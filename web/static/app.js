@@ -68,7 +68,7 @@ function providerProblem() {
 
 const state = {
   me: null, // the signed-in user
-  prefs: { level: 'B1', lang: 'en', readSize: 'm', theme: 'system' },
+  prefs: { level: 'B1', lang: 'en', readSize: 'm', readWidth: 'm', theme: 'system' },
   model: null,
   books: [], // the shelf, without content
   segments: new Map(), // id -> { el, text }
@@ -1432,6 +1432,14 @@ function applyReadSize(size) {
   markPressed('#size-seg', 'size', v);
 }
 
+// Reading column width; it only matters on screens wider than the column.
+const READ_WIDTHS = { n: '680px', m: '820px', w: '1040px' };
+function applyReadWidth(width) {
+  const v = READ_WIDTHS[width] ? width : 'm';
+  document.documentElement.style.setProperty('--read-width', READ_WIDTHS[v]);
+  markPressed('#width-seg', 'width', v);
+}
+
 // "system" follows the device; theme.js (loaded in <head>) does the work and
 // remembers the choice in this browser so the next visit paints correctly at once.
 function applyTheme(theme) {
@@ -1563,7 +1571,7 @@ async function onSynced() {
     return;
   }
   if (!state.me || me?.user?.id !== state.me.id) return;
-  const before = { level: getLevel(), lang: state.prefs.lang, readSize: state.prefs.readSize, theme: state.prefs.theme };
+  const before = { level: getLevel(), lang: state.prefs.lang, readSize: state.prefs.readSize, readWidth: state.prefs.readWidth, theme: state.prefs.theme };
   state.me = me.user;
   state.model = me.model;
   state.prefs = { ...state.prefs, ...me.user.prefs };
@@ -1573,6 +1581,7 @@ async function onSynced() {
   state.known = new Set(known);
   if (state.prefs.theme !== before.theme) applyTheme(state.prefs.theme);
   if (state.prefs.readSize !== before.readSize) applyReadSize(state.prefs.readSize);
+  if (state.prefs.readWidth !== before.readWidth) applyReadWidth(state.prefs.readWidth);
   updateWordbookBadge();
   refreshKnownMarks();
   if (state.prefs.lang && state.prefs.lang !== getLang()) {
@@ -1646,6 +1655,7 @@ async function startSession(me, { offline = false } = {}) {
   state.prefs = { ...state.prefs, ...me.user.prefs };
   if (state.prefs.lang && state.prefs.lang !== getLang()) setLang(state.prefs.lang);
   applyReadSize(state.prefs.readSize);
+  applyReadWidth(state.prefs.readWidth);
   applyTheme(state.prefs.theme);
   try {
     const [wordbook, known] = await Promise.all([loadData('wordbook'), loadData('known')]);
@@ -2010,6 +2020,7 @@ async function init() {
   renderLevelUI();
   markPressed('#lang-seg', 'lang', getLang());
   applyReadSize('m');
+  applyReadWidth('m');
   markPressed('.theme-seg', 'mode', document.documentElement.dataset.theme || 'system');
 
   // Header popovers
@@ -2046,6 +2057,12 @@ async function init() {
     if (!size) return;
     savePrefs({ readSize: size });
     applyReadSize(size);
+  });
+  $('#width-seg').addEventListener('click', (e) => {
+    const width = e.target.closest('[data-width]')?.dataset.width;
+    if (!width) return;
+    savePrefs({ readWidth: width });
+    applyReadWidth(width);
   });
 
 

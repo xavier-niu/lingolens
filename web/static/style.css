@@ -178,8 +178,8 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 }
 .seg button:hover { color: var(--ink); }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
-.theme-seg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 1; }
-.theme-seg svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.theme-seg button, #width-seg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 1; }
+.theme-seg svg, #width-seg svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon-seg button { padding: 0 9px; }
 /* Switching themes recolours everything at once instead of animating each control. */
 .theme-switching, .theme-switching * { transition: none !important; }
@@ -442,7 +442,7 @@ label.pop-row:hover { background: var(--hover); }
 .empty-art span:nth-child(3) { left: 28px; top: 0; }
 
 /* ------------------------------------------------------------ reader */
-.reader { max-width: 700px; margin: 48px auto 0; }
+.reader { max-width: var(--read-width, 820px); margin: 48px auto 0; }
 .reader-head { margin-bottom: 28px; }
 .book-heading {
   font-family: var(--serif); font-size: clamp(28px, 4.4vw, 40px); font-weight: 650; line-height: 1.15;
@@ -750,6 +750,7 @@ body[data-view="login"] main { padding-bottom: 40px; }
 
 @media (max-width: 900px) {
   body[data-view="reader"] .bar-label, body[data-view="reader"] .lv-name { display: none; }
+  .width-row { display: none; } /* the text already spans the screen */
 }
 
 @media (max-width: 640px) {

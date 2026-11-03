@@ -41,6 +41,9 @@ func (s *Server) handlePrefs(w http.ResponseWriter, r *http.Request) {
 	if req.ReadSize == "s" || req.ReadSize == "m" || req.ReadSize == "l" {
 		p.ReadSize = req.ReadSize
 	}
+	if req.ReadWidth == "n" || req.ReadWidth == "m" || req.ReadWidth == "w" {
+		p.ReadWidth = req.ReadWidth
+	}
 	if req.Theme == "system" || req.Theme == "light" || req.Theme == "dark" {
 		p.Theme = req.Theme
 	}

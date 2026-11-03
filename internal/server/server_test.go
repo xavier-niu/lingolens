@@ -207,16 +207,20 @@ func TestPrefs(t *testing.T) {
 	me := decodeJSON[struct {
 		User store.User `json:"user"`
 	}](t, e.do(t, c, "GET", "/api/me", nil))
-	if got := me.User.Prefs; got != (store.Prefs{Level: "B1", Lang: "en", ReadSize: "m", Theme: "system"}) {
+	if got := me.User.Prefs; got != (store.Prefs{Level: "B1", Lang: "en", ReadSize: "m", ReadWidth: "m", Theme: "system"}) {
 		t.Fatalf("default prefs = %+v", got)
 	}
 	got := decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]string{"theme": "dark", "level": "C1"}))
 	if got.Theme != "dark" || got.Level != "C1" || got.Lang != "en" {
 		t.Fatalf("after update = %+v", got)
 	}
+	got = decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]string{"readWidth": "w"}))
+	if got.ReadWidth != "w" || got.Theme != "dark" {
+		t.Fatalf("after width update = %+v", got)
+	}
 	// Unknown values are ignored rather than stored.
-	got = decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]string{"theme": "purple", "lang": "fr"}))
-	if got.Theme != "dark" || got.Lang != "en" {
+	got = decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]string{"theme": "purple", "lang": "fr", "readWidth": "huge"}))
+	if got.Theme != "dark" || got.Lang != "en" || got.ReadWidth != "w" {
 		t.Fatalf("invalid values stored: %+v", got)
 	}
 	me = decodeJSON[struct {

@@ -32,10 +32,11 @@ type User struct {
 
 // Prefs is the user's profile: reading level and interface settings.
 type Prefs struct {
-	Level    string `json:"level"`
-	Lang     string `json:"lang"`
-	ReadSize string `json:"readSize"`
-	Theme    string `json:"theme"` // "system" (follow the device), "light" or "dark"
+	Level     string `json:"level"`
+	Lang      string `json:"lang"`
+	ReadSize  string `json:"readSize"`
+	ReadWidth string `json:"readWidth"` // reading column: "n" narrow, "m" standard, "w" wide
+	Theme     string `json:"theme"`     // "system" (follow the device), "light" or "dark"
 }
 
 func (p Prefs) withDefaults() Prefs {
@@ -47,6 +48,9 @@ func (p Prefs) withDefaults() Prefs {
 	}
 	if p.ReadSize == "" {
 		p.ReadSize = "m"
+	}
+	if p.ReadWidth == "" {
+		p.ReadWidth = "m"
 	}
 	if p.Theme == "" {
 		p.Theme = "system"

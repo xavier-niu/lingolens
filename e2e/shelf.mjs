@@ -132,7 +132,21 @@ await page.screenshot({ path: `${OUT}/d-reader-bar.png` });
 await page.click('#btn-display');
 await page.click('#size-seg [data-size="l"]');
 check('text size option applies', await page.evaluate(() => getComputedStyle(document.querySelector('#article')).fontSize) === '23px');
+const articleWidth = () => page.evaluate(() => Math.round(document.querySelector('#article').getBoundingClientRect().width));
+check('standard line width by default', await articleWidth() === 820, String(await articleWidth()));
+check('standard width marked', (await page.getAttribute('#width-seg [data-width="m"]', 'aria-pressed')) === 'true');
 await page.screenshot({ path: `${OUT}/d-display-pop.png` });
+await page.click('#width-seg [data-width="w"]');
+check('wide line width applies', await articleWidth() === 1040, String(await articleWidth()));
+await page.click('#width-seg [data-width="n"]');
+check('narrow line width applies', await articleWidth() === 680, String(await articleWidth()));
+await page.waitForTimeout(600);
+check('line width saved to the account', await page.evaluate(() => fetch('/api/me').then((r) => r.json()).then((m) => m.user.prefs.readWidth)) === 'n');
+await page.reload();
+await page.waitForSelector('#reader-view:not([hidden])');
+check('line width kept after reload', await articleWidth() === 680, String(await articleWidth()));
+await page.click('#btn-display');
+await page.click('#width-seg [data-width="m"]');
 await page.keyboard.press('Escape');
 
 // Settings page: profile reflects the level; back returns to the book
