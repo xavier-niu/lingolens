@@ -61,6 +61,35 @@ for (const [label, device] of [['phone', devices['iPhone 13']], ['tablet', devic
   check(`${label}: chat drawer in viewport`, await inViewport(page, '#chat'));
   check(`${label}: chat input visible`, await inViewport(page, '#chat-form'));
   await page.screenshot({ path: `${OUT}/${label}-chat.png` });
+  await page.tap('#chat-close');
+  await page.waitForSelector('#chat', { state: 'hidden' });
+
+  // Select a phrase: Ask AI docks at the bottom, clear of the system's selection
+  // menu (which sits right above or below the selection).
+  const sel = await page.evaluate(() => {
+    const w = document.createTreeWalker(document.querySelector('#article'), NodeFilter.SHOW_TEXT);
+    while (w.nextNode()) {
+      const n = w.currentNode;
+      if (n.parentElement.closest('ruby') || n.data.trim().length < 30) continue;
+      n.parentElement.scrollIntoView({ block: 'center' });
+      const r = document.createRange(); r.setStart(n, 0); r.setEnd(n, 25);
+      getSelection().removeAllRanges(); getSelection().addRange(r);
+      const b = r.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, text: r.toString() };
+    }
+    return null;
+  });
+  await page.waitForSelector('#ask-fab:not([hidden])', { timeout: 3000 });
+  const fab = await page.$eval('#ask-fab', (f) => {
+    const r = f.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, h: r.height, gap: innerHeight - r.bottom, fixed: getComputedStyle(f).position === 'fixed' };
+  });
+  check(`${label}: Ask AI docked at the bottom`, fab.fixed && fab.gap >= 10 && fab.gap < 60, JSON.stringify(fab));
+  check(`${label}: Ask AI well away from the selection`, fab.top > sel.bottom + 60, JSON.stringify({ fab, sel }));
+  check(`${label}: Ask AI easy to tap`, fab.h >= 44, String(fab.h));
+  await page.screenshot({ path: `${OUT}/${label}-ask-fab.png` });
+  await page.tap('#ask-fab');
+  await page.waitForSelector('#chat:not([hidden])');
+  check(`${label}: tapping Ask AI opens the chat about the selection`, (await page.textContent('#chat')).includes(sel.text.trim().slice(0, 15)));
   check(`${label}: no page errors`, errors.length === 0, errors.join(' | '));
   await ctx.close();
 }

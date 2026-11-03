@@ -849,8 +849,13 @@ function maybeShowFab() {
   const fab = $('#ask-fab');
   fab.hidden = false;
   fab._info = info;
-  // Above the selection with a mouse; below it on touch, where the native copy menu sits above.
-  positionNear(fab, info.rect, !isTouch());
+  // Mouse: just above the selection. Touch: docked at the bottom of the screen,
+  // clear of the system's Copy / Look Up menu, which iOS and Android put above or
+  // below the selection depending on the room there.
+  const docked = isTouch();
+  fab.classList.toggle('docked', docked);
+  if (docked) fab.style.left = fab.style.top = '';
+  else positionNear(fab, info.rect, true);
 }
 function hideFab() { $('#ask-fab').hidden = true; }
 
@@ -2182,12 +2187,15 @@ async function init() {
   // Touch devices select by long-press + handles, with no mouseup: show the button
   // once the selection has settled.
   let selTimer = 0;
+  let fabPressedAt = 0;
   document.addEventListener('selectionchange', () => {
     const sel = window.getSelection();
     clearTimeout(selTimer);
-    if (!sel || sel.isCollapsed) hideFab();
+    // A tap on the button can clear the selection before its click arrives.
+    if (!sel || sel.isCollapsed) { if (Date.now() - fabPressedAt > 800) hideFab(); }
     else if (isTouch()) selTimer = setTimeout(maybeShowFab, 400);
   });
+  fab.addEventListener('pointerdown', () => { fabPressedAt = Date.now(); });
   fab.addEventListener('mousedown', (e) => e.preventDefault()); // keep the selection
   fab.addEventListener('click', () => {
     const info = fab._info;

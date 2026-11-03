@@ -519,6 +519,14 @@ ruby.ann.known rt { display: none; }
   background: var(--primary); color: var(--on-primary); font-weight: 600; font-size: 13.5px;
   box-shadow: var(--shadow-lg); cursor: pointer;
 }
+/* Touch: docked at the bottom, away from the system selection menu (and above
+   Safari's bottom toolbar and the home indicator). */
+.ask-fab.docked {
+  position: fixed; left: 50%; top: auto; bottom: calc(18px + env(safe-area-inset-bottom));
+  transform: translateX(-50%); height: 44px; padding: 0 24px; font-size: 15px;
+  animation: fab-up .18s ease-out both;
+}
+@keyframes fab-up { from { opacity: 0; transform: translate(-50%, 8px); } }
 
 /* One-time reading hint, floating above the text. */
 .hint {
