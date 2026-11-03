@@ -25,6 +25,13 @@ const visible = (sel) => page.isVisible(sel);
 
 // ---- the dialog
 await openDialog();
+check('empty shelf: sample text offered', await visible('#src-sample'));
+await page.click('#src-sample');
+check('…and it fills the form', (await page.inputValue('#src-text')).length > 200 && (await page.inputValue('#src-title')).length > 0);
+await page.click('#src-save');
+await page.waitForSelector('#reader-view:not([hidden])');
+await openDialog();
+check('once a text is on the shelf: no sample', !(await visible('#src-sample')));
 check('three kinds: Text, Web Page, EPUB', JSON.stringify(await kinds()) === '["text","url","epub"]');
 check('no Markdown option any more', !(await page.$('#src-kinds input[value="markdown"]')));
 check('nothing disabled or "coming soon"', (await page.$$('#src-kinds input:disabled')).length === 0);
@@ -46,7 +53,7 @@ await page.click('#src-save');
 await page.waitForSelector('#reader-view:not([hidden])');
 check('Markdown renders as a list', (await page.$$('#article ul li')).length === 3);
 check('…with bold kept', !!(await page.$('#article strong')));
-const fmt = await page.evaluate(() => fetch('/api/books').then((r) => r.json()).then((b) => b[0].format));
+const fmt = await page.evaluate(() => fetch('/api/books/' + location.hash.split('/').pop()).then((r) => r.json()).then((b) => b.format));
 check('stored as markdown', fmt === 'markdown');
 
 // ---- web page

@@ -1221,7 +1221,8 @@ function labelSourceDialog() {
   $('#src-save').textContent = t(editing ? 'source.saveEdit'
     : { text: 'source.save', url: 'source.saveUrl', epub: 'source.saveEpub' }[srcKind]);
   $('#src-title').placeholder = t({ text: 'source.titlePh', url: 'source.titleUrl', epub: 'source.titleEpub' }[srcKind]);
-  $('#src-sample').hidden = editing || srcKind !== 'text';
+  // The sample is for getting started: offered only while the shelf is empty.
+  $('#src-sample').hidden = editing || srcKind !== 'text' || state.books.length > 0;
   $('#src-delete').hidden = !editing;
   $('#src-count').hidden = srcKind !== 'text';
   if (srcFile) $('#src-file-meta').textContent = t('source.fileMeta', { size: formatBytes(srcFile.size) });
