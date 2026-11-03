@@ -285,6 +285,41 @@ func TestSelection(t *testing.T) {
 	}
 }
 
+// Sites that turn away anything unlike a browser, or that set a cookie and
+// redirect to check it, still give up their articles.
+func TestFetchLooksLikeABrowser(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ua := r.Header.Get("User-Agent")
+		if !strings.Contains(ua, "Chrome/") || strings.Contains(ua, "Go-http-client") ||
+			r.Header.Get("Accept-Language") == "" || r.Header.Get("Sec-Fetch-Mode") != "navigate" ||
+			!strings.Contains(r.Header.Get("Accept"), "text/html") {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		if _, err := r.Cookie("checked"); err != nil {
+			http.SetCookie(w, &http.Cookie{Name: "checked", Value: "1", Path: "/"})
+			http.Redirect(w, r, r.URL.Path, http.StatusFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(page))
+	}))
+	defer srv.Close()
+	f := NewFetcher(true)
+	for range 2 { // the second fetch starts without the first one's cookie
+		doc, err := f.Article(context.Background(), srv.URL+"/post")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if doc.Title != "How Habits Form" {
+			t.Fatalf("doc = %+v", doc)
+		}
+	}
+	if client := f.client; client.Jar != nil {
+		t.Fatal("the shared client keeps cookies")
+	}
+}
+
 func TestFetchBlocksPrivateAddresses(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(page))

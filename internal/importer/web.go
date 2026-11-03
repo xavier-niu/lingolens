@@ -9,6 +9,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/netip"
 	"net/url"
 	"strings"
@@ -41,9 +42,27 @@ const MaxPageBytes = 8 << 20
 const (
 	fetchTimeout  = 25 * time.Second
 	maxRedirects  = 5
-	userAgent     = "Mozilla/5.0 (compatible; LingoLens/1.0; +https://github.com/xavier-niu/lingolens)"
-	acceptHeaders = "text/html,application/xhtml+xml;q=0.9,text/plain;q=0.8"
+	chromeVersion = "141"
 )
+
+// browserHeaders are what Chrome on a desktop sends when you open a link. Many
+// sites turn away anything that doesn't look like a browser (an unknown user
+// agent, no Accept-Language, no Sec-Fetch-*), and the person importing could
+// open the page themselves anyway. Accept-Encoding is left to Go's transport,
+// which asks for gzip and decodes it.
+var browserHeaders = map[string]string{
+	"User-Agent":                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + chromeVersion + ".0.0.0 Safari/537.36",
+	"Accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+	"Accept-Language":           "en-US,en;q=0.9",
+	"Sec-Ch-Ua":                 `"Google Chrome";v="` + chromeVersion + `", "Chromium";v="` + chromeVersion + `", "Not_A Brand";v="24"`,
+	"Sec-Ch-Ua-Mobile":          "?0",
+	"Sec-Ch-Ua-Platform":        `"Windows"`,
+	"Sec-Fetch-Dest":            "document",
+	"Sec-Fetch-Mode":            "navigate",
+	"Sec-Fetch-Site":            "none",
+	"Sec-Fetch-User":            "?1",
+	"Upgrade-Insecure-Requests": "1",
+}
 
 // Fetcher downloads web pages for import. Unless AllowPrivate is set it refuses to
 // connect to loopback, private, link-local and other internal addresses, so a
@@ -150,11 +169,15 @@ func (f *Fetcher) Article(ctx context.Context, raw string) (*Doc, error) {
 	if err != nil {
 		return nil, userErr("That doesn't look like a web address.")
 	}
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", acceptHeaders)
-	req.Header.Set("Accept-Language", "en;q=1.0, *;q=0.5")
+	for k, v := range browserHeaders {
+		req.Header.Set(k, v)
+	}
 
-	resp, err := f.client.Do(req)
+	// A fresh cookie jar per fetch: some sites set a cookie and redirect, and loop
+	// without it. Nothing is kept, so no cookie passes between fetches or users.
+	client := *f.client
+	client.Jar, _ = cookiejar.New(nil)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fetchError(err)
 	}

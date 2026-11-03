@@ -39,8 +39,10 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.epub': 'application/epub+
 const site = createServer(async (req, res) => {
   const name = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\/+/, '');
   if (!name || name.includes('/') || name.startsWith('.')) { res.writeHead(404).end(); return; }
-  // Like sites that turn servers away: browsers get the page, LingoLens gets 403.
-  if (name === 'blocked.html' && /LingoLens/.test(req.headers['user-agent'] || '')) { res.writeHead(403).end(); return; }
+  // Like sites that see through browser headers (by IP range or TLS fingerprint):
+  // browsers get the page, the LingoLens server gets 403. Go's client asks only
+  // for gzip; browsers also offer deflate.
+  if (name === 'blocked.html' && !/deflate/.test(req.headers['accept-encoding'] || '')) { res.writeHead(403).end(); return; }
   try {
     const body = await readFile(join(HERE, 'fixtures', name));
     res.writeHead(200, { 'Content-Type': TYPES[extname(name)] || 'application/octet-stream' }).end(body);
