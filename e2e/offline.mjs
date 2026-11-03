@@ -125,10 +125,11 @@ await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight * 0.6));
 await page.waitForTimeout(700);
 const progressOffline = await page.evaluate(() => document.querySelector('#read-thread > div').style.width);
 
-// other book opens from the device too
+// other book opens from the device too (the reader is already showing book A,
+// so wait for B's title rather than for the reader view)
 await page.goto(BASE + `#/read/${b.id}`);
-await page.waitForSelector('#reader-view:not([hidden])');
-check('a book never opened online reads offline', (await page.textContent('#article')).includes('Paragraph 6'));
+await page.waitForFunction(() => document.querySelector('#book-title').textContent === 'Second Book', null, { timeout: 5000 }).catch(() => {});
+check('a book never opened online reads offline', (await page.textContent('#article')).includes('Paragraph 6'), await page.textContent('#book-title'));
 
 // add a text offline
 await page.goto(BASE + '#/');
