@@ -46,7 +46,9 @@
 
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   --serif: "Literata", Georgia, "Noto Serif CJK SC", "Songti SC", serif;
-  --kai: "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", "Noto Serif CJK SC", serif;
+  /* Chinese glosses: the system's Chinese sans, which stays crisp at gloss size
+     (brush-style Kai looked thin and spaced out beside the serif text). */
+  --zh: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", sans-serif;
   color-scheme: light;
 }
 
@@ -482,7 +484,7 @@ ruby.ann {
 }
 ruby.ann:hover, ruby.ann.active { background: var(--hover); }
 ruby.ann rt {
-  font-family: var(--kai); font-size: .55em; line-height: 1.15; letter-spacing: .02em;
+  font-family: var(--zh); font-size: .52em; font-weight: 500; line-height: 1.15; letter-spacing: 0;
   user-select: none; -webkit-user-select: none; white-space: nowrap;
 }
 ruby.ann-word rt { color: var(--gloss); }
@@ -503,7 +505,7 @@ ruby.ann.known rt { display: none; }
 .card .lemma { font-family: var(--serif); font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
 .card .ipa { color: var(--muted); font-size: 14px; }
 .card .pos { color: var(--muted); font-style: italic; font-family: var(--serif); font-size: 14px; }
-.card .zh { font-family: var(--kai); font-size: 18px; color: var(--gloss); margin: 4px 0 2px; }
+.card .zh { font-family: var(--zh); font-size: 18px; color: var(--gloss); margin: 4px 0 2px; }
 .card .surface { color: var(--muted); font-size: 13px; }
 .card .detail { margin-top: 12px; font-size: 14px; line-height: 1.6; color: var(--ink-2); }
 .card .detail h4 { margin: 12px 0 3px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
