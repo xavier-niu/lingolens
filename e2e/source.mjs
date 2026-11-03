@@ -70,7 +70,8 @@ await page.fill('#src-url', SITE + 'article.html');
 await page.screenshot({ path: `${OUT}/s-url.png` });
 await page.click('#src-save');
 await page.waitForSelector('#reader-view:not([hidden])');
-const art = await page.textContent('#article');
+// The stored text: the reader's text gets glosses inside it as it's annotated.
+const art = await page.evaluate(() => fetch('/api/books/' + location.hash.split('/').pop()).then((r) => r.json()).then((b) => b.content));
 check('page title used', (await page.textContent('#book-title')).includes('The Art of Slow Travel'));
 check('article text imported', art.includes('settle into one place') && art.includes('better stories'));
 check('menus, ads and footer left out', !/Hot Deals|cheap flights|newsletter/.test(art));

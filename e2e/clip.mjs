@@ -47,6 +47,9 @@ check('clicking it here explains to drag it', (await text(app, '#bm-status')).in
 check('…and opens nothing', ctx.pages().length === 1);
 await app.locator('section.set-section:has(> .set-head #set-clip-h)').screenshot({ path: `${OUT}/c-settings.png` });
 
+// The text as stored: the reader's own text gets glosses inside it as it's annotated.
+const stored = (page) => page.evaluate(() => fetch('/api/books/' + location.hash.split('/').pop()).then((r) => r.json()).then((b) => b.content));
+
 // Runs the bookmarklet on a page, as clicking it in the bookmarks bar does.
 async function runBookmarklet(page) {
   const [tab] = await Promise.all([ctx.waitForEvent('page'), page.evaluate(code)]);
@@ -65,7 +68,7 @@ check('breadcrumb: Shelf / Add Page', (await tab.$$eval('#crumbs li', (l) => l.m
 await tab.screenshot({ path: `${OUT}/c-clip.png` });
 await tab.click('#clip-save');
 await tab.waitForSelector('#reader-view:not([hidden])', { timeout: 10000 });
-let art = await text(tab, '#article');
+let art = await stored(tab);
 const bookTitle = await text(tab, '#book-title');
 check('added and opened, with the article’s title', bookTitle === 'Night Trains of Europe', bookTitle);
 check('article text kept', art.includes('fall asleep to the sound of the wheels'));
@@ -90,7 +93,7 @@ const what = await text(tab, '#clip-what');
 check('a selection is announced with its length', /selected .*\(3\d words\)/.test(what), what);
 await tab.click('#clip-save');
 await tab.waitForSelector('#reader-view:not([hidden])', { timeout: 10000 });
-art = await text(tab, '#article');
+art = await stored(tab);
 check('only the selection kept', art.startsWith('When you stay longer') && art.endsWith('Saturday morning.') && !art.includes('Slow travel is less'), art.slice(0, 80));
 check('…under the article’s title', (await text(tab, '#book-title')) === 'The Art of Slow Travel');
 await tab.close();
@@ -143,7 +146,7 @@ await tab2.waitForSelector('#clip-page:not([hidden])', { timeout: 10000 });
 check('…then shows the page to add', (await text(tab2, '#clip-title')).startsWith('The Art of Slow Travel'));
 await tab2.click('#clip-save');
 await tab2.waitForSelector('#reader-view:not([hidden])', { timeout: 10000 });
-check('…and adds it', (await text(tab2, '#article')).includes('fewer photos and far better stories'));
+check('…and adds it', (await stored(tab2)).includes('fewer photos and far better stories'));
 await fresh.close();
 
 // ---- phone, dark, Chinese
