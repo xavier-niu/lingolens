@@ -34,7 +34,7 @@ type User struct {
 type Prefs struct {
 	Level     string `json:"level"`
 	Lang      string `json:"lang"`
-	ReadSize  string `json:"readSize"`
+	ReadSize  string `json:"readSize"`  // "s" 17px, "sm" 18.5px, "m" 20px, "l" 23px
 	ReadWidth string `json:"readWidth"` // reading column: "n" narrow, "m" standard, "w" wide
 	Theme     string `json:"theme"`     // "system" (follow the device), "light" or "dark"
 	ReadFont  string `json:"readFont"`  // English: "literata", "classic", "sans" or "legible"

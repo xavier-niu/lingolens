@@ -219,8 +219,8 @@ func TestPrefs(t *testing.T) {
 	if got.ReadWidth != "w" || got.Theme != "dark" {
 		t.Fatalf("after width update = %+v", got)
 	}
-	got = decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]string{"readFont": "legible", "glossFont": "kai"}))
-	if got.ReadFont != "legible" || got.GlossFont != "kai" || got.ReadWidth != "w" {
+	got = decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]string{"readFont": "legible", "glossFont": "kai", "readSize": "sm"}))
+	if got.ReadFont != "legible" || got.GlossFont != "kai" || got.ReadSize != "sm" || got.ReadWidth != "w" {
 		t.Fatalf("after font update = %+v", got)
 	}
 	// Unknown values are ignored rather than stored.

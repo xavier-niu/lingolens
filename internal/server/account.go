@@ -38,7 +38,7 @@ func (s *Server) handlePrefs(w http.ResponseWriter, r *http.Request) {
 	if req.Lang == "en" || req.Lang == "zh" {
 		p.Lang = req.Lang
 	}
-	if req.ReadSize == "s" || req.ReadSize == "m" || req.ReadSize == "l" {
+	if req.ReadSize == "s" || req.ReadSize == "sm" || req.ReadSize == "m" || req.ReadSize == "l" {
 		p.ReadSize = req.ReadSize
 	}
 	if req.ReadWidth == "n" || req.ReadWidth == "m" || req.ReadWidth == "w" {

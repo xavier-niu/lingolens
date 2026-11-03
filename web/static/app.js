@@ -1619,7 +1619,7 @@ function markPressed(groupSel, attr, value) {
   for (const b of document.querySelectorAll(`${groupSel} button`)) b.setAttribute('aria-pressed', String(b.dataset[attr] === value));
 }
 
-const READ_SIZES = { s: '17px', m: '20px', l: '23px' };
+const READ_SIZES = { s: '17px', sm: '18.5px', m: '20px', l: '23px' };
 function applyReadSize(size) {
   const v = READ_SIZES[size] ? size : 'm';
   document.documentElement.style.setProperty('--read-size', READ_SIZES[v]);
