@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Upload Markdown to the LingoLens shelf and print the link to read it.
 #
-#   upload.sh FILE [--title TITLE]     upload a Markdown file
+#   upload.sh FILE [--title TITLE]     upload a Markdown file as a new text
 #   upload.sh - [--title TITLE]        upload Markdown from stdin
+#   upload.sh FILE --append ID         add to the end of text ID, after a --- line
+#   upload.sh --list                   list the texts agents saved: ID, words, title
 #   upload.sh --check                  check LINGOLENS_URL and LINGOLENS_TOKEN
 #
 # Needs bash and curl. Reads LINGOLENS_URL and LINGOLENS_TOKEN from the environment
@@ -46,7 +48,8 @@ request() {
   printf '%s' "$body"
 }
 
-field() { sed -n "s/.*\"$1\":\"\\([^\"]*\\)\".*/\\1/p"; }
+# The value of a JSON string field, escapes kept (\" stays \").
+field() { sed -nE "s/.*\"$1\":\"(([^\"\\\\]|\\\\.)*)\".*/\\1/p"; }
 
 if [[ "${1:-}" == "--check" ]]; then
   body="$(request GET /api/agent/whoami)"
@@ -54,17 +57,35 @@ if [[ "${1:-}" == "--check" ]]; then
   exit 0
 fi
 
+if [[ "${1:-}" == "--list" ]]; then
+  body="$(request GET /api/agent/texts)"
+  # One object per line, then: ID<TAB>WORDS<TAB>UPDATED<TAB>TITLE, newest first.
+  rows="$(printf '%s' "$body" | sed 's/},{/}\n{/g')"
+  [[ "$rows" == "[]" ]] && { echo "No texts saved by agents yet."; exit 0; }
+  printf '%s\n' "$rows" | while IFS= read -r row; do
+    printf '%s\t%s\t%s\t%s\n' "$(printf '%s' "$row" | field id)" \
+      "$(printf '%s' "$row" | sed -n 's/.*"words":\([0-9]*\).*/\1/p')" \
+      "$(printf '%s' "$row" | field updatedAt)" "$(printf '%s' "$row" | field title)"
+  done
+  exit 0
+fi
+
 src="${1:-}"
-[[ -n "$src" ]] || die "usage: upload.sh FILE|- [--title TITLE] | --check"
+[[ -n "$src" ]] || die "usage: upload.sh FILE|- [--title TITLE | --append ID] | --list | --check"
 shift
 title=""
+append=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --title) [[ $# -ge 2 ]] || die "--title needs a value"; title="$2"; shift 2 ;;
     --title=*) title="${1#--title=}"; shift ;;
+    --append) [[ $# -ge 2 ]] || die "--append needs a text ID (see --list)"; append="$2"; shift 2 ;;
+    --append=*) append="${1#--append=}"; shift ;;
     *) die "unknown argument: $1" ;;
   esac
 done
+[[ -z "$append" || "$append" =~ ^[A-Za-z0-9_-]+$ ]] || die "not a text ID: $append"
+[[ -z "$append" || -z "$title" ]] || die "--append keeps the text's title; leave out --title"
 
 if [[ "$src" == "-" ]]; then
   tmp="$(mktemp)"
@@ -75,11 +96,17 @@ fi
 [[ -f "$src" ]] || die "no such file: $src"
 [[ -s "$src" ]] || die "the file is empty: $src"
 
-path="/api/agent/texts"
-[[ -n "$title" ]] && path+="?title=$(urlencode "$title")"
+if [[ -n "$append" ]]; then
+  path="/api/agent/texts/$append/append"
+  done_msg='Added to "%s" (%s words now)\n%s\n'
+else
+  path="/api/agent/texts"
+  [[ -n "$title" ]] && path+="?title=$(urlencode "$title")"
+  done_msg='Saved "%s" (%s words)\n%s\n'
+fi
 body="$(request POST "$path" -H "Content-Type: text/markdown; charset=utf-8" --data-binary "@$src")"
 
-printf 'Saved "%s" (%s words)\n%s\n' \
+printf "$done_msg" \
   "$(printf '%s' "$body" | field title)" \
   "$(printf '%s' "$body" | sed -n 's/.*"words":\([0-9]*\).*/\1/p')" \
   "$(printf '%s' "$body" | field url)"

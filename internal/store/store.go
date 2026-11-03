@@ -122,6 +122,9 @@ var migrations = []string{
 	// that is retried (the reply was lost) doesn't add the text twice.
 	`ALTER TABLE books ADD COLUMN client_ref TEXT NOT NULL DEFAULT '';
 	CREATE UNIQUE INDEX books_client_ref ON books(user_id, client_ref) WHERE client_ref != '';`,
+	// 4: who added a text. Agents may add to texts that agents added ('agent'),
+	// never to the user's own.
+	`ALTER TABLE books ADD COLUMN origin TEXT NOT NULL DEFAULT '';`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

@@ -701,6 +701,56 @@ func TestAgentAPI(t *testing.T) {
 		}
 	}
 
+	// Adding more to an agent's text: listed, appended after a --- line, same id.
+	mine := decodeJSON[store.Book](t, e.do(t, c, "POST", "/api/books", map[string]string{"title": "My Notes", "content": "My own words."}))
+	texts := decodeJSON[[]map[string]any](t, agent("GET", "/api/agent/texts", "", created.Token, ""))
+	byTitle := map[any]map[string]any{}
+	for _, x := range texts {
+		byTitle[x["title"]] = x
+	}
+	if len(texts) != 2 || byTitle["Hello"] == nil || byTitle["Phrasal Verbs"] == nil || texts[0]["url"] == nil {
+		t.Fatalf("agent texts = %+v (the user's own text must not be listed)", texts)
+	}
+	pv := byTitle["Phrasal Verbs"]["id"].(string)
+	resp = agent("POST", "/api/agent/texts/"+pv+"/append?title=Ignored", "text/markdown", created.Token, "## More verbs\n\n- **put off**: delay\n")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("append: %d", status(t, resp))
+	}
+	if up = decodeJSON[map[string]any](t, resp); up["id"] != pv || up["title"] != "Phrasal Verbs" {
+		t.Fatalf("append = %+v", up)
+	}
+	up = decodeJSON[map[string]any](t, agent("POST", "/api/agent/texts/"+pv+"/append", "application/json", created.Token, `{"markdown": "One more line."}`))
+	book := decodeJSON[store.Book](t, e.do(t, c, "GET", "/api/books/"+pv, nil))
+	if want := "investigate\n\n---\n\n## More verbs\n\n- **put off**: delay\n\n---\n\nOne more line."; !strings.HasSuffix(book.Content, want) {
+		t.Fatalf("appended content = %q", book.Content)
+	}
+	otherTok := decodeJSON[struct {
+		Token string `json:"token"`
+	}](t, e.do(t, other, "POST", "/api/me/tokens", map[string]string{"name": "Other"})).Token
+	if texts = decodeJSON[[]map[string]any](t, agent("GET", "/api/agent/texts", "", otherTok, "")); len(texts) != 0 {
+		t.Fatalf("another user's agent sees %+v", texts)
+	}
+	for name, tc := range map[string]struct {
+		resp *http.Response
+		want int
+	}{
+		"the user's own text":  {agent("POST", "/api/agent/texts/"+mine.ID+"/append", "text/markdown", created.Token, "x"), 404},
+		"another user's agent": {agent("POST", "/api/agent/texts/"+pv+"/append", "text/markdown", otherTok, "x"), 404},
+		"no such text":         {agent("POST", "/api/agent/texts/nope/append", "text/markdown", created.Token, "x"), 404},
+		"empty addition":       {agent("POST", "/api/agent/texts/"+pv+"/append", "text/markdown", created.Token, " "), 400},
+		"no token":             {agent("POST", "/api/agent/texts/"+pv+"/append", "text/markdown", "", "x"), 401},
+		"no token, list":       {agent("GET", "/api/agent/texts", "", "", ""), 401},
+		"cookie on append":     {e.do(t, c, "POST", "/api/agent/texts/"+pv+"/append", map[string]string{"markdown": "x"}), 401},
+		"too long together":    {agent("POST", "/api/agent/texts/"+pv+"/append", "text/markdown", created.Token, strings.Repeat("x", store.MaxBookChars)), 413},
+	} {
+		if got := status(t, tc.resp); got != tc.want {
+			t.Errorf("%s: %d, want %d", name, got, tc.want)
+		}
+	}
+	if book := decodeJSON[store.Book](t, e.do(t, c, "GET", "/api/books/"+mine.ID, nil)); book.Content != "My own words." {
+		t.Fatalf("the user's own text changed: %q", book.Content)
+	}
+
 	// Revoking stops it working; another user can't revoke it.
 	id := strconv.FormatInt(created.Info.ID, 10)
 	if status(t, e.do(t, other, "DELETE", "/api/me/tokens/"+id, nil)) != 404 {

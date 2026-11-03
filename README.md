@@ -5,7 +5,7 @@ Read English with Chinese glosses above the words you probably don't know — at
 - **A shelf of texts.** Each text you add gets a cover on your shelf, with reading progress and an estimated reading time for your level. Reopening a text returns you to where you stopped.
 - **Add sources.** Paste text (Markdown is detected automatically), import a web page (just the article: no menus, ads or comments), or add a DRM-free EPUB book or a PDF. Long texts with sections get a Contents list.
 - **Bookmarklet.** Some sites refuse requests from servers (*HTTP 403*). Click the LingoLens bookmarklet on the page instead: your browser hands the page to LingoLens, so it also works for pages you're signed in to and text added by scripts. See [Bookmarklet](#bookmarklet).
-- **Agent access.** AI agents such as Claude Code can save their replies to your shelf with a per-user token and the bundled [skill](skills/lingolens/SKILL.md).
+- **Agent access.** AI agents such as Claude Code can save their replies to your shelf with a per-user token and the bundled [skill](skills/lingolens/SKILL.md), and add later replies on the same topic to the same text.
 
 - **Level-aware annotations.** Pick a CEFR level (A1–C2, with Chinese exam equivalents). The higher the level, the fewer words are annotated. Glosses sit above words using `<ruby>`.
 - **Fixed expressions.** Collocations, phrasal verbs and idioms (`take into account`, `by and large`, `run out of`) are detected and glossed as a unit, with a dotted underline.
@@ -95,7 +95,7 @@ Tags: `latest` (default branch), `X.Y.Z` and `X.Y` (from `vX.Y.Z` tags), branch 
 - **Web-page import** connects only to public internet addresses: loopback, private, link-local (including cloud metadata at `169.254.169.254`) and other internal ranges are refused at connect time, after DNS and on every redirect, so a pasted link can't probe the server's network. Pages are capped at 8 MB and 25 s; no proxy is used. Requests carry the headers desktop Chrome sends (many sites refuse anything else), and cookies live only for one fetch.
 - **PDFs** are read in the browser with [pdf.js](https://mozilla.github.io/pdf.js/) (JavaScript evaluation off); the file itself is never uploaded, only the text taken from it.
 - **EPUB import** refuses DRM-protected books, archives with too many entries, and any file that inflates past its limit (zip bombs). Uploads are capped at 50 MB.
-- **Agent tokens** (`llat_…`) can only add texts to their owner's shelf and check themselves (`/api/agent/*`). Browser sessions don't work on those routes, and tokens don't work anywhere else. Only a SHA-256 of each token is stored; the token is shown once when created and can be revoked in Settings.
+- **Agent tokens** (`llat_…`) can only add texts to their owner's shelf, list and add to the texts agents added there (not the user's own, and never their content), and check themselves (`/api/agent/*`). Browser sessions don't work on those routes, and tokens don't work anywhere else. Only a SHA-256 of each token is stored; the token is shown once when created and can be revoked in Settings.
 - **Isolation:** every query for user data is scoped to the signed-in user; tests check that one account can't read or change another's texts, progress or wordbook.
 - The server calls whatever API base URL a user saves, so only give accounts to people you trust with that, and put HTTPS in front of it if it's reachable beyond your machine.
 
@@ -129,6 +129,8 @@ Authenticated with `Authorization: Bearer llat_…` (an agent token), never the 
 | Endpoint | Purpose |
 |---|---|
 | `POST /api/agent/texts?title=` | Raw Markdown body (`Content-Type: text/markdown`), or JSON `{title?, markdown}` → `201 {id, title, format, words, url}`; `url` opens the text in the reader |
+| `GET /api/agent/texts` | Texts agents added (not the user's own), newest change first: `[{id, title, format, words, updatedAt, url}]` |
+| `POST /api/agent/texts/{id}/append` | Add to the end of a text an agent added, after a `---` line; same bodies as a new text (a title is ignored) → `200 {id, title, …}`. `404` for the user's own texts, `413` past the length limit |
 | `GET /api/agent/whoami` | Check a token: `{ok, user, shelf}` |
 | `GET /skills/lingolens.zip` | The agent skill, ready to unzip into a skills folder (public) |
 
@@ -169,7 +171,7 @@ Let Claude Code (or any agent or script) save replies to your shelf:
    curl -fsSL https://raw.githubusercontent.com/xavier-niu/lingolens/master/skills/install.sh | bash -s -- --dir ~/.codex/skills
    ```
    Or use **Download Skill** on the same page and unzip it into the agent's skills folder, or copy [`skills/lingolens`](skills/lingolens) from this repository. The CLI installs the skill from GitHub, so `npx skills update` picks up new versions.
-3. Ask the agent things like "explain the present perfect and save it to LingoLens" or "write me a B1 article about coffee for LingoLens". It replies with a link to the new text.
+3. Ask the agent things like "explain the present perfect and save it to LingoLens" or "write me a B1 article about coffee for LingoLens". It replies with a link to the new text. Ask it to add more on the same topic ("add a part about roasting to my coffee text") and it adds to the end of that text, after a separator line, instead of starting a new one.
 
 Without the skill, any script can upload:
 

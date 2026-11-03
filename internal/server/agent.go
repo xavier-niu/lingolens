@@ -16,12 +16,15 @@ import (
 )
 
 // Agent API: an AI agent (or any script) holding one of the user's agent tokens
-// can add Markdown texts to their shelf. It is the only thing a token can do;
-// browser sessions don't work here and tokens don't work anywhere else.
+// can add Markdown texts to their shelf, and add more to the texts agents added.
+// That is all a token can do: it can't read texts or touch the ones the user
+// added. Browser sessions don't work here and tokens don't work anywhere else.
 //
 //   POST /api/agent/texts            Authorization: Bearer llat_…
 //     Content-Type: text/markdown    raw Markdown body; ?title= optional
 //     Content-Type: application/json {"title": "...", "markdown": "..."}
+//   GET  /api/agent/texts            texts agents added: id, title, words, url
+//   POST /api/agent/texts/{id}/append  add to one of them, after a --- line
 //   GET  /api/agent/whoami           check a token
 
 func (s *Server) requireAgent(next http.HandlerFunc) http.HandlerFunc {
@@ -52,7 +55,64 @@ func (s *Server) handleAgentWhoami(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentText(w http.ResponseWriter, r *http.Request) {
-	var title, content, format string
+	title, content, format, ok := readAgentText(w, r)
+	if !ok {
+		return
+	}
+	b, err := s.opts.Store.CreateAgentBook(r.Context(), currentUser(r.Context()).ID, title, format, content)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, sentence(err))
+		return
+	}
+	writeJSON(w, http.StatusCreated, s.agentBook(r, b))
+}
+
+// GET /api/agent/texts: the texts agents added, newest change first, so an agent
+// can find the one to add to. Texts the user added aren't listed.
+func (s *Server) handleAgentListTexts(w http.ResponseWriter, r *http.Request) {
+	books, err := s.opts.Store.ListAgentBooks(r.Context(), currentUser(r.Context()).ID)
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	out := make([]map[string]any, len(books))
+	for i := range books {
+		out[i] = s.agentBook(r, &books[i])
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// POST /api/agent/texts/{id}/append: add more to the end of a text an agent
+// added, after a separator line (---). Same bodies as a new text; a title is
+// ignored. The text keeps its id, title and link.
+func (s *Server) handleAgentAppend(w http.ResponseWriter, r *http.Request) {
+	_, content, _, ok := readAgentText(w, r)
+	if !ok {
+		return
+	}
+	b, err := s.opts.Store.AppendAgentBook(r.Context(), currentUser(r.Context()).ID, r.PathValue("id"), content)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		writeError(w, http.StatusNotFound, "No text with this id was added by an agent. Agents can only add to texts agents added; save a new text instead.")
+	case errors.Is(err, store.ErrTooLong):
+		writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("Together they would be longer than %s characters. Save this part as a new text.", thousands(store.MaxBookChars)))
+	case err != nil:
+		writeError(w, http.StatusBadRequest, sentence(err))
+	default:
+		writeJSON(w, http.StatusOK, s.agentBook(r, b))
+	}
+}
+
+func (s *Server) agentBook(r *http.Request, b *store.Book) map[string]any {
+	return map[string]any{
+		"id": b.ID, "title": b.Title, "format": b.Format, "words": b.Words, "updatedAt": b.UpdatedAt,
+		"url": s.publicURL(r) + "/#/read/" + b.ID,
+	}
+}
+
+// readAgentText reads an agent's text: raw Markdown (?title= optional), plain
+// text, or JSON {title, markdown}. On a bad request it has answered already.
+func readAgentText(w http.ResponseWriter, r *http.Request) (title, content, format string, ok bool) {
 	mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	switch mt {
 	case "application/json":
@@ -63,7 +123,7 @@ func (s *Server) handleAgentText(w http.ResponseWriter, r *http.Request) {
 			Format   string `json:"format"`
 		}
 		if !decodeLimit(w, r, &req, maxBookBodyBytes) {
-			return
+			return "", "", "", false
 		}
 		title, content, format = req.Title, req.Markdown, "markdown"
 		if content == "" {
@@ -78,7 +138,7 @@ func (s *Server) handleAgentText(w http.ResponseWriter, r *http.Request) {
 			} else {
 				writeError(w, http.StatusBadRequest, "The upload didn't finish.")
 			}
-			return
+			return "", "", "", false
 		}
 		title, content, format = r.URL.Query().Get("title"), string(body), "markdown"
 		if mt == "text/plain" {
@@ -86,17 +146,9 @@ func (s *Server) handleAgentText(w http.ResponseWriter, r *http.Request) {
 		}
 	default:
 		writeError(w, http.StatusUnsupportedMediaType, "Send Markdown (Content-Type: text/markdown) or JSON {\"title\", \"markdown\"}.")
-		return
+		return "", "", "", false
 	}
-	b, err := s.opts.Store.CreateBook(r.Context(), currentUser(r.Context()).ID, title, format, content)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, sentence(err))
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{
-		"id": b.ID, "title": b.Title, "format": b.Format, "words": b.Words,
-		"url": s.publicURL(r) + "/#/read/" + b.ID,
-	})
+	return title, content, format, true
 }
 
 // GET /skills/lingolens.zip: the agent skill, ready to unpack into ~/.claude/skills.

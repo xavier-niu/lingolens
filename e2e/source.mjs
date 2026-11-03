@@ -170,6 +170,41 @@ await page.waitForSelector('#library-view:not([hidden])');
 // The shelf shows this device's copy at once, then refreshes from the server.
 await page.waitForFunction(() => document.querySelector('#shelf').textContent.includes('From an Agent'), null, { timeout: 5000 }).catch(() => {});
 check('agent text on the shelf', (await page.textContent('#shelf')).includes('From an Agent'));
+
+// Adding to it: the reader, which keeps a copy of the text, shows the new part after a rule.
+await page.goto(BASE + '#/read/' + up.body.id);
+await page.waitForFunction(() => document.querySelector('#article')?.textContent.includes('A reply saved by an agent'));
+const more = await page.evaluate(async (tok) => {
+  const auth = { Authorization: `Bearer ${tok}` };
+  const list = await fetch('/api/agent/texts', { credentials: 'omit', headers: auth }).then((r) => r.json());
+  const r = await fetch(`/api/agent/texts/${list[0].id}/append`, {
+    method: 'POST', credentials: 'omit', headers: { ...auth, 'Content-Type': 'text/markdown' },
+    body: '## A Follow-up\n\nMore on the same topic.',
+  });
+  return { status: r.status, body: await r.json(), listed: list.map((b) => b.title) };
+}, token);
+check('agent lists its texts and adds to one', more.status === 200 && more.body.id === up.body.id && more.listed.join() === 'From an Agent', JSON.stringify(more));
+await page.goto(BASE + '#/');
+await page.waitForSelector('#library-view:not([hidden])');
+await page.goto(BASE + '#/read/' + up.body.id);
+const grown = await page.waitForFunction(() => document.querySelector('#article')?.textContent.includes('More on the same topic'), null, { timeout: 8000 }).then(() => true, () => false);
+check('reader shows the added part', grown);
+check('…after a separator line, under its own heading', await page.evaluate(() => {
+  const hr = document.querySelector('#article hr');
+  const h2 = [...document.querySelectorAll('#article h2')].find((h) => h.textContent.includes('A Follow-up'));
+  return !!hr && !!h2 && !!(hr.compareDocumentPosition(h2) & Node.DOCUMENT_POSITION_FOLLOWING);
+}));
+await page.screenshot({ path: `${OUT}/s-agent-append.png` });
+// Added to while open: coming back to the tab shows it, in place.
+await page.evaluate(async (tok) => {
+  await fetch(`/api/agent/texts/${location.hash.split('/').pop()}/append`, {
+    method: 'POST', credentials: 'omit', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'text/markdown' },
+    body: 'A third part, added while the text was open.',
+  });
+  document.dispatchEvent(new Event('visibilitychange'));
+}, token);
+const live = await page.waitForFunction(() => document.querySelector('#article')?.textContent.includes('A third part'), null, { timeout: 8000 }).then(() => true, () => false);
+check('added while open: shown on returning to the tab', live && (await page.$$eval('#article hr', (h) => h.length)) === 2);
 await page.goto(BASE + '#/settings');
 await page.waitForSelector('#settings-view:not([hidden])');
 check('token hidden after leaving Settings', !(await visible('#token-new')));

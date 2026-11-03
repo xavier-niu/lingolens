@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -27,6 +28,8 @@ type Book struct {
 }
 
 const MaxBookChars = 2_000_000 // a long novel
+
+var ErrTooLong = errors.New("the text is too long")
 
 var wordRe = regexp.MustCompile(`[A-Za-z]+(?:['’-][A-Za-z]+)*`)
 
@@ -94,7 +97,7 @@ func ValidateBook(title, format, content string) (string, string, error) {
 		return "", "", errors.New("the text is empty")
 	}
 	if utf8.RuneCountInString(content) > MaxBookChars {
-		return "", "", errors.New("the text is too long")
+		return "", "", ErrTooLong
 	}
 	if format != "text" && format != "markdown" {
 		format = DetectFormat(content)
@@ -150,12 +153,24 @@ func (s *Store) GetBook(ctx context.Context, userID int64, id string) (*Book, er
 }
 
 func (s *Store) CreateBook(ctx context.Context, userID int64, title, format, content string) (*Book, error) {
-	return s.CreateBookRef(ctx, userID, title, format, content, "")
+	return s.createBook(ctx, userID, title, format, content, "", "")
 }
 
 // CreateBookRef creates a book; `ref` is the creating device's own id for it (from
 // a text added offline). Creating again with the same ref returns the first book.
 func (s *Store) CreateBookRef(ctx context.Context, userID int64, title, format, content, ref string) (*Book, error) {
+	return s.createBook(ctx, userID, title, format, content, ref, "")
+}
+
+// CreateAgentBook creates a book for one of the user's agents, which may later
+// add to it (AppendAgentBook).
+func (s *Store) CreateAgentBook(ctx context.Context, userID int64, title, format, content string) (*Book, error) {
+	return s.createBook(ctx, userID, title, format, content, "", originAgent)
+}
+
+const originAgent = "agent"
+
+func (s *Store) createBook(ctx context.Context, userID int64, title, format, content, ref, origin string) (*Book, error) {
 	title, format, err := ValidateBook(title, format, content)
 	if err != nil {
 		return nil, err
@@ -174,8 +189,8 @@ func (s *Store) CreateBookRef(ctx context.Context, userID int64, title, format, 
 		}
 	}
 	id, ts := randomHex(8), now()
-	_, err = s.db.ExecContext(ctx, `INSERT INTO books (id, user_id, title, format, content, words, created_at, updated_at, client_ref)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, userID, title, format, content, CountWords(content), ts, ts, ref)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO books (id, user_id, title, format, content, words, created_at, updated_at, client_ref, origin)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, userID, title, format, content, CountWords(content), ts, ts, ref, origin)
 	if err != nil {
 		return nil, err
 	}
@@ -203,6 +218,76 @@ func (s *Store) UpdateBook(ctx context.Context, userID int64, id, title, format,
 	_, err = s.db.ExecContext(ctx, `UPDATE books SET title = ?, format = ?, content = ?, words = ?, progress = ?, pos = ?, updated_at = ?
 		WHERE user_id = ? AND id = ?`, title, format, content, CountWords(content), progress, pos, now(), userID, id)
 	if err != nil {
+		return nil, err
+	}
+	return s.GetBook(ctx, userID, id)
+}
+
+// ListAgentBooks returns the texts the user's agents added, without their
+// content, most recently changed first.
+func (s *Store) ListAgentBooks(ctx context.Context, userID int64) ([]Book, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+bookCols+` FROM books WHERE user_id = ? AND origin = ?
+		ORDER BY updated_at DESC, rowid DESC`, userID, originAgent)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Book{}
+	for rows.Next() {
+		b, err := scanBook(rows, false)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *b)
+	}
+	return out, rows.Err()
+}
+
+// AgentSeparator goes between a text and what an agent adds to it: a
+// horizontal rule in Markdown.
+const AgentSeparator = "\n\n---\n\n"
+
+// AppendAgentBook adds more to the end of a text an agent added, after a
+// separator line. Texts the user added themselves are ErrNotFound. The reading
+// position and progress keep pointing at the same place, now a smaller share
+// of the longer text.
+func (s *Store) AppendAgentBook(ctx context.Context, userID int64, id, more string) (*Book, error) {
+	more = strings.TrimSpace(more)
+	if more == "" {
+		return nil, errors.New("the text is empty")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	var content, updated string
+	var progress, pos float64
+	err = tx.QueryRowContext(ctx, `SELECT content, progress, pos, updated_at FROM books WHERE user_id = ? AND id = ? AND origin = ?`,
+		userID, id, originAgent).Scan(&content, &progress, &pos, &updated)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	content = strings.TrimRightFunc(content, unicode.IsSpace)
+	next := content + AgentSeparator + more
+	if utf8.RuneCountInString(next) > MaxBookChars {
+		return nil, ErrTooLong
+	}
+	share := float64(utf8.RuneCountInString(content)) / float64(utf8.RuneCountInString(next))
+	// Devices refetch a text when its updated_at changes, so it always moves on,
+	// even within the second of the last change.
+	ts := now()
+	if last, err := time.Parse(time.RFC3339, updated); err == nil && ts <= updated {
+		ts = last.Add(time.Second).UTC().Format(time.RFC3339)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE books SET content = ?, words = ?, progress = ?, pos = ?, updated_at = ?
+		WHERE user_id = ? AND id = ?`, next, CountWords(next), progress*share, pos*share, ts, userID, id); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return s.GetBook(ctx, userID, id)

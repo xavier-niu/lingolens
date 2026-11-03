@@ -325,3 +325,55 @@ func TestCreateBookRef(t *testing.T) {
 		t.Fatal("a very long ref was accepted")
 	}
 }
+
+func TestAppendAgentBook(t *testing.T) {
+	s := newTestStore(t)
+	ctx := t.Context()
+	u, _ := s.CreateUser(ctx, "ag@example.com", "", "password 12345", false)
+	other, _ := s.CreateUser(ctx, "ot@example.com", "", "password 12345", false)
+	mine, _ := s.CreateBook(ctx, u.ID, "Mine", "markdown", "My own notes.")
+	a, err := s.CreateAgentBook(ctx, u.ID, "Coffee", "markdown", "# Coffee\n\nPart one.\n\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveProgress(ctx, u.ID, a.ID, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	b, err := s.AppendAgentBook(ctx, u.ID, a.ID, "\n## More\n\nPart two.\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "# Coffee\n\nPart one.\n\n---\n\n## More\n\nPart two."; b.Content != want {
+		t.Fatalf("content = %q, want %q", b.Content, want)
+	}
+	if b.Title != "Coffee" || b.Words != CountWords(b.Content) {
+		t.Fatalf("book = %+v", b)
+	}
+	if c, _ := s.AppendAgentBook(ctx, u.ID, a.ID, "Part three."); c.UpdatedAt <= b.UpdatedAt || b.UpdatedAt <= a.UpdatedAt {
+		t.Fatalf("updatedAt %s → %s → %s: devices wouldn't refetch", a.UpdatedAt, b.UpdatedAt, c.UpdatedAt)
+	}
+	if b.Pos <= 0.4 || b.Pos >= 0.8 || b.Progress != b.Pos {
+		t.Fatalf("pos %v, progress %v: should still point at the end of part one", b.Pos, b.Progress)
+	}
+
+	list, _ := s.ListAgentBooks(ctx, u.ID)
+	if len(list) != 1 || list[0].ID != a.ID || list[0].Content != "" {
+		t.Fatalf("agent books = %+v", list)
+	}
+	for name, err := range map[string]error{
+		"the user's own text": func() error { _, err := s.AppendAgentBook(ctx, u.ID, mine.ID, "x"); return err }(),
+		"another user's text": func() error { _, err := s.AppendAgentBook(ctx, other.ID, a.ID, "x"); return err }(),
+		"no such text":        func() error { _, err := s.AppendAgentBook(ctx, u.ID, "nope", "x"); return err }(),
+	} {
+		if !errors.Is(err, ErrNotFound) {
+			t.Errorf("%s: %v, want not found", name, err)
+		}
+	}
+	if _, err := s.AppendAgentBook(ctx, u.ID, a.ID, "  \n"); err == nil {
+		t.Error("empty addition accepted")
+	}
+	if _, err := s.AppendAgentBook(ctx, u.ID, a.ID, strings.Repeat("x", MaxBookChars)); !errors.Is(err, ErrTooLong) {
+		t.Errorf("too long: %v", err)
+	}
+}

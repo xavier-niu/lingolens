@@ -450,8 +450,10 @@ function updateBookStat() {
 
 let openSeq = 0; // ignores a slow load if the reader has moved on
 
-async function openBook(id) {
+// keepPlace: reopening the same text after it changed; stay where the reader is.
+async function openBook(id, { keepPlace = false } = {}) {
   const seq = ++openSeq;
+  const placeY = window.scrollY;
   flushProgress();
   let book;
   try {
@@ -486,7 +488,8 @@ async function openBook(id) {
   // Return to where the reader left off.
   requestAnimationFrame(() => {
     const top = article.getBoundingClientRect().top + window.scrollY;
-    window.scrollTo(0, book.pos > 0 ? top + book.pos * article.offsetHeight - 96 : 0);
+    if (keepPlace) window.scrollTo(0, placeY);
+    else window.scrollTo(0, book.pos > 0 ? top + book.pos * article.offsetHeight - 96 : 0);
     trackReading(false);
     armShortTextTimer();
   });
@@ -1754,12 +1757,29 @@ async function onSynced() {
     if ($('#wordbook').open) renderWordbook();
   }
   if (state.book && getLevel() !== before.level) openBook(state.book.id);
+  else refreshOpenBook(books);
   if (wasOffline) {
     wasOffline = false;
     renderNet('synced');
   } else if ($('#net-status').dataset.mode !== 'synced') {
     renderNet();
   }
+}
+
+// The open text changed elsewhere (an agent added to it, another device edited
+// it): show the new version, keeping the reader's place.
+async function refreshOpenBook(books) {
+  const open = state.book;
+  const fresh = open && books.find((b) => b.id === open.id);
+  if (!fresh || fresh.updatedAt === open.updatedAt || document.body.dataset.view !== 'reader') return;
+  const seq = openSeq;
+  const book = await getBook(open.id).catch(() => null);
+  if (!book || state.book !== open || openSeq !== seq) return;
+  if (book.content === open.content) {
+    open.updatedAt = book.updatedAt;
+    return;
+  }
+  openBook(open.id, { keepPlace: true });
 }
 
 // A text added offline reached the server and got its real id.
@@ -2341,7 +2361,10 @@ async function init() {
     scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; trackReading(true); });
   }, { passive: true });
   window.addEventListener('pagehide', () => flushProgress({ closing: true }));
-  document.addEventListener('visibilitychange', () => { if (document.hidden) flushProgress({ closing: true }); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) flushProgress({ closing: true });
+    else if (state.me && net.online) sync(); // back from another app, say an agent that added to this text
+  });
 
   // Word card
   article.addEventListener('click', (e) => {
