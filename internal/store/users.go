@@ -37,6 +37,8 @@ type Prefs struct {
 	ReadSize  string `json:"readSize"`
 	ReadWidth string `json:"readWidth"` // reading column: "n" narrow, "m" standard, "w" wide
 	Theme     string `json:"theme"`     // "system" (follow the device), "light" or "dark"
+	ReadFont  string `json:"readFont"`  // English: "literata", "classic", "sans" or "legible"
+	GlossFont string `json:"glossFont"` // Chinese glosses: "sans" (黑体), "song" (宋体) or "kai" (楷体)
 }
 
 func (p Prefs) withDefaults() Prefs {
@@ -54,6 +56,12 @@ func (p Prefs) withDefaults() Prefs {
 	}
 	if p.Theme == "" {
 		p.Theme = "system"
+	}
+	if p.ReadFont == "" {
+		p.ReadFont = "literata"
+	}
+	if p.GlossFont == "" {
+		p.GlossFont = "sans"
 	}
 	return p
 }

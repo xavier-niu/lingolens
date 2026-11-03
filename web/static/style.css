@@ -15,6 +15,23 @@
   font-display: swap;
 }
 
+/* Atkinson Hyperlegible Next (Braille Institute): an optional reading font,
+   loaded only when chosen. */
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("vendor/fonts/atkinson-next-latin.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("vendor/fonts/atkinson-next-latin-italic.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: italic;
+  font-display: swap;
+}
+
 /* ------------------------------------------------------------ tokens */
 :root {
   --canvas: #fafafa;
@@ -46,9 +63,18 @@
 
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   --serif: "Literata", Georgia, "Noto Serif CJK SC", "Songti SC", serif;
-  /* Chinese glosses: the system's Chinese sans, which stays crisp at gloss size
-     (brush-style Kai looked thin and spaced out beside the serif text). */
-  --zh: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", sans-serif;
+  /* Reading fonts the reader can choose (Reading Options); Literata is the default.
+     Each ends in Chinese fonts for any Chinese inside the English text. */
+  --font-literata: "Literata", Georgia, "Noto Serif CJK SC", "Songti SC", serif;
+  --font-classic: Charter, "Bitstream Charter", "Iowan Old Style", "Sitka Text", Cambria, Georgia, "Noto Serif CJK SC", "Songti SC", serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-legible: "Atkinson Hyperlegible Next", -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --read-font: var(--font-literata);
+  /* Chinese gloss fonts: 黑体 (the default: crisp at gloss size), 宋体, 楷体. */
+  --zh-sans: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", sans-serif;
+  --zh-song: "Songti SC", STSong, SimSun, "Noto Serif CJK SC", "Noto Serif SC", "Source Han Serif SC", serif;
+  --zh-kai: "LXGW WenKai", "Kaiti SC", STKaiti, KaiTi, "AR PL UKai CN", "Noto Serif CJK SC", serif;
+  --zh: var(--zh-sans);
   color-scheme: light;
 }
 
@@ -183,6 +209,20 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .theme-seg button, #width-seg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 1; }
 .theme-seg svg, #width-seg svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon-seg button { padding: 0 9px; }
+
+/* Font choices in Reading Options: each name set in its own font. */
+.pop-block { padding: 6px 10px 8px; font-size: 14px; }
+.pop-block > span { display: block; margin-bottom: 6px; }
+.font-seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+.font-seg.zh { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.font-seg button { height: 34px; padding: 0 8px; font-size: 15px; font-weight: 400; color: var(--ink-2); }
+.font-seg button[data-font="literata"] { font-family: var(--font-literata); }
+.font-seg button[data-font="classic"] { font-family: var(--font-classic); }
+.font-seg button[data-font="sans"] { font-family: var(--font-sans); }
+.font-seg button[data-font="legible"] { font-family: var(--font-legible); }
+.font-seg button[data-gloss="sans"] { font-family: var(--zh-sans); }
+.font-seg button[data-gloss="song"] { font-family: var(--zh-song); }
+.font-seg button[data-gloss="kai"] { font-family: var(--zh-kai); font-size: 16px; }
 /* Switching themes recolours everything at once instead of animating each control. */
 .theme-switching, .theme-switching * { transition: none !important; }
 
@@ -454,7 +494,7 @@ label.pop-row:hover { background: var(--hover); }
 .reader { max-width: var(--read-width, 820px); margin: 48px auto 0; }
 .reader-head { margin-bottom: 28px; }
 .book-heading {
-  font-family: var(--serif); font-size: clamp(28px, 4.4vw, 40px); font-weight: 650; line-height: 1.15;
+  font-family: var(--read-font); font-size: clamp(28px, 4.4vw, 40px); font-weight: 650; line-height: 1.15;
   letter-spacing: -0.02em; margin: 0;
 }
 .reader-head .book-stat { display: block; font-size: 14px; margin-top: 10px; }
@@ -467,7 +507,7 @@ label.pop-row:hover { background: var(--hover); }
 
 /* The text: no card, just a well-set column. */
 .article {
-  font-family: var(--serif); font-size: var(--read-size, 20px); line-height: 2.3; font-optical-sizing: auto;
+  font-family: var(--read-font); font-size: var(--read-size, 20px); line-height: 2.3; font-optical-sizing: auto;
   color: var(--ink); overflow-wrap: break-word; cursor: text;
 }
 .article > :first-child { margin-top: 0; }

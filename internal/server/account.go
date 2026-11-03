@@ -47,6 +47,14 @@ func (s *Server) handlePrefs(w http.ResponseWriter, r *http.Request) {
 	if req.Theme == "system" || req.Theme == "light" || req.Theme == "dark" {
 		p.Theme = req.Theme
 	}
+	switch req.ReadFont {
+	case "literata", "classic", "sans", "legible":
+		p.ReadFont = req.ReadFont
+	}
+	switch req.GlossFont {
+	case "sans", "song", "kai":
+		p.GlossFont = req.GlossFont
+	}
 	p, err := s.opts.Store.UpdatePrefs(r.Context(), u.ID, p)
 	if err != nil {
 		s.internalError(w, err)

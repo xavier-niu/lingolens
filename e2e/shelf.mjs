@@ -147,6 +147,29 @@ await page.waitForSelector('#reader-view:not([hidden])');
 check('line width kept after reload', await articleWidth() === 680, String(await articleWidth()));
 await page.click('#btn-display');
 await page.click('#width-seg [data-width="m"]');
+
+// Fonts: English text and Chinese glosses, each chosen on its own.
+const fonts = () => page.evaluate(() => ({
+  read: getComputedStyle(document.querySelector('#article p')).fontFamily,
+  gloss: getComputedStyle(document.querySelector('#article rt') || document.body).fontFamily,
+  title: getComputedStyle(document.querySelector('#book-title')).fontFamily,
+}));
+check('Literata and 黑体 by default', (await fonts()).read.startsWith('Literata') && (await page.getAttribute('#font-seg [data-font="literata"]', 'aria-pressed')) === 'true' && (await page.getAttribute('#gloss-seg [data-gloss="sans"]', 'aria-pressed')) === 'true');
+await page.click('#font-seg [data-font="legible"]');
+await page.click('#gloss-seg [data-gloss="kai"]');
+const chosen = await fonts();
+check('reading font applies to the text and title', chosen.read.startsWith('"Atkinson Hyperlegible Next"') && chosen.title === chosen.read, JSON.stringify(chosen));
+check('gloss font applies', chosen.gloss.includes('Kai'), chosen.gloss);
+check('the chosen font loads', await page.evaluate(() => document.fonts.ready.then(() => document.fonts.check('16px "Atkinson Hyperlegible Next"'))));
+await page.screenshot({ path: `${OUT}/d-display-fonts.png` });
+await page.waitForTimeout(600);
+check('fonts saved to the account', await page.evaluate(() => fetch('/api/me').then((r) => r.json()).then((m) => `${m.user.prefs.readFont}/${m.user.prefs.glossFont}`)) === 'legible/kai');
+await page.reload();
+await page.waitForSelector('#reader-view:not([hidden])');
+check('fonts kept after reload', (await fonts()).read.startsWith('"Atkinson Hyperlegible Next"'));
+await page.click('#btn-display');
+await page.click('#font-seg [data-font="literata"]');
+await page.click('#gloss-seg [data-gloss="sans"]');
 await page.keyboard.press('Escape');
 
 // Settings page: profile reflects the level; back returns to the book

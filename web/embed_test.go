@@ -25,10 +25,14 @@ func TestServiceWorkerListsEveryAppFile(t *testing.T) {
 	}
 
 	notCached := map[string]bool{
-		"index.html":           true, // cached as './'
-		"sw.js":                true, // the service worker itself
-		"vendor/fonts/OFL.txt": true, // the font licence, not used by the page
-		"vendor/pdfjs/LICENSE": true, // pdf.js's licence
+		"index.html":                    true, // cached as './'
+		"sw.js":                         true, // the service worker itself
+		"vendor/fonts/OFL.txt":          true, // the font licence, not used by the page
+		"vendor/fonts/OFL-atkinson.txt": true,
+		// An optional reading font: fetched (and then kept) only when chosen.
+		"vendor/fonts/atkinson-next-latin.woff2":        true,
+		"vendor/fonts/atkinson-next-latin-italic.woff2": true,
+		"vendor/pdfjs/LICENSE":                          true, // pdf.js's licence
 		// pdf.js (1.8 MB) loads only when someone adds a PDF; the service worker
 		// keeps it from then on, like any file it fetches.
 		"vendor/pdfjs/pdf.min.js":        true,

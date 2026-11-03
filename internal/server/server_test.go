@@ -208,7 +208,7 @@ func TestPrefs(t *testing.T) {
 	me := decodeJSON[struct {
 		User store.User `json:"user"`
 	}](t, e.do(t, c, "GET", "/api/me", nil))
-	if got := me.User.Prefs; got != (store.Prefs{Level: "B1", Lang: "en", ReadSize: "m", ReadWidth: "m", Theme: "system"}) {
+	if got := me.User.Prefs; got != (store.Prefs{Level: "B1", Lang: "en", ReadSize: "m", ReadWidth: "m", Theme: "system", ReadFont: "literata", GlossFont: "sans"}) {
 		t.Fatalf("default prefs = %+v", got)
 	}
 	got := decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]string{"theme": "dark", "level": "C1"}))
@@ -219,9 +219,13 @@ func TestPrefs(t *testing.T) {
 	if got.ReadWidth != "w" || got.Theme != "dark" {
 		t.Fatalf("after width update = %+v", got)
 	}
+	got = decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]string{"readFont": "legible", "glossFont": "kai"}))
+	if got.ReadFont != "legible" || got.GlossFont != "kai" || got.ReadWidth != "w" {
+		t.Fatalf("after font update = %+v", got)
+	}
 	// Unknown values are ignored rather than stored.
-	got = decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]string{"theme": "purple", "lang": "fr", "readWidth": "huge"}))
-	if got.Theme != "dark" || got.Lang != "en" || got.ReadWidth != "w" {
+	got = decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]string{"theme": "purple", "lang": "fr", "readWidth": "huge", "readFont": "comic", "glossFont": "x"}))
+	if got.Theme != "dark" || got.Lang != "en" || got.ReadWidth != "w" || got.ReadFont != "legible" || got.GlossFont != "kai" {
 		t.Fatalf("invalid values stored: %+v", got)
 	}
 	me = decodeJSON[struct {

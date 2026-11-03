@@ -11,6 +11,7 @@ Read English with Chinese glosses above the words you probably don't know — at
 - **Level-aware annotations.** Pick a CEFR level (A1–C2, with Chinese exam equivalents). The higher the level, the fewer words are annotated. Glosses sit above words using `<ruby>`.
 - **Fixed expressions.** Collocations, phrasal verbs and idioms (`take into account`, `by and large`, `run out of`) are detected and glossed as a unit, with a dotted underline.
 - **Click any word.** CEFR is only a guess, so clicking any word — annotated or not — fetches a context-aware entry (meaning here, IPA, other senses, collocations, examples) and adds its gloss to the text.
+- **Your choice of fonts.** In *Reading options* (**Aa**), pick the English font (Literata, a classic serif, a sans or Atkinson Hyperlegible Next) and, separately, the font of the Chinese glosses (黑体, 宋体 or 楷体), along with text size, line width and light or dark. The choices follow your account to every device.
 - **Ask AI about a sentence.** Select text and press *Ask AI* to chat with the model about it (translation, grammar, vocabulary, more examples), grounded in the surrounding passage.
 - **Wordbook.** Save words with their context sentence, mark words as known (their glosses are hidden), export to CSV (Anki-friendly).
 - **Token-frugal.** Paragraphs are annotated lazily as they scroll into view, in ~1,800-character batches, and results are cached per paragraph on the server.
@@ -206,7 +207,7 @@ internal/importer/    web-page (readability + SSRF-safe fetcher, or a page the b
 internal/server/      HTTP handlers, sessions, CSRF guard, sign-in throttling, NDJSON streaming, chat prompt
 skills/lingolens/     agent skill (SKILL.md + upload script), embedded and served as a zip; skills/install.sh installs it
 e2e/                  browser tests (Playwright): run.mjs starts a fresh server and runs the suites; fixtures/ for imports
-web/static/           UI: app.js, api.js, library.js (shelf), offline.js (device copy, outbox, sync), sw.js (service worker), i18n.js; pdftext.js (PDF → Markdown); vendored marked, DOMPurify, pdf.js (Apache-2.0, loaded on first PDF), Literata (OFL); embedded into the binary
+web/static/           UI: app.js, api.js, library.js (shelf), offline.js (device copy, outbox, sync), sw.js (service worker), i18n.js; pdftext.js (PDF → Markdown); vendored marked, DOMPurify, pdf.js (Apache-2.0, loaded on first PDF), Literata and Atkinson Hyperlegible Next (OFL; the latter loaded only when chosen); embedded into the binary
 ```
 
 ## Development

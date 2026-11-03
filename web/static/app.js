@@ -69,7 +69,7 @@ function providerProblem() {
 
 const state = {
   me: null, // the signed-in user
-  prefs: { level: 'B1', lang: 'en', readSize: 'm', readWidth: 'm', theme: 'system' },
+  prefs: { level: 'B1', lang: 'en', readSize: 'm', readWidth: 'm', theme: 'system', readFont: 'literata', glossFont: 'sans' },
   model: null,
   books: [], // the shelf, without content
   segments: new Map(), // id -> { el, text }
@@ -1634,6 +1634,19 @@ function applyReadWidth(width) {
   markPressed('#width-seg', 'width', v);
 }
 
+// The reading font and the Chinese gloss font (Reading Options).
+const READ_FONTS = ['literata', 'classic', 'sans', 'legible'];
+const GLOSS_FONTS = ['sans', 'song', 'kai'];
+function applyFonts({ readFont, glossFont }) {
+  const read = READ_FONTS.includes(readFont) ? readFont : 'literata';
+  const gloss = GLOSS_FONTS.includes(glossFont) ? glossFont : 'sans';
+  const root = document.documentElement.style;
+  root.setProperty('--read-font', `var(--font-${read})`);
+  root.setProperty('--zh', `var(--zh-${gloss})`);
+  markPressed('#font-seg', 'font', read);
+  markPressed('#gloss-seg', 'gloss', gloss);
+}
+
 // "system" follows the device; theme.js (loaded in <head>) does the work and
 // remembers the choice in this browser so the next visit paints correctly at once.
 function applyTheme(theme) {
@@ -1765,7 +1778,7 @@ async function onSynced() {
     return;
   }
   if (!state.me || me?.user?.id !== state.me.id) return;
-  const before = { level: getLevel(), lang: state.prefs.lang, readSize: state.prefs.readSize, readWidth: state.prefs.readWidth, theme: state.prefs.theme };
+  const before = { level: getLevel(), lang: state.prefs.lang, readSize: state.prefs.readSize, readWidth: state.prefs.readWidth, theme: state.prefs.theme, readFont: state.prefs.readFont, glossFont: state.prefs.glossFont };
   state.me = me.user;
   state.model = me.model;
   state.prefs = { ...state.prefs, ...me.user.prefs };
@@ -1776,6 +1789,7 @@ async function onSynced() {
   if (state.prefs.theme !== before.theme) applyTheme(state.prefs.theme);
   if (state.prefs.readSize !== before.readSize) applyReadSize(state.prefs.readSize);
   if (state.prefs.readWidth !== before.readWidth) applyReadWidth(state.prefs.readWidth);
+  if (state.prefs.readFont !== before.readFont || state.prefs.glossFont !== before.glossFont) applyFonts(state.prefs);
   updateWordbookBadge();
   refreshKnownMarks();
   if (state.prefs.lang && state.prefs.lang !== getLang()) {
@@ -1867,6 +1881,7 @@ async function startSession(me, { offline = false } = {}) {
   if (state.prefs.lang && state.prefs.lang !== getLang()) setLang(state.prefs.lang);
   applyReadSize(state.prefs.readSize);
   applyReadWidth(state.prefs.readWidth);
+  applyFonts(state.prefs);
   applyTheme(state.prefs.theme);
   try {
     const [wordbook, known] = await Promise.all([loadData('wordbook'), loadData('known')]);
@@ -2268,6 +2283,18 @@ async function init() {
     if (!size) return;
     savePrefs({ readSize: size });
     applyReadSize(size);
+  });
+  $('#font-seg').addEventListener('click', (e) => {
+    const readFont = e.target.closest('[data-font]')?.dataset.font;
+    if (!readFont) return;
+    savePrefs({ readFont });
+    applyFonts({ ...state.prefs, readFont });
+  });
+  $('#gloss-seg').addEventListener('click', (e) => {
+    const glossFont = e.target.closest('[data-gloss]')?.dataset.gloss;
+    if (!glossFont) return;
+    savePrefs({ glossFont });
+    applyFonts({ ...state.prefs, glossFont });
   });
   $('#width-seg').addEventListener('click', (e) => {
     const width = e.target.closest('[data-width]')?.dataset.width;
