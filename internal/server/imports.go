@@ -34,6 +34,37 @@ func (s *Server) handleImportURL(w http.ResponseWriter, r *http.Request) {
 	s.shelve(w, r, doc, req.Title)
 }
 
+// POST /api/books/import/page {url, html, title?, selection?}: shelve a page the
+// user's own browser loaded and sent through the bookmarklet, for sites that
+// refuse requests from servers (HTTP 403 and the like). With a selection (HTML),
+// only that part is kept; otherwise the article is found as for a fetched page.
+// The bookmarklet can't call this from the page's own site (the CSRF guard turns
+// cross-site requests away), so it hands the page to a LingoLens tab, which does.
+func (s *Server) handleImportPage(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		URL       string `json:"url"`
+		HTML      string `json:"html"`
+		Title     string `json:"title"`
+		Selection string `json:"selection"`
+	}
+	// JSON escaping can grow a page a little past its own size.
+	if !decodeLimit(w, r, &req, importer.MaxPageBytes+importer.MaxPageBytes/2) {
+		return
+	}
+	var doc *importer.Doc
+	var err error
+	if strings.TrimSpace(req.Selection) != "" {
+		doc, err = importer.Selection(req.Selection, req.URL, req.Title)
+	} else {
+		doc, err = importer.PageArticle(req.HTML, req.URL)
+	}
+	if err != nil {
+		s.importError(w, err)
+		return
+	}
+	s.shelve(w, r, doc, "")
+}
+
 // POST /api/books/import/epub?title=…, body: the .epub file (application/epub+zip).
 func (s *Server) handleImportEPUB(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, importer.MaxEPUBBytes))

@@ -22,6 +22,9 @@ export const updateBook = (id, { title, content, format }) => updateText(id, { t
 
 // Imports need the server (it fetches the page or reads the EPUB).
 export const importURL = (url, title) => api('POST', '/api/books/import/url', { url, title });
+// A page the bookmarklet sent from the user's browser: the article, or just the selection.
+export const importPage = ({ url, title, html, selection }) =>
+  api('POST', '/api/books/import/page', selection ? { url, title, selection } : { url, title, html });
 export const importEPUB = (file, title) => api('POST', `/api/books/import/epub?title=${encodeURIComponent(title || '')}`, file, { type: 'application/epub+zip' });
 
 // Mirrors store.DetectFormat on the server: is pasted text Markdown?

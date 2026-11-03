@@ -236,6 +236,40 @@
         </form>
       </section>
 
+      <section class="set-section" aria-labelledby="set-clip-h">
+        <div class="set-head">
+          <h2 id="set-clip-h" data-i18n="clip.title">Bookmarklet</h2>
+          <p data-i18n="clip.note">Add web pages from your own browser: it works on sites that refuse LingoLens (such as “HTTP 403”) and on pages you’re signed in to.</p>
+        </div>
+        <div class="set-body">
+          <div class="set-block bm-desktop">
+            <h3 data-i18n="clip.desktop">On a Computer</h3>
+            <div class="bm-drag">
+              <a id="bm-link" class="bookmarklet" href="#" translate="no"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect class="m-tile" width="32" height="32" rx="7"/><rect class="m-gloss" x="7" y="7" width="9" height="3.4" rx="1.7"/><rect class="m-word" x="6" y="13" width="12" height="5" rx="2.5"/><rect class="m-line" x="20.5" y="13" width="5.5" height="5" rx="2.5"/><rect class="m-line" x="6" y="21.5" width="7.5" height="5" rx="2.5"/><rect class="m-line" x="16" y="21.5" width="10" height="5" rx="2.5"/></svg><span>LingoLens</span></a>
+              <span class="set-help" data-i18n="clip.drag">Drag this button to your bookmarks bar.</span>
+            </div>
+            <ol class="bm-steps">
+              <li data-i18n="clip.step1">Open an article in your browser.</li>
+              <li data-i18n="clip.step2">Click LingoLens in the bookmarks bar. To keep only part of the page, select it first.</li>
+              <li data-i18n="clip.step3">A LingoLens tab opens. Check the page and choose Add to Shelf.</li>
+            </ol>
+            <p id="bm-status" class="set-help bm-status" role="status"></p>
+          </div>
+          <div class="set-block">
+            <h3 data-i18n="clip.phone">On a Phone or Tablet</h3>
+            <ol class="bm-steps">
+              <li data-i18n="clip.phone1">Copy the code below.</li>
+              <li data-i18n="clip.phone2">Bookmark any page, then edit the bookmark: name it LingoLens and paste the code as its address.</li>
+              <li data-i18n="clip.phone3">On an article, tap the address bar, type LingoLens and tap the bookmark.</li>
+            </ol>
+            <div class="token-box bm-box">
+              <code id="bm-code" class="bm-code" translate="no"></code>
+              <button type="button" id="bm-copy" class="btn small" data-i18n="agent.copy">Copy</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="set-section" aria-labelledby="set-agent-h">
         <div class="set-head">
           <h2 id="set-agent-h" data-i18n="agent.title">Agent Access</h2>
@@ -331,6 +365,29 @@
         </div>
       </section>
     </section>
+    <!-- #/clip: a page sent by the bookmarklet from another tab, waiting to be added. -->
+    <section id="clip-view" class="clip" hidden>
+      <div class="clip-card">
+        <p class="clip-kicker" data-i18n="clip.kicker">Add a Web Page</p>
+        <div id="clip-wait" class="clip-wait" role="status"><span class="spinner" aria-hidden="true"></span><span data-i18n="clip.waiting">Waiting for the page…</span></div>
+        <div id="clip-none" hidden>
+          <h1 data-i18n="clip.noneTitle">No page arrived</h1>
+          <p class="clip-from" data-i18n="clip.none">Open this with the LingoLens bookmarklet, on the page you want to read.</p>
+          <div class="row"><a class="btn" href="#/settings" data-clip-setup data-i18n="clip.setup">Set Up the Bookmarklet</a></div>
+        </div>
+        <div id="clip-page" hidden>
+          <h1 id="clip-title"></h1>
+          <p id="clip-from" class="clip-from"></p>
+          <p id="clip-what" class="src-note"></p>
+          <p id="clip-error" class="field-error" role="alert"></p>
+          <div class="row">
+            <span class="spacer"></span>
+            <button type="button" id="clip-cancel" class="btn ghost" data-i18n="settings.cancel">Cancel</button>
+            <button type="button" id="clip-save" class="btn primary" data-i18n="clip.save">Add to Shelf</button>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <div id="card" class="card" role="dialog" hidden></div>
@@ -386,6 +443,8 @@
         <label class="field"><span data-i18n="source.link">Link</span>
           <input id="src-url" name="url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://…"></label>
         <p class="src-note" data-i18n="source.urlNote">We fetch the page and keep the article — menus, ads and comments are left out.</p>
+        <p class="src-note"><span data-i18n="source.blocked">Site refuses? Add the page from your browser with the bookmarklet.</span>
+          <a href="#/settings" class="link-btn" data-clip-setup data-i18n="source.blockedLink">Set it up</a></p>
       </div>
 
       <div class="src-panel" data-kind="epub" hidden>

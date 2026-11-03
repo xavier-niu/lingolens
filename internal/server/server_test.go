@@ -490,6 +490,61 @@ func TestImportWebPage(t *testing.T) {
 	}
 }
 
+func TestImportPageFromBrowser(t *testing.T) {
+	e := newEnv(t)
+	c := e.signIn(t, "p@example.com", false)
+	page := `<!doctype html><html><head><title>Rain on the Coast | Weekly</title></head><body>
+		<nav>Menu Login Subscribe</nav><article><h1>Rain on the Coast</h1>
+		<p>The rain arrived in the afternoon, soft at first and then heavy enough to empty the beach of everyone but the gulls.</p>
+		<p>Down by the harbour, fishermen pulled their boats higher onto the sand and tied them to the old iron rings in the wall.</p>
+		<p>By evening the storm had passed, and the whole town came out to walk along the shining, washed-clean promenade.</p>
+		</article><footer>All rights reserved</footer></body></html>`
+
+	resp := e.do(t, c, "POST", "/api/books/import/page", map[string]string{"url": "https://weekly.example/rain", "html": page})
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("import: %d", status(t, resp))
+	}
+	b := decodeJSON[store.Book](t, resp)
+	got := decodeJSON[store.Book](t, e.do(t, c, "GET", "/api/books/"+b.ID, nil))
+	if !strings.Contains(got.Title, "Rain on the Coast") || got.Format != "markdown" ||
+		!strings.Contains(got.Content, "old iron rings") || strings.Contains(got.Content, "Subscribe") {
+		t.Fatalf("book = %+v", got)
+	}
+
+	// With a selection, only that part is kept, under the page's title.
+	resp = e.do(t, c, "POST", "/api/books/import/page", map[string]string{
+		"url": "https://weekly.example/rain", "title": "Rain on the Coast | Weekly",
+		"selection": "<p>By evening the storm had passed.</p>"})
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("selection: %d", status(t, resp))
+	}
+	b = decodeJSON[store.Book](t, resp)
+	got = decodeJSON[store.Book](t, e.do(t, c, "GET", "/api/books/"+b.ID, nil))
+	if got.Title != "Rain on the Coast | Weekly" || got.Content != "By evening the storm had passed." {
+		t.Fatalf("selection book = %+v", got)
+	}
+
+	for name, body := range map[string]map[string]string{
+		"no article":  {"url": "https://weekly.example/", "html": "<html><body><nav>Home</nav></body></html>"},
+		"bad address": {"url": "file:///etc/passwd", "html": page},
+	} {
+		if code := status(t, e.do(t, c, "POST", "/api/books/import/page", body)); code != http.StatusUnprocessableEntity {
+			t.Errorf("%s: %d", name, code)
+		}
+	}
+
+	// Other sites can't post pages to the shelf with the reader's cookie.
+	req, _ := http.NewRequest("POST", e.srv.URL+"/api/books/import/page", strings.NewReader(`{"url":"https://x.example/","html":"x"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://weekly.example")
+	if resp, _ := c.Do(req); status(t, resp) != http.StatusForbidden {
+		t.Fatal("cross-site page import accepted")
+	}
+	if code := status(t, e.do(t, http.DefaultClient, "POST", "/api/books/import/page", map[string]string{"url": "https://weekly.example/", "html": page})); code != http.StatusUnauthorized {
+		t.Fatalf("signed out: %d", code)
+	}
+}
+
 func TestImportEPUB(t *testing.T) {
 	e := newEnv(t)
 	c := e.signIn(t, "e@example.com", false)

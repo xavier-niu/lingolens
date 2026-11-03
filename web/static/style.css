@@ -653,7 +653,7 @@ body.chat-open .hint { display: none; }
 
 /* ------------------------------------------------------------ settings page */
 .settings-page { max-width: 720px; margin: 48px auto 0; }
-.set-section { margin-top: 36px; }
+.set-section { margin-top: 36px; scroll-margin-top: 76px; }
 .set-head h2 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
 .set-head p { margin: 4px 0 0; font-size: 13.5px; color: var(--muted); }
 .set-body { min-width: 0; margin-top: 12px; }
@@ -708,6 +708,40 @@ body.chat-open .hint { display: none; }
 .token-list:empty { display: none; }
 .token-list:not(:empty) + .token-empty { display: none; }
 .token-hint { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+
+/* ------------------------------------------------------------ bookmarklet */
+.bm-drag { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; margin-top: 12px; }
+.bookmarklet {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border-radius: 999px;
+  border: 1px dashed var(--line-strong); background: var(--canvas); color: var(--ink);
+  font-weight: 600; font-size: 14px; text-decoration: none; cursor: grab;
+}
+.bookmarklet:hover { border-color: var(--ink-2); }
+.bookmarklet .mark { width: 22px; height: 22px; }
+.bm-steps { margin: 12px 0 0; padding-left: 20px; font-size: 13.5px; line-height: 1.55; }
+.bm-steps li + li { margin-top: 3px; }
+.bm-status:empty { display: none; }
+.bm-status { margin-top: 10px; }
+.bm-box { margin-top: 12px; }
+.bm-box code.bm-code { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 6.6em; overflow-y: auto; font-size: 11.5px; }
+
+@media (pointer: coarse) { .bm-desktop { display: none; } } /* nothing to drag to on a phone */
+
+.clip { max-width: 560px; margin: 72px auto 0; }
+.clip-card {
+  padding: 24px 24px 20px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-sm);
+}
+.clip-kicker { margin: 0 0 10px; font-size: 12.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.clip-wait { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+.clip-card h1 { margin: 0; font-family: var(--serif); font-size: 22px; font-weight: 650; letter-spacing: -0.015em; line-height: 1.3; overflow-wrap: anywhere; }
+.clip-from { margin: 6px 0 0; font-size: 13.5px; color: var(--muted); overflow-wrap: anywhere; }
+.clip-card .row { margin-top: 20px; }
+.clip-card .field-error:empty { display: none; }
+@media (max-width: 640px) {
+  .clip { margin-top: 32px; }
+  .clip-card { padding: 20px 18px 16px; }
+}
 
 /* ------------------------------------------------------------ sign in */
 body[data-view="login"] .topbar { display: none; }

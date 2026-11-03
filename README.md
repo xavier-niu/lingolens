@@ -4,6 +4,7 @@ Read English with Chinese glosses above the words you probably don't know — at
 
 - **A shelf of texts.** Each text you add gets a cover on your shelf, with reading progress and an estimated reading time for your level. Reopening a text returns you to where you stopped.
 - **Add sources.** Paste text (Markdown is detected automatically), import a web page (just the article: no menus, ads or comments), or upload a DRM-free EPUB book. Long texts with sections get a Contents list.
+- **Bookmarklet.** Some sites refuse requests from servers (*HTTP 403*). Click the LingoLens bookmarklet on the page instead: your browser hands the page to LingoLens, so it also works for pages you're signed in to and text added by scripts. See [Bookmarklet](#bookmarklet).
 - **Agent access.** AI agents such as Claude Code can save their replies to your shelf with a per-user token and the bundled [skill](skills/lingolens/SKILL.md).
 
 - **Level-aware annotations.** Pick a CEFR level (A1–C2, with Chinese exam equivalents). The higher the level, the fewer words are annotated. Glosses sit above words using `<ruby>`.
@@ -90,6 +91,7 @@ Tags: `latest` (default branch), `X.Y.Z` and `X.Y` (from `vX.Y.Z` tags), branch 
 - **Sessions** are random tokens in an `HttpOnly`, `SameSite=Lax` cookie, valid for 30 days of use; the database stores only their SHA-256. Changing a password signs out the account's other sessions.
 - **Cross-site requests:** state-changing requests must send JSON or use a non-simple method, and a present `Origin` must match the host.
 - **API keys** are encrypted with AES-256-GCM, bound to their owner's account, and never returned by the API. Back up `secret.key` (or keep `LINGOLENS_SECRET`) with the database: without it, stored keys can't be decrypted and users must re-enter them.
+- **Bookmarklet:** it posts the page only to the LingoLens origin it was made for, and the LingoLens tab accepts it only from the tab that opened it, only when the page's claimed address matches its real origin, and only after you choose *Add to Shelf*. The import request itself is an ordinary same-site JSON call, so other sites still can't add to your shelf.
 - **Web-page import** connects only to public internet addresses: loopback, private, link-local (including cloud metadata at `169.254.169.254`) and other internal ranges are refused at connect time, after DNS and on every redirect, so a pasted link can't probe the server's network. Pages are capped at 8 MB and 25 s; no proxy is used.
 - **EPUB import** refuses DRM-protected books, archives with too many entries, and any file that inflates past its limit (zip bombs). Uploads are capped at 50 MB.
 - **Agent tokens** (`llat_…`) can only add texts to their owner's shelf and check themselves (`/api/agent/*`). Browser sessions don't work on those routes, and tokens don't work anywhere else. Only a SHA-256 of each token is stored; the token is shown once when created and can be revoked in Settings.
@@ -108,6 +110,7 @@ JSON in and out; streaming endpoints return NDJSON (one JSON object per line). E
 | `PUT /api/me/prefs`, `PUT /api/me/password`, `PUT /api/me/model` | Profile `{level, lang, readSize, theme}` (theme: `system`, `light` or `dark`); password; `{preset, kind, base_url, model, api_key?}` (omit `api_key` to keep it, `""` to remove it) |
 | `GET/POST /api/books`, `GET/PUT/DELETE /api/books/{id}`, `PUT /api/books/{id}/progress` | The shelf. `format` is `text`, `markdown` or `auto` (detect); up to 2,000,000 characters. A create may carry `clientRef` (a device's id for a text added offline): sending it again returns the same book. Progress is `{pos, progress, at?}`; `progress` only grows, and `pos` is ignored if newer reading was recorded after `at` |
 | `POST /api/books/import/url` | `{url, title?}` → fetches the page and shelves its article as Markdown |
+| `POST /api/books/import/page` | `{url, html}` → shelves the article of a page the browser sent (the bookmarklet); `{url, title, selection}` keeps just the selected HTML. ≤ 8 MB |
 | `POST /api/books/import/epub?title=` | Body: the `.epub` file with `Content-Type: application/epub+zip` (≤ 50 MB) |
 | `GET/POST /api/me/tokens`, `DELETE /api/me/tokens/{id}` | Agent tokens: list (name and hint only), create `{name}` (returns the token once), revoke |
 | `GET /api/wordbook`, `PUT/DELETE /api/wordbook/{key}`, `GET/DELETE /api/known`, `PUT/DELETE /api/known/{lemma}` | Wordbook and known words |
@@ -127,6 +130,18 @@ Authenticated with `Authorization: Bearer llat_…` (an agent token), never the 
 | `POST /api/agent/texts?title=` | Raw Markdown body (`Content-Type: text/markdown`), or JSON `{title?, markdown}` → `201 {id, title, format, words, url}`; `url` opens the text in the reader |
 | `GET /api/agent/whoami` | Check a token: `{ok, user, shelf}` |
 | `GET /skills/lingolens.zip` | The agent skill, ready to unzip into a skills folder (public) |
+
+## Bookmarklet
+
+For sites that answer LingoLens with *HTTP 403* (or need you to be signed in), add the page from your own browser:
+
+1. Open **Settings → Bookmarklet** and drag the **LingoLens** button to your bookmarks bar. (Show the bar with Ctrl/Cmd+Shift+B in Chrome and Edge, or *View → Show Favorites Bar* in Safari.)
+2. On an article, click **LingoLens** in the bookmarks bar. To keep only part of the page, select it first.
+3. A LingoLens tab opens (sign in if asked), shows the page's title and site, and adds it when you choose **Add to Shelf**. *Cancel* closes the tab.
+
+On a phone or tablet there's no bar to drag to: copy the code from the same section, bookmark any page, edit that bookmark (name it *LingoLens*, paste the code as its address), then on an article type *LingoLens* in the address bar and tap the bookmark.
+
+The bookmarklet contains this server's address, so re-add it if LingoLens moves. If nothing happens, allow pop-ups for that site. A few sites that isolate their windows (`Cross-Origin-Opener-Policy`) can't hand the page over; the new tab then says *No page arrived*. Select the text and paste it in **Add Source → Text** instead.
 
 ## Agents
 
@@ -177,7 +192,7 @@ internal/store/       SQLite: users, sessions, agent tokens, books, wordbook, se
 internal/levels/      CEFR levels and per-level annotation guidance
 internal/llm/         provider adapters (OpenAI-compatible via net/http, Anthropic via the Go SDK)
 internal/annotate/    prompts, chunking, alignment of LLM output to exact offsets, caches, lookup
-internal/importer/    web-page (readability + SSRF-safe fetcher) and EPUB import, HTML → Markdown
+internal/importer/    web-page (readability + SSRF-safe fetcher, or a page the bookmarklet sent) and EPUB import, HTML → Markdown
 internal/server/      HTTP handlers, sessions, CSRF guard, sign-in throttling, NDJSON streaming, chat prompt
 skills/lingolens/     agent skill (SKILL.md + upload script), embedded and served as a zip; skills/install.sh installs it
 e2e/                  browser tests (Playwright): run.mjs starts a fresh server and runs the suites; fixtures/ for imports
@@ -196,7 +211,7 @@ Tests:
 | `make e2e` | Browser tests with local Node 20+ and Playwright's Chromium (first time on Linux: `cd e2e && npx playwright install-deps chromium`) |
 | `make e2e-docker` | The same browser tests inside Playwright's Docker image; no Node needed |
 
-The browser tests build the server, start it on a free port with a throwaway data directory and the Fake model, and run eight suites: first-run setup (on its own empty server), sign-in and accounts, shelf and reader, phones and tablets, header, theme, Add Source (text, web page, EPUB, agent API) and offline sync. `make e2e SUITES="shelf offline"` runs only those. Screenshots and the server log land in `e2e/out/` (CI uploads them when a run fails).
+The browser tests build the server, start it on a free port with a throwaway data directory and the Fake model, and run nine suites: first-run setup (on its own empty server), sign-in and accounts, shelf and reader, phones and tablets, header, theme, Add Source (text, web page, EPUB, agent API), the bookmarklet (against a fixture site that refuses the server) and offline sync. `make e2e SUITES="shelf offline"` runs only those. Screenshots and the server log land in `e2e/out/` (CI uploads them when a run fails).
 
 ```sh
 LINGOLENS_DEV_FAKE=1 LINGOLENS_ADMIN_EMAIL=dev@example.com LINGOLENS_ADMIN_PASSWORD='dev password' \

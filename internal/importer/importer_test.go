@@ -206,7 +206,7 @@ func TestFetchArticle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(doc.Title, "How Habits Form") || doc.Format != "markdown" {
+	if doc.Title != "How Habits Form" || doc.Format != "markdown" {
 		t.Fatalf("doc = %+v", doc)
 	}
 	if !strings.Contains(doc.Content, "habit loop") || !strings.Contains(doc.Content, "swap in a better routine") {
@@ -226,6 +226,62 @@ func TestFetchArticle(t *testing.T) {
 		if _, err := f.Article(ctx, srv.URL+path); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: err = %v", path, err)
 		}
+	}
+}
+
+func TestPageArticle(t *testing.T) {
+	doc, err := PageArticle(page, "https://daily.example/habits")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(doc.Title, "How Habits Form") || doc.Format != "markdown" ||
+		!strings.Contains(doc.Content, "swap in a better routine") || strings.Contains(doc.Content, "Subscribe now") {
+		t.Fatalf("doc = %+v", doc)
+	}
+	if _, err := PageArticle(page, "javascript:alert(1)"); err == nil {
+		t.Error("a page without a web address was accepted")
+	}
+	big := page + strings.Repeat(" ", MaxPageBytes)
+	if _, err := PageArticle(big, "https://daily.example/"); err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Errorf("huge page: err = %v", err)
+	}
+	if _, err := PageArticle("<html><body><nav>Home</nav></body></html>", "https://daily.example/"); err == nil {
+		t.Error("a page without an article was accepted")
+	}
+}
+
+func TestSitelessTitle(t *testing.T) {
+	body, _ := html.Parse(strings.NewReader(`<h1>Night  Trains</h1><h2>Why - and how</h2>`))
+	for in, want := range map[string]string{
+		"Night Trains | The Journal":   "Night Trains",
+		"Night Trains – The Journal":   "Night Trains",
+		"Why - and how - The Journal":  "Why - and how",
+		"Night Trains | Travel | Site": "Night Trains",
+		"Spider-Man - a review":        "Spider-Man - a review",
+		"The Journal | Night Trains":   "The Journal | Night Trains",
+		"Plain title":                  "Plain title",
+	} {
+		if got := siteless(in, body); got != want {
+			t.Errorf("siteless(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestSelection(t *testing.T) {
+	doc, err := Selection(`<p>First <b>bold</b> line.</p><nav>Menu</nav><p>Second line with <a href="/x">a link</a>.</p><script>evil()</script>`,
+		"https://www.forum.example/t/1", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Title != "forum.example" || doc.Content != "First **bold** line.\n\nSecond line with a link." {
+		t.Fatalf("doc = %+v", doc)
+	}
+	doc, err = Selection("<span>Only this.</span>", "https://forum.example/t/1", "Thread Title")
+	if err != nil || doc.Title != "Thread Title" || doc.Content != "Only this." {
+		t.Fatalf("doc = %+v, err = %v", doc, err)
+	}
+	if _, err := Selection("<img src=x><script>1</script>", "https://forum.example/", "x"); err == nil {
+		t.Error("a selection without text was accepted")
 	}
 }
 

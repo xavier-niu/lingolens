@@ -17,6 +17,7 @@ import (
 
 	readability "codeberg.org/readeck/go-readability/v2"
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 	"golang.org/x/net/html/charset"
 )
 
@@ -34,8 +35,10 @@ func (e *Error) Error() string { return e.Msg }
 
 func userErr(format string, a ...any) error { return &Error{Msg: fmt.Sprintf(format, a...)} }
 
+// MaxPageBytes is the largest web page LingoLens reads, fetched or sent by a browser.
+const MaxPageBytes = 8 << 20
+
 const (
-	maxPageBytes  = 8 << 20
 	fetchTimeout  = 25 * time.Second
 	maxRedirects  = 5
 	userAgent     = "Mozilla/5.0 (compatible; LingoLens/1.0; +https://github.com/xavier-niu/lingolens)"
@@ -159,11 +162,11 @@ func (f *Fetcher) Article(ctx context.Context, raw string) (*Doc, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, userErr("The site answered with an error (HTTP %d).", resp.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPageBytes+1))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxPageBytes+1))
 	if err != nil {
 		return nil, fetchError(err)
 	}
-	if len(body) > maxPageBytes {
+	if len(body) > MaxPageBytes {
 		return nil, userErr("That page is too large to import.")
 	}
 
@@ -197,7 +200,61 @@ func (f *Fetcher) Article(ctx context.Context, raw string) (*Doc, error) {
 	if err != nil {
 		return nil, userErr("This page couldn't be read.")
 	}
-	article, err := readability.FromDocument(doc, resp.Request.URL)
+	return extract(doc, resp.Request.URL)
+}
+
+// PageArticle keeps the main text of a page that the user's browser loaded and
+// sent (the bookmarklet), for sites that refuse requests from servers. pageURL is
+// the page's address: it names untitled pages and resolves relative links.
+func PageArticle(page, pageURL string) (*Doc, error) {
+	u, err := pageAddress(page, pageURL)
+	if err != nil {
+		return nil, err
+	}
+	doc, err := html.Parse(strings.NewReader(page))
+	if err != nil {
+		return nil, userErr("This page couldn't be read.")
+	}
+	return extract(doc, u)
+}
+
+// Selection keeps the part of a page the user selected before clicking the
+// bookmarklet, all of it: for pages whose article LingoLens can't find itself.
+// fragment is the selection as HTML; title is the page's own title.
+func Selection(fragment, pageURL, title string) (*Doc, error) {
+	u, err := pageAddress(fragment, pageURL)
+	if err != nil {
+		return nil, err
+	}
+	box := &html.Node{Type: html.ElementNode, Data: "div", DataAtom: atom.Div}
+	nodes, err := html.ParseFragment(strings.NewReader(fragment), box)
+	if err != nil {
+		return nil, userErr("The selected text couldn't be read.")
+	}
+	for _, n := range nodes {
+		box.AppendChild(n)
+	}
+	content := strings.TrimSpace(ToMarkdown(box))
+	if content == "" {
+		return nil, userErr("The selection has no text. Select the part to read, or nothing for the whole article.")
+	}
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = titleFromURL(u)
+	}
+	return &Doc{Title: title, Format: "markdown", Content: content}, nil
+}
+
+func pageAddress(page, pageURL string) (*url.URL, error) {
+	if len(page) > MaxPageBytes {
+		return nil, userErr("That page is too large to import.")
+	}
+	return NormalizeURL(pageURL)
+}
+
+// extract finds the article in a parsed page and converts it to Markdown.
+func extract(doc *html.Node, u *url.URL) (*Doc, error) {
+	article, err := readability.FromDocument(doc, u)
 	if err != nil || article.Node == nil {
 		return nil, userErr("Couldn't find the article text on that page.")
 	}
@@ -205,11 +262,43 @@ func (f *Fetcher) Article(ctx context.Context, raw string) (*Doc, error) {
 	if content == "" {
 		return nil, userErr("Couldn't find the article text on that page.")
 	}
-	title := strings.TrimSpace(article.Title())
+	title := siteless(strings.TrimSpace(article.Title()), doc)
 	if title == "" {
-		title = titleFromURL(resp.Request.URL)
+		title = titleFromURL(u)
 	}
 	return &Doc{Title: title, Format: "markdown", Content: content}, nil
+}
+
+// siteless drops the site name from a page title ("How Habits Form | The Daily
+// Example"), but only when the rest is also a heading on the page, so titles
+// that merely contain a dash stay whole.
+func siteless(title string, doc *html.Node) string {
+	for _, sep := range []string{" | ", " – ", " — ", " - ", " · ", " :: "} {
+		// The site name usually comes last; some titles also name a section.
+		last := strings.LastIndex(title, sep)
+		if last < 0 {
+			continue
+		}
+		for _, head := range []string{title[:last], title[:strings.Index(title, sep)]} {
+			if head = strings.TrimSpace(head); head != "" && hasHeading(doc, head) {
+				return head
+			}
+		}
+	}
+	return title
+}
+
+func hasHeading(n *html.Node, text string) bool {
+	if n.Type == html.ElementNode && (n.DataAtom == atom.H1 || n.DataAtom == atom.H2) &&
+		strings.EqualFold(strings.Join(strings.Fields(textContent(n)), " "), text) {
+		return true
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if hasHeading(c, text) {
+			return true
+		}
+	}
+	return false
 }
 
 func decode(body []byte, ctype string) (string, error) {

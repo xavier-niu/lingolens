@@ -101,6 +101,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/agent/whoami", s.requireAgent(s.handleAgentWhoami))
 	mux.HandleFunc("POST /api/agent/texts", s.requireAgent(s.handleAgentText))
 	mux.HandleFunc("POST /api/books/import/url", s.requireUser(s.handleImportURL))
+	mux.HandleFunc("POST /api/books/import/page", s.requireUser(s.handleImportPage))
 	mux.HandleFunc("POST /api/books/import/epub", s.requireUser(s.handleImportEPUB))
 	mux.HandleFunc("GET /api/books/{id}", s.requireUser(s.handleGetBook))
 	mux.HandleFunc("PUT /api/books/{id}", s.requireUser(s.handleUpdateBook))

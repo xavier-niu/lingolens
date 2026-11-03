@@ -17,7 +17,7 @@ import { join, extname, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SUITES = ['setup', 'auth', 'shelf', 'devices', 'header', 'theme', 'source', 'offline'];
+const SUITES = ['setup', 'auth', 'shelf', 'devices', 'header', 'theme', 'source', 'clip', 'offline'];
 const OWN_SERVER = new Set(['setup']); // these need a server with an empty database
 const SUITE_TIMEOUT = 5 * 60_000;
 const ADMIN = { email: 'admin@example.com', password: 'admin password 1' };
@@ -39,6 +39,8 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.epub': 'application/epub+
 const site = createServer(async (req, res) => {
   const name = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\/+/, '');
   if (!name || name.includes('/') || name.startsWith('.')) { res.writeHead(404).end(); return; }
+  // Like sites that turn servers away: browsers get the page, LingoLens gets 403.
+  if (name === 'blocked.html' && /LingoLens/.test(req.headers['user-agent'] || '')) { res.writeHead(403).end(); return; }
   try {
     const body = await readFile(join(HERE, 'fixtures', name));
     res.writeHead(200, { 'Content-Type': TYPES[extname(name)] || 'application/octet-stream' }).end(body);

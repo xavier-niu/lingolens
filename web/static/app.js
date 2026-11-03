@@ -11,7 +11,7 @@ import {
 } from './offline.js';
 import {
   MAX_CHARS, MAX_EPUB_BYTES, getBook, createBook, updateBook, deleteBook, saveProgress,
-  importURL, importEPUB, detectFormat,
+  importURL, importPage, importEPUB, detectFormat,
   minutesLeft, isFinished, tintFor, readLegacyData, hasLegacyData, clearLegacyData,
 } from './library.js';
 
@@ -403,6 +403,7 @@ function setView(view) {
   $('#library-view').hidden = view !== 'library';
   $('#reader-view').hidden = view !== 'reader';
   $('#settings-view').hidden = view !== 'settings';
+  $('#clip-view').hidden = view !== 'clip';
   $('#login-view').hidden = view !== 'login';
   if (view === 'settings') $('#banner-action').hidden = true; // already here
   renderCrumbs(view);
@@ -420,6 +421,7 @@ function renderCrumbs(view) {
     if (book) items.push({ label: book.title, href: returnTo });
     items.push({ key: 'settings.page' });
   }
+  if (view === 'clip') items.push({ key: 'clip.crumb' });
   $('#crumbs ol').replaceChildren(...items.map((c, i) => {
     const li = document.createElement('li');
     li.className = c.home ? 'crumb-home' : c.key ? '' : 'crumb-title';
@@ -1104,7 +1106,141 @@ function showSettings() {
   $('#token-new').hidden = true; // a token is shown once, then gone
   $('#tk-env').textContent = '';
   loadTokens();
+  renderBookmarklet();
+  if (scrollToBookmarklet) $('#set-clip-h').closest('section').scrollIntoView({ block: 'start' });
+  else window.scrollTo(0, 0);
+  scrollToBookmarklet = false;
+}
+
+// ------------------------------------------------------------------ bookmarklet
+
+// Some sites refuse requests from servers (HTTP 403), and some pages need the
+// reader's own sign-in. The bookmarklet reads the page in the reader's browser
+// instead: run on any page, it opens LingoLens at #/clip and hands that tab the
+// page (or just the selected part) once the tab says it's ready. It posts only to
+// this server's origin, and the tab asks before adding anything to the shelf.
+let scrollToBookmarklet = false; // "Set it up" links open Settings at this section
+
+function bookmarkletCode() {
+  const app = location.origin + location.pathname;
+  // Plain ES2017, no comments: it runs inside other people's pages. Scripts,
+  // styles and frames are dropped to keep the message small.
+  const js = `(()=>{const A=${JSON.stringify(app)},O=new URL(A).origin,d=document,`
+    + `c=d.documentElement.cloneNode(true);`
+    + `c.querySelectorAll('script,style,noscript,template,iframe,svg,canvas,object,embed,link').forEach(n=>n.remove());`
+    + `let s='';const g=getSelection();`
+    + `if(g&&!g.isCollapsed){const b=d.createElement('div');for(let i=0;i<g.rangeCount;i++)b.append(g.getRangeAt(i).cloneContents());s=b.innerHTML}`
+    + `const p={type:'lingolens:page',url:location.href,title:d.title,html:'<!doctype html>'+c.outerHTML,selection:s},w=open(A+'#/clip');`
+    + `if(!w){alert(${JSON.stringify(t('clip.popup'))});return}`
+    + `const f=e=>{if(e.source===w&&e.origin===O&&e.data==='lingolens:ready')w.postMessage(p,O)};`
+    + `addEventListener('message',f);setTimeout(()=>removeEventListener('message',f),6e5)})()`;
+  return 'javascript:' + encodeURIComponent(js);
+}
+
+function renderBookmarklet() {
+  const code = bookmarkletCode();
+  $('#bm-link').href = code;
+  $('#bm-code').textContent = code;
+  $('#bm-status').textContent = '';
+}
+
+// #/clip: the page the bookmarklet sent, shown for a check before it's added.
+let clip = null; // { url, title, html, selection, host, words }
+let clipWaited = false;
+let clipTimer = 0;
+
+function receiveClip(e) {
+  const d = e.data;
+  if (!window.opener || e.source !== window.opener || d?.type !== 'lingolens:page') return;
+  let from;
+  try { from = new URL(d.url); } catch { return; }
+  // A page may only speak for its own site, so the shelf can't be told a page
+  // came from somewhere else.
+  if (from.origin !== e.origin || !/^https?:$/.test(from.protocol) || typeof d.html !== 'string') return;
+  // DOMParser makes inert documents: nothing in them runs or loads.
+  const parse = (html) => new DOMParser().parseFromString(html, 'text/html');
+  const selection = typeof d.selection === 'string' ? d.selection : '';
+  const words = selection ? (parse(selection).body.textContent.match(/\S+/g) || []).length : 0;
+  const headings = [...parse(d.html).querySelectorAll('h1, h2')].map((h) => h.textContent);
+  clip = {
+    url: from.href, html: d.html, selection, words,
+    title: sitelessTitle(String(d.title || '').trim().slice(0, 300), headings),
+    host: from.hostname.replace(/^www\./, ''),
+  };
+  clearTimeout(clipTimer);
+  if (document.body.dataset.view === 'clip') renderClip();
+}
+
+// Mirrors siteless in internal/importer: "Night Trains | The Journal" becomes
+// "Night Trains" when that is also a heading on the page.
+function sitelessTitle(title, headings) {
+  const norm = (x) => x.replace(/\s+/g, ' ').trim().toLowerCase();
+  const heads = new Set(headings.map(norm));
+  for (const sep of [' | ', ' – ', ' — ', ' - ', ' · ', ' :: ']) {
+    const last = title.lastIndexOf(sep);
+    if (last < 0) continue;
+    for (const head of [title.slice(0, last), title.slice(0, title.indexOf(sep))]) {
+      if (head.trim() && heads.has(norm(head))) return head.trim();
+    }
+  }
+  return title;
+}
+
+function showClip() {
+  flushProgress();
+  state.book = null;
+  resetLazy();
+  closeCard();
+  hideFab();
+  closeChat();
+  hideBanner();
+  setView('clip');
+  document.title = `${t('clip.crumb')} – LingoLens`;
+  $('#clip-error').textContent = '';
+  clipWaited = false;
+  if (!clip) {
+    // Tell the bookmarklet's tab we're here; it answers with the page.
+    window.opener?.postMessage('lingolens:ready', '*');
+    clearTimeout(clipTimer);
+    clipTimer = setTimeout(() => { clipWaited = true; renderClip(); }, window.opener ? 8000 : 0);
+  }
+  renderClip();
   window.scrollTo(0, 0);
+}
+
+function renderClip() {
+  if (document.body.dataset.view !== 'clip') return;
+  $('#clip-wait').hidden = !!clip || clipWaited;
+  $('#clip-none').hidden = !!clip || !clipWaited;
+  $('#clip-page').hidden = !clip;
+  if (!clip) return;
+  $('#clip-title').textContent = clip.title || clip.host;
+  $('#clip-from').textContent = t('clip.from', { host: clip.host });
+  $('#clip-what').textContent = clip.selection ? t('clip.selection', { n: clip.words.toLocaleString() }) : t('clip.article');
+  $('#clip-save').focus();
+}
+
+async function saveClip() {
+  const btn = $('#clip-save');
+  busy(btn, true);
+  $('#clip-error').textContent = '';
+  let book;
+  try {
+    book = await importPage(clip);
+  } catch (err) {
+    busy(btn, false);
+    $('#clip-error').textContent = err.message;
+    return;
+  }
+  busy(btn, false);
+  clip = null;
+  location.replace(`#/read/${encodeURIComponent(book.id)}`); // Back shouldn't return here
+}
+
+function cancelClip() {
+  clip = null;
+  window.close(); // the bookmarklet opened this tab; closing returns to the page
+  setTimeout(() => location.replace('#/'), 100); // if the browser keeps it open
 }
 
 
@@ -1375,6 +1511,8 @@ function route() {
   if (hash === '#/settings') {
     if (lastHash !== '#/settings') returnTo = lastHash;
     showSettings();
+  } else if (hash === '#/clip') {
+    showClip();
   } else {
     const m = hash.match(/^#\/read\/([^/]+)$/);
     if (m) openBook(decodeURIComponent(m[1]));
@@ -2108,6 +2246,20 @@ async function init() {
   $('#token-form').addEventListener('submit', createToken);
   $('#tk-copy').onclick = () => copyCode($('#tk-env'), $('#tk-copy'));
   $('#skill-copy').onclick = () => copyCode($('#skill-cmd'), $('#skill-copy'));
+  $('#bm-copy').onclick = () => copyCode($('#bm-code'), $('#bm-copy'));
+  $('#bm-link').addEventListener('click', (e) => {
+    e.preventDefault(); // it's for other sites; run here it would only open another tab
+    $('#bm-status').textContent = t('clip.notHere');
+  });
+  window.addEventListener('message', receiveClip);
+  $('#clip-save').onclick = saveClip;
+  $('#clip-cancel').onclick = cancelClip;
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-clip-setup]')) return;
+    $('#source-dialog').close();
+    scrollToBookmarklet = true;
+    if (location.hash === '#/settings') { e.preventDefault(); showSettings(); }
+  });
   $('#token-list').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-revoke]');
     if (btn) revokeToken(btn);
