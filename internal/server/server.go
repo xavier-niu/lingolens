@@ -81,6 +81,7 @@ func (s *Server) Handler() http.Handler {
 	// Accounts
 	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
 	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
+	mux.HandleFunc("POST /api/auth/setup", s.handleSetup)
 	mux.HandleFunc("GET /api/me", s.requireUser(s.handleMe))
 	mux.HandleFunc("PUT /api/me/prefs", s.requireUser(s.handlePrefs))
 	mux.HandleFunc("PUT /api/me/password", s.requireUser(s.handleChangePassword))
@@ -305,8 +306,8 @@ func clipAround(passage, selection string, limit int) string {
 	return "…" + string(runes[start:end]) + "…"
 }
 
-// needsSetup reports whether no accounts exist yet, so the sign-in page can say
-// how to create the first admin.
+// needsSetup reports whether no accounts exist yet, so the sign-in page offers
+// first-run setup instead.
 func (s *Server) needsSetup(r *http.Request) bool {
 	n, err := s.opts.Store.CountUsers(r.Context())
 	return err == nil && n == 0

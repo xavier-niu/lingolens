@@ -714,8 +714,6 @@ body[data-view="login"] main { padding-bottom: 40px; }
 .login-sub { margin: 6px 0 8px; color: var(--muted); font-size: 14px; }
 .login-card .btn.wide { margin-top: 20px; }
 .login-note { margin: 16px 0 0; font-size: 13px; color: var(--muted); text-align: center; }
-.login-setup { margin: 14px 0 0; padding: 10px 12px; border-radius: var(--r-sm); background: var(--sunken); font-size: 13px; color: var(--muted); }
-.login-setup code { display: block; margin-top: 6px; font-size: 12.5px; color: var(--ink); overflow-wrap: anywhere; }
 
 /* ------------------------------------------------------------ responsive */
 @media (prefers-reduced-motion: reduce) {

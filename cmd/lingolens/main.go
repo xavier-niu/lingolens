@@ -172,7 +172,9 @@ func bootstrapAdmin(st *store.Store, logger *slog.Logger, devMode bool) error {
 		return nil
 	}
 	if email == "" || pw == "" {
-		logger.Warn("no accounts yet; create the first admin with: lingolens user add -admin -email you@example.com")
+		logger.Warn("no accounts yet: open the app in a browser to create the first admin " +
+			"(or run: lingolens user add -admin -email you@example.com). Until then, anyone who " +
+			"reaches this server can do it, so finish setup now or set LINGOLENS_ADMIN_EMAIL and LINGOLENS_ADMIN_PASSWORD")
 		return nil
 	}
 	create := st.CreateUser

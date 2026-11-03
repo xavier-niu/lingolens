@@ -1471,7 +1471,7 @@ function refreshLanguage() {
   if (!$('#card').hidden) renderCard();
   if ($('#wordbook').open) renderWordbook();
   if (document.body.dataset.view === 'login') {
-    document.title = `${t('login.title')} – LingoLens`;
+    renderLoginMode();
     markPressed('#login-lang', 'lang', getLang());
   }
   if (document.body.dataset.view === 'settings') {
@@ -1670,15 +1670,38 @@ function showLogin() {
   for (const p of document.querySelectorAll('[popover]:popover-open')) p.hidePopover();
   setView('login');
   renderNet();
-  document.title = `${t('login.title')} – LingoLens`;
+  renderLoginMode();
   markPressed('#login-lang', 'lang', getLang());
-  $('#login-setup').hidden = !serverConfig.needs_setup;
   $('#login-error').textContent = '';
   $('#login-email').focus();
 }
 
+// The sign-in card doubles as first-run setup while the server has no accounts.
+function renderLoginMode() {
+  const setup = !!serverConfig.needs_setup;
+  const texts = setup
+    ? { '#login-title': 'setup.title', '#login-sub': 'setup.sub', '#login-submit': 'setup.submit', '#login-note': 'setup.note' }
+    : { '#login-title': 'login.title', '#login-sub': 'login.sub', '#login-submit': 'login.submit', '#login-note': 'login.note' };
+  for (const [sel, key] of Object.entries(texts)) {
+    const el = $(sel);
+    el.dataset.i18n = key;
+    el.textContent = t(key);
+  }
+  $('#setup-confirm-field').hidden = !setup;
+  const pw = $('#login-password');
+  pw.autocomplete = setup ? 'new-password' : 'current-password';
+  pw.placeholder = setup ? t('setup.passwordHint') : '';
+  document.title = `${t(setup ? 'setup.title' : 'login.title')} – LingoLens`;
+}
+
+function setNeedsSetup(on) {
+  serverConfig.needs_setup = on;
+  try { localStorage.setItem(CONFIG_KEY, JSON.stringify(serverConfig)); } catch { /* private mode */ }
+}
+
 async function submitLogin(e) {
   e.preventDefault();
+  const setup = !!serverConfig.needs_setup;
   const email = $('#login-email').value.trim();
   const password = $('#login-password').value;
   const err = $('#login-error');
@@ -1687,13 +1710,31 @@ async function submitLogin(e) {
     $(email ? '#login-password' : '#login-email').focus();
     return;
   }
+  if (setup && [...password].length < 8) {
+    err.textContent = t('setup.short');
+    $('#login-password').focus();
+    return;
+  }
+  if (setup && password !== $('#setup-confirm').value) {
+    err.textContent = t('setup.mismatch');
+    $('#setup-confirm').select();
+    return;
+  }
   busy($('#login-submit'), true);
   err.textContent = '';
   try {
-    await api('POST', '/api/auth/login', { email, password });
+    await api('POST', setup ? '/api/auth/setup' : '/api/auth/login', { email, password });
     $('#login-password').value = '';
+    $('#setup-confirm').value = '';
+    if (setup) setNeedsSetup(false);
     await startSession(await api('GET', '/api/me'));
   } catch (error) {
+    if (setup && error.status === 409) { // someone else finished setup first
+      setNeedsSetup(false);
+      renderLoginMode();
+      err.textContent = t('setup.done');
+      return;
+    }
     err.textContent = error.message;
     $('#login-password').select();
   } finally {

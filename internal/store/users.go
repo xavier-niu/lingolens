@@ -80,7 +80,17 @@ func (s *Store) CreateUser(ctx context.Context, email, name, password string, ad
 	if err := ValidatePassword(password); err != nil {
 		return nil, err
 	}
-	return s.createUser(ctx, email, name, password, admin)
+	return s.createUser(ctx, email, name, password, admin, false)
+}
+
+// CreateFirstAdmin creates an admin only while there are no accounts at all, in
+// one statement, so two people racing through first-run setup can't both win.
+// It returns ErrSetupDone once any account exists.
+func (s *Store) CreateFirstAdmin(ctx context.Context, email, name, password string) (*User, error) {
+	if err := ValidatePassword(password); err != nil {
+		return nil, err
+	}
+	return s.createUser(ctx, email, name, password, true, true)
 }
 
 // CreateDemoUser is CreateUser without the minimum password length, for local
@@ -92,10 +102,10 @@ func (s *Store) CreateDemoUser(ctx context.Context, email, name, password string
 	if len(password) > 72 {
 		return nil, errors.New("password must be at most 72 bytes")
 	}
-	return s.createUser(ctx, email, name, password, admin)
+	return s.createUser(ctx, email, name, password, admin, false)
 }
 
-func (s *Store) createUser(ctx context.Context, email, name, password string, admin bool) (*User, error) {
+func (s *Store) createUser(ctx context.Context, email, name, password string, admin, onlyFirst bool) (*User, error) {
 	email, err := NormalizeEmail(email)
 	if err != nil {
 		return nil, err
@@ -106,14 +116,20 @@ func (s *Store) createUser(ctx context.Context, email, name, password string, ad
 	}
 	name = strings.TrimSpace(name)
 	ts := now()
-	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO users (email, name, password_hash, is_admin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		email, name, string(hash), admin, ts, ts)
+	q := `INSERT INTO users (email, name, password_hash, is_admin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+	if onlyFirst {
+		q = `INSERT INTO users (email, name, password_hash, is_admin, created_at, updated_at)
+			SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM users)`
+	}
+	res, err := s.db.ExecContext(ctx, q, email, name, string(hash), admin, ts, ts)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return nil, ErrEmailTaken
 		}
 		return nil, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, ErrSetupDone
 	}
 	id, _ := res.LastInsertId()
 	return s.GetUser(ctx, id)

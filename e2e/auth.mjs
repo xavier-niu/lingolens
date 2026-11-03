@@ -19,7 +19,7 @@ await page.goto(BASE);
 await page.waitForSelector('#login-view:not([hidden])');
 check('signed-out visitors see the sign-in page', await page.isVisible('#login-form'));
 check('header hidden on sign-in page', !(await page.isVisible('.topbar')));
-check('setup hint hidden once accounts exist', !(await page.isVisible('#login-setup')));
+check('no first-run setup once accounts exist', (await page.textContent('#login-title')) === 'Sign In to LingoLens' && !(await page.isVisible('#setup-confirm')));
 await page.screenshot({ path: `${OUT}/a-login.png` });
 await page.click('#login-submit');
 check('empty form explains what to enter', (await page.textContent('#login-error')).includes('Enter your email'));

@@ -22,6 +22,7 @@ var (
 	ErrNotFound           = errors.New("not found")
 	ErrEmailTaken         = errors.New("an account with this email already exists")
 	ErrInvalidCredentials = errors.New("email or password is incorrect")
+	ErrSetupDone          = errors.New("this server already has accounts")
 )
 
 type Store struct {

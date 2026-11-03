@@ -162,6 +162,45 @@ func TestSignInAndOut(t *testing.T) {
 	}
 }
 
+func TestFirstRunSetup(t *testing.T) {
+	e := newEnv(t)
+	c := e.client()
+	setup := func(c *http.Client, email, pw string) *http.Response {
+		return e.do(t, c, "POST", "/api/auth/setup", map[string]string{"email": email, "password": pw})
+	}
+	if got := status(t, setup(c, "admin@example.com", "short")); got != 400 {
+		t.Fatalf("short password: status %d, want 400", got)
+	}
+	if got := status(t, setup(c, "not an email", testPassword)); got != 400 {
+		t.Fatalf("bad email: status %d, want 400", got)
+	}
+	if got := status(t, setup(c, "Admin@Example.com", testPassword)); got != 201 {
+		t.Fatalf("setup: status %d, want 201", got)
+	}
+	me := decodeJSON[struct {
+		User store.User `json:"user"`
+	}](t, e.do(t, c, "GET", "/api/me", nil))
+	if me.User.Email != "admin@example.com" || !me.User.IsAdmin {
+		t.Fatalf("setup should sign in as the new admin, got %+v", me.User)
+	}
+	// Done once: nobody can use it again, signed in or not.
+	if got := status(t, setup(e.client(), "intruder@example.com", testPassword)); got != 409 {
+		t.Fatalf("second setup: status %d, want 409", got)
+	}
+	if got := status(t, setup(c, "intruder@example.com", testPassword)); got != 409 {
+		t.Fatalf("setup while signed in: status %d, want 409", got)
+	}
+	cfg := decodeJSON[struct {
+		NeedsSetup bool `json:"needs_setup"`
+	}](t, e.do(t, e.client(), "GET", "/api/config", nil))
+	if cfg.NeedsSetup {
+		t.Fatal("config still says the server needs setup")
+	}
+	if n, _ := e.st.CountUsers(t.Context()); n != 1 {
+		t.Fatalf("%d accounts, want 1", n)
+	}
+}
+
 func TestPrefs(t *testing.T) {
 	e := newEnv(t)
 	c := e.signIn(t, "p@example.com", false)

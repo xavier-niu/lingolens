@@ -24,15 +24,16 @@ Everything a user saves lives in a SQLite database on the server, in the data di
 Requires Go 1.27+.
 
 ```sh
-go run ./cmd/lingolens user add -admin -email you@example.com   # prompts for a password
-go run ./cmd/lingolens                                           # http://127.0.0.1:8080
+go run ./cmd/lingolens   # http://127.0.0.1:8080
 ```
 
-Sign in, open **Settings**, pick your English level and an AI model, and add your API key. **Add source** puts a text on your shelf.
+The first visit sets up the server: while there are no accounts, the sign-in page asks for the admin's email and password instead, then signs you in. Then open **Settings**, pick your English level and an AI model, and add your API key. **Add source** puts a text on your shelf.
 
 ### Accounts
 
-Accounts are created by an admin, either in **Settings → Members** or on the command line:
+**First admin.** A server with no accounts offers first-run setup in the browser, and anyone who reaches it first becomes admin. Finish it right after starting the server, or skip it by creating the admin before anyone can connect: set `LINGOLENS_ADMIN_EMAIL` and `LINGOLENS_ADMIN_PASSWORD` (used only while there are no accounts), or run `lingolens user add -admin -email you@example.com`. Setup closes for good once any account exists.
+
+After that, accounts are created by an admin, either in **Settings → Members** or on the command line:
 
 ```sh
 lingolens user add -email reader@example.com [-name "Mei"] [-admin]
@@ -49,13 +50,11 @@ Texts kept in a browser by older versions are moved into the account on its firs
 
 ```sh
 docker build -t lingolens .
-docker run -d -p 8080:8080 -v lingolens-data:/data \
-  -e LINGOLENS_ADMIN_EMAIL=you@example.com -e LINGOLENS_ADMIN_PASSWORD='a long password' \
-  lingolens
-docker exec <container> /lingolens user add -email reader@example.com   # more accounts
+docker run -d -p 8080:8080 -v lingolens-data:/data lingolens   # then open it and set up the admin
+docker exec <container> /lingolens user add -email reader@example.com   # more accounts, or use Settings
 ```
 
-`LINGOLENS_ADMIN_*` only creates that admin when the database has no accounts yet. Keep `/data` on a volume: it holds the database and the encryption secret.
+To create the admin up front instead of in the browser, add `-e LINGOLENS_ADMIN_EMAIL=you@example.com -e LINGOLENS_ADMIN_PASSWORD='a long password'`; it applies only while the database has no accounts. Keep `/data` on a volume: it holds the database and the encryption secret.
 
 Inside the container, `localhost` refers to the container itself: to reach Ollama or LiteLLM on the host, use `http://host.docker.internal:…` (add `--add-host=host.docker.internal:host-gateway` on Linux).
 
@@ -104,6 +103,7 @@ JSON in and out; streaming endpoints return NDJSON (one JSON object per line). E
 | Endpoint | Purpose |
 |---|---|
 | `POST /api/auth/login`, `POST /api/auth/logout` | `{email, password}` → session cookie |
+| `POST /api/auth/setup` | First-run setup: `{email, password, name?}` creates the first admin and signs in; `409` once any account exists |
 | `GET /api/me` | The user, their profile (`prefs`) and model settings (`has_key`, never the key) |
 | `PUT /api/me/prefs`, `PUT /api/me/password`, `PUT /api/me/model` | Profile `{level, lang, readSize, theme}` (theme: `system`, `light` or `dark`); password; `{preset, kind, base_url, model, api_key?}` (omit `api_key` to keep it, `""` to remove it) |
 | `GET/POST /api/books`, `GET/PUT/DELETE /api/books/{id}`, `PUT /api/books/{id}/progress` | The shelf. `format` is `text`, `markdown` or `auto` (detect); up to 2,000,000 characters. A create may carry `clientRef` (a device's id for a text added offline): sending it again returns the same book. Progress is `{pos, progress, at?}`; `progress` only grows, and `pos` is ignored if newer reading was recorded after `at` |
@@ -187,7 +187,7 @@ Tests:
 | `make e2e` | Browser tests with local Node 20+ and Playwright's Chromium (first time on Linux: `cd e2e && npx playwright install-deps chromium`) |
 | `make e2e-docker` | The same browser tests inside Playwright's Docker image; no Node needed |
 
-The browser tests build the server, start it on a free port with a throwaway data directory and the Fake model, and run seven suites: sign-in and accounts, shelf and reader, phones and tablets, header, theme, Add Source (text, web page, EPUB, agent API) and offline sync. `make e2e SUITES="shelf offline"` runs only those. Screenshots and the server log land in `e2e/out/` (CI uploads them when a run fails).
+The browser tests build the server, start it on a free port with a throwaway data directory and the Fake model, and run eight suites: first-run setup (on its own empty server), sign-in and accounts, shelf and reader, phones and tablets, header, theme, Add Source (text, web page, EPUB, agent API) and offline sync. `make e2e SUITES="shelf offline"` runs only those. Screenshots and the server log land in `e2e/out/` (CI uploads them when a run fails).
 
 ```sh
 LINGOLENS_DEV_FAKE=1 LINGOLENS_ADMIN_EMAIL=dev@example.com LINGOLENS_ADMIN_PASSWORD='dev password' \

@@ -118,17 +118,15 @@
           <rect class="m-line" x="6" y="21.5" width="7.5" height="5" rx="2.5"/>
           <rect class="m-line" x="16" y="21.5" width="10" height="5" rx="2.5"/>
         </svg>
-        <h1 data-i18n="login.title">Sign in to LingoLens</h1>
-        <p class="login-sub" data-i18n="login.sub"></p>
+        <!-- Sign-in, or first-run setup while the server has no accounts (app.js sets the texts). -->
+        <h1 id="login-title" data-i18n="login.title">Sign in to LingoLens</h1>
+        <p id="login-sub" class="login-sub" data-i18n="login.sub"></p>
         <label class="field"><span data-i18n="login.email">Email</span><input id="login-email" name="email" type="email" inputmode="email" autocomplete="username" spellcheck="false" placeholder="you@example.com"></label>
         <label class="field"><span data-i18n="login.password">Password</span><input id="login-password" name="password" type="password" autocomplete="current-password"></label>
+        <label id="setup-confirm-field" class="field" hidden><span data-i18n="setup.confirm">Confirm password</span><input id="setup-confirm" name="confirm" type="password" autocomplete="new-password"></label>
         <p id="login-error" class="field-error" role="alert"></p>
         <button id="login-submit" class="btn primary wide" type="submit" data-i18n="login.submit">Sign in</button>
-        <p class="login-note" data-i18n="login.note"></p>
-        <p id="login-setup" class="login-setup" hidden>
-          <span data-i18n="login.setup"></span>
-          <code translate="no">lingolens user add -admin -email you@example.com</code>
-        </p>
+        <p id="login-note" class="login-note" data-i18n="login.note"></p>
       </form>
       <div class="seg login-lang" id="login-lang" role="group" data-i18n-aria="menu.language">
         <button type="button" data-lang="en">English</button>

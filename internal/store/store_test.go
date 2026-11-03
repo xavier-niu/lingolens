@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -57,6 +58,34 @@ func TestUsersAndAuth(t *testing.T) {
 		if _, err := s.Authenticate(ctx, c[0], c[1]); !errors.Is(err, ErrInvalidCredentials) {
 			t.Fatalf("auth %v: %v", c, err)
 		}
+	}
+}
+
+func TestCreateFirstAdmin(t *testing.T) {
+	s := newTestStore(t)
+	// Several people race through first-run setup: exactly one becomes admin.
+	const racers = 8
+	errs := make(chan error, racers)
+	for i := range racers {
+		go func() {
+			_, err := s.CreateFirstAdmin(ctx, fmt.Sprintf("admin%d@example.com", i), "", "correct horse")
+			errs <- err
+		}()
+	}
+	won := 0
+	for range racers {
+		switch err := <-errs; {
+		case err == nil:
+			won++
+		case !errors.Is(err, ErrSetupDone):
+			t.Fatalf("racer: %v", err)
+		}
+	}
+	if n, _ := s.CountUsers(ctx); won != 1 || n != 1 {
+		t.Fatalf("%d setups succeeded, %d accounts; want 1 and 1", won, n)
+	}
+	if _, err := s.CreateFirstAdmin(ctx, "late@example.com", "", "correct horse"); !errors.Is(err, ErrSetupDone) {
+		t.Fatalf("setup after the first admin: %v", err)
 	}
 }
 

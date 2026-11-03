@@ -5,8 +5,9 @@
 // Starts the server binary (LINGOLENS_BIN, default .bin/lingolens) on a free port
 // with a throwaway data directory and the Fake model, serves fixtures/ over HTTP
 // for the import tests, then runs each suite as `node <suite>.mjs <out dir>`.
-// Screenshots and server.log land in out/. Exits non-zero if any check fails or
-// a suite crashes.
+// Most suites share one server with an admin from the environment; "setup" gets
+// its own server with no accounts. Screenshots and server logs land in out/.
+// Exits non-zero if any check fails or a suite crashes.
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
@@ -16,7 +17,8 @@ import { join, extname, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SUITES = ['auth', 'shelf', 'devices', 'header', 'theme', 'source', 'offline'];
+const SUITES = ['setup', 'auth', 'shelf', 'devices', 'header', 'theme', 'source', 'offline'];
+const OWN_SERVER = new Set(['setup']); // these need a server with an empty database
 const SUITE_TIMEOUT = 5 * 60_000;
 const ADMIN = { email: 'admin@example.com', password: 'admin password 1' };
 
@@ -47,35 +49,18 @@ const site = createServer(async (req, res) => {
 await new Promise((ok) => site.listen(0, '127.0.0.1', ok));
 const sitePort = site.address().port;
 
-// ---- the server under test
-const port = await freePort();
-const data = await mkdtemp(join(tmpdir(), 'lingolens-e2e-'));
-const log = createWriteStream(join(out, 'server.log'));
-const server = spawn(bin, ['-addr', `127.0.0.1:${port}`, '-data', data], {
-  env: {
-    ...process.env,
-    LINGOLENS_DEV_FAKE: '1',
-    LINGOLENS_FETCH_ALLOW_PRIVATE: '1', // the fixtures are on 127.0.0.1
-    LINGOLENS_ADMIN_EMAIL: ADMIN.email,
-    LINGOLENS_ADMIN_PASSWORD: ADMIN.password,
-  },
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
-server.stdout.pipe(log);
-server.stderr.pipe(log);
-let serverExit = null;
-server.on('exit', (code, sig) => { serverExit = sig || code; });
-server.on('error', (e) => { serverExit = e.message; });
-
-const base = `http://127.0.0.1:${port}/`;
+// ---- the servers under test
+const servers = [];
 let failed = 0;
 let passed = 0;
 const problems = [];
 try {
-  await waitHealthy(base);
-  console.log(`server ${base} (data ${data}), fixtures http://127.0.0.1:${sitePort}/\n`);
+  const shared = suites.some((n) => !OWN_SERVER.has(n)) ? await startServer('server', { admin: true }) : null;
+  if (shared) console.log(`server ${shared.base}, fixtures http://127.0.0.1:${sitePort}/\n`);
   for (const name of suites) {
-    const r = await runSuite(name);
+    const target = OWN_SERVER.has(name) ? await startServer(`server-${name}`, { admin: false }) : shared;
+    const r = await runSuite(name, target.base);
+    if (target !== shared) await target.stop();
     passed += r.pass;
     failed += r.fail;
     if (r.fail) problems.push(`${name}: ${r.fail} failed`);
@@ -85,18 +70,52 @@ try {
 } catch (e) {
   problems.push(e.message);
 } finally {
-  server.kill();
+  for (const s of servers) await s.stop();
   site.close();
-  await rm(data, { recursive: true, force: true });
 }
 
-console.log(`${passed} passed, ${failed} failed. Screenshots and server.log: ${out}`);
+console.log(`${passed} passed, ${failed} failed. Screenshots and server logs: ${out}`);
 if (problems.length) {
   console.log('\nFAILED:\n  ' + problems.join('\n  '));
   process.exit(1);
 }
 
-function runSuite(name) {
+// A LingoLens server on a free port with its own throwaway data directory.
+async function startServer(label, { admin }) {
+  const port = await freePort();
+  const data = await mkdtemp(join(tmpdir(), 'lingolens-e2e-'));
+  const log = createWriteStream(join(out, `${label}.log`));
+  const env = {
+    ...process.env,
+    LINGOLENS_DEV_FAKE: '1',
+    LINGOLENS_FETCH_ALLOW_PRIVATE: '1', // the fixtures are on 127.0.0.1
+    LINGOLENS_ADMIN_EMAIL: admin ? ADMIN.email : '',
+    LINGOLENS_ADMIN_PASSWORD: admin ? ADMIN.password : '',
+  };
+  const child = spawn(bin, ['-addr', `127.0.0.1:${port}`, '-data', data], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  child.stdout.pipe(log);
+  child.stderr.pipe(log);
+  let exit = null;
+  const exited = new Promise((done) => child.on('close', done));
+  child.on('exit', (code, sig) => { exit = sig || code; });
+  child.on('error', (e) => { exit = e.message; });
+  let stopped = false;
+  const server = {
+    base: `http://127.0.0.1:${port}/`,
+    async stop() {
+      if (stopped) return;
+      stopped = true;
+      if (exit === null) child.kill();
+      await exited;
+      await rm(data, { recursive: true, force: true });
+    },
+  };
+  servers.push(server);
+  await waitHealthy(server.base, () => exit, label);
+  return server;
+}
+
+function runSuite(name, base) {
   console.log(`== ${name}`);
   const started = Date.now();
   return new Promise((done) => {
@@ -140,10 +159,10 @@ function runSuite(name) {
   });
 }
 
-async function waitHealthy(url) {
+async function waitHealthy(url, exitStatus, label) {
   const until = Date.now() + 30_000;
   while (Date.now() < until) {
-    if (serverExit !== null) throw new Error(`server exited (${serverExit}); see ${join(out, 'server.log')}`);
+    if (exitStatus() !== null) throw new Error(`${label} exited (${exitStatus()}); see ${join(out, `${label}.log`)}`);
     try {
       if ((await fetch(url + 'api/health')).ok) return;
     } catch { /* not up yet */ }

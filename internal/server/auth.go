@@ -218,6 +218,41 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"user": u})
 }
 
+// handleSetup is first-run setup: while the server has no accounts, anyone who
+// reaches it can create the first admin (and is signed in as it). Once any
+// account exists it refuses, so it can't be used to add more admins.
+func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email    string `json:"email"`
+		Name     string `json:"name"`
+		Password string `json:"password"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	if !s.needsSetup(r) {
+		writeError(w, http.StatusConflict, "This server is already set up. Sign in instead.")
+		return
+	}
+	u, err := s.opts.Store.CreateFirstAdmin(r.Context(), req.Email, req.Name, req.Password)
+	if errors.Is(err, store.ErrSetupDone) {
+		writeError(w, http.StatusConflict, "This server is already set up. Sign in instead.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, sentence(err))
+		return
+	}
+	s.opts.Logger.Info("created the first admin through first-run setup", "email", u.Email, "ip", clientIP(r))
+	token, err := s.opts.Store.CreateSession(r.Context(), u.ID, sessionTTL)
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	s.setSessionCookie(w, r, token)
+	writeJSON(w, http.StatusCreated, map[string]any{"user": u})
+}
+
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(sessionCookie); err == nil {
 		_ = s.opts.Store.DeleteSession(r.Context(), c.Value)
