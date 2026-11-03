@@ -17,7 +17,7 @@ import { join, extname, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SUITES = ['setup', 'auth', 'shelf', 'devices', 'header', 'theme', 'source', 'clip', 'offline'];
+const SUITES = ['setup', 'auth', 'shelf', 'devices', 'header', 'theme', 'source', 'pdf', 'clip', 'offline'];
 const OWN_SERVER = new Set(['setup']); // these need a server with an empty database
 const SUITE_TIMEOUT = 5 * 60_000;
 const ADMIN = { email: 'admin@example.com', password: 'admin password 1' };

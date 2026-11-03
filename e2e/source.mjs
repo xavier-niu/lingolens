@@ -1,4 +1,5 @@
 // Add Source (text with Markdown detection, web page, EPUB), Contents, and Agent Access.
+// PDFs have their own suite (pdf.mjs).
 import { chromium, devices } from 'playwright';
 import { BASE, SITE, fixture, freshUser, signIn, checker } from './helpers.mjs';
 
@@ -32,7 +33,7 @@ await page.click('#src-save');
 await page.waitForSelector('#reader-view:not([hidden])');
 await openDialog();
 check('once a text is on the shelf: no sample', !(await visible('#src-sample')));
-check('three kinds: Text, Web Page, EPUB', JSON.stringify(await kinds()) === '["text","url","epub"]');
+check('three kinds: Text, Web Page, Book or PDF', JSON.stringify(await kinds()) === '["text","url","file"]');
 check('no Markdown option any more', !(await page.$('#src-kinds input[value="markdown"]')));
 check('nothing disabled or "coming soon"', (await page.$$('#src-kinds input:disabled')).length === 0);
 await page.fill('#src-text', 'Dear Sam,\n\nThanks for the letter. I hope you are well.');
@@ -77,12 +78,12 @@ check('section heading kept', !!(await page.$('#article h2')));
 
 // ---- EPUB
 await openDialog();
-await page.click('#src-kinds label:has(input[value="epub"])');
+await page.click('#src-kinds label:has(input[value="file"])');
 check('Import Book label', (await page.textContent('#src-save')) === 'Import Book');
 await page.click('#src-save');
-check('asks for a file first', (await page.textContent('#src-error')).includes('Choose an EPUB'));
+check('asks for a file first', (await page.textContent('#src-error')).includes('Choose an EPUB or PDF'));
 await page.setInputFiles('#src-file', fixture('notes.txt'));
-check('a non-EPUB file is refused', (await page.textContent('#src-error')).includes('isn’t an EPUB'));
+check('a file that is neither EPUB nor PDF is refused', (await page.textContent('#src-error')).includes('isn’t an EPUB or a PDF'));
 await page.setInputFiles('#src-file', fixture('drm.epub'));
 await page.click('#src-save');
 await page.waitForFunction(() => document.querySelector('#src-error').textContent.includes('DRM'));
@@ -123,7 +124,7 @@ await page.keyboard.press('Escape');
 
 // ---- a novel-sized book
 await openDialog();
-await page.click('#src-kinds label:has(input[value="epub"])');
+await page.click('#src-kinds label:has(input[value="file"])');
 await page.setInputFiles('#src-file', fixture('big.epub'));
 let t0 = Date.now();
 await page.click('#src-save');
@@ -186,7 +187,7 @@ pp.on('pageerror', (e) => errors.push(String(e)));
 await signIn(pp, user);
 await pp.locator('#btn-add:visible, #btn-add-empty:visible').first().click();
 await pp.waitForSelector('#source-dialog[open]');
-await pp.click('#src-kinds label:has(input[value="epub"])');
+await pp.click('#src-kinds label:has(input[value="file"])');
 const fit = await pp.evaluate(() => {
   const d = document.querySelector('#source-dialog').getBoundingClientRect();
   const k = document.querySelector('#src-kinds').getBoundingClientRect();

@@ -433,11 +433,11 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 10h14M5 14h10M5 18h7"/></svg><span data-i18n="source.text">Text</span></label>
         <label class="kind"><input type="radio" name="kind" value="url">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.6 3.5 5.4 3.5 8.5s-1.1 5.9-3.5 8.5c-2.4-2.6-3.5-5.4-3.5-8.5s1.1-5.9 3.5-8.5z"/></svg><span data-i18n="source.url">Web Page</span></label>
-        <label class="kind"><input type="radio" name="kind" value="epub">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5v-15zM5 19.5A1.5 1.5 0 0 0 6.5 21H19M9 7h6"/></svg><span data-i18n="source.epub">EPUB Book</span></label>
+        <label class="kind"><input type="radio" name="kind" value="file">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5v-15zM5 19.5A1.5 1.5 0 0 0 6.5 21H19M9 7h6"/></svg><span data-i18n="source.file">Book or PDF</span></label>
       </div>
 
-      <p id="src-offline" class="src-note src-offline" hidden data-i18n="net.sourceOffline">You’re offline. Pasted text is saved on this device and added to your shelf when you’re back online; web pages and EPUB books need a connection.</p>
+      <p id="src-offline" class="src-note src-offline" hidden data-i18n="net.sourceOffline">You’re offline. Pasted text and PDFs are saved on this device and added to your shelf when you’re back online; web pages and EPUB books need a connection.</p>
 
       <div class="src-panel" data-kind="url" hidden>
         <label class="field"><span data-i18n="source.link">Link</span>
@@ -447,12 +447,12 @@
           <a href="#/settings" class="link-btn" data-clip-setup data-i18n="source.blockedLink">Set it up</a></p>
       </div>
 
-      <div class="src-panel" data-kind="epub" hidden>
+      <div class="src-panel" data-kind="file" hidden>
         <label class="dropzone" id="src-drop">
-          <input id="src-file" name="file" type="file" accept=".epub,application/epub+zip">
+          <input id="src-file" name="file" type="file" accept=".epub,.pdf,application/epub+zip,application/pdf">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 14v4.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V14"/></svg>
-          <span id="src-file-name" class="drop-title" data-i18n="source.choose">Choose an EPUB file or drop it here</span>
-          <small id="src-file-meta" data-i18n="source.epubNote">DRM-free EPUB, up to 50 MB</small>
+          <span id="src-file-name" class="drop-title" data-i18n="source.choose">Choose an EPUB or PDF file, or drop it here</span>
+          <small id="src-file-meta" data-i18n="source.fileNote">A DRM-free EPUB, or a PDF with selectable text; up to 50 MB</small>
         </label>
       </div>
 

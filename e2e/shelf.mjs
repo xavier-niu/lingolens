@@ -71,7 +71,7 @@ await page.click('#home-link');
 await page.waitForSelector('#shelf .book');
 check('shelf marks the finished text', await page.isVisible('.book-stat.done'));
 await page.click('#btn-add');
-check('dialog offers Text, Web Page and EPUB', (await page.$$eval('#src-kinds input', (xs) => xs.map((x) => x.value).join())) === 'text,url,epub');
+check('dialog offers Text, Web Page and Book or PDF', (await page.$$eval('#src-kinds input', (xs) => xs.map((x) => x.value).join())) === 'text,url,file');
 check('Text selected by default', await page.$eval('input[value="text"]', (i) => i.checked));
 await page.click('#src-save');
 check('empty text is rejected', (await page.textContent('#src-error')).includes('Paste'));

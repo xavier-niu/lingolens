@@ -1,7 +1,7 @@
 // Offline mode: the app opens without a connection, the shelf and glosses come
 // from this browser, changes wait in the outbox and sync when back online.
 import { chromium, devices } from 'playwright';
-import { BASE, freshUser, signIn, checker } from './helpers.mjs';
+import { BASE, freshUser, signIn, checker, fixture } from './helpers.mjs';
 
 const OUT = process.argv[2];
 const { check } = checker();
@@ -137,8 +137,14 @@ await page.waitForSelector('#library-view:not([hidden])');
 await page.locator('#btn-add:visible, #btn-add-empty:visible').first().click();
 await page.waitForSelector('#source-dialog[open]');
 check('offline note in Add Source', await page.isVisible('#src-offline'));
-check('web page and EPUB disabled offline', await page.$$eval('#src-kinds input', (xs) => xs.filter((x) => x.disabled).map((x) => x.value).join()) === 'url,epub');
+check('web page disabled offline; files (for PDFs) still offered', await page.$$eval('#src-kinds input', (xs) => xs.filter((x) => x.disabled).map((x) => x.value).join()) === 'url');
 await page.screenshot({ path: `${OUT}/o-source-offline.png` });
+await page.click('#src-kinds label:has(input[value="file"])');
+await page.setInputFiles('#src-file', fixture('book.epub'));
+await page.click('#src-save');
+await page.waitForFunction(() => document.querySelector('#src-error').textContent.length > 0);
+check('an EPUB offline: needs a connection', (await page.textContent('#src-error')).includes('needs a connection'));
+await page.click('#src-kinds label:has(input[value="text"])');
 await page.fill('#src-title', 'Written Offline');
 await page.fill('#src-text', '# Written Offline\n\nThis note was written on a train with no signal.\n\n- one\n- two');
 await page.click('#src-save');

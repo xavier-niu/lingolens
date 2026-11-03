@@ -47,7 +47,7 @@ e2e: e2e-bin
 # The same inside Playwright's Docker image: no local Node or browsers needed.
 e2e-docker: e2e-bin
 	docker run --rm --ipc=host $(DOCKER_USER) -e HOME=/tmp \
-		-v "$(CURDIR)/e2e:/e2e" -w /e2e $(E2E_IMAGE) \
+		-v "$(CURDIR):/src" -w /src/e2e $(E2E_IMAGE) \
 		sh -c 'npm ci --no-audit --no-fund && node run.mjs $(SUITES)'
 
 # A static binary, so it also runs inside the Playwright image.

@@ -14,6 +14,7 @@ import {
   importURL, importPage, importEPUB, detectFormat,
   minutesLeft, isFinished, tintFor, readLegacyData, hasLegacyData, clearLegacyData,
 } from './library.js';
+import { readPDF, isPDF, PDFError } from './pdftext.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -1328,7 +1329,8 @@ function bookHTML(b, level) {
 
 let editingId = null;
 
-// Kinds: pasted text (Markdown detected automatically), a web page, an EPUB book.
+// Kinds: pasted text (Markdown detected automatically), a web page, a file (an
+// EPUB book, read by the server, or a PDF, read here).
 let srcKind = 'text';
 let srcFile = null;
 let editingFormat = null;
@@ -1360,8 +1362,8 @@ function labelSourceDialog() {
   $('#source-heading').textContent = t(editing ? 'source.edit' : 'source.add');
   $('#src-kinds').hidden = editing;
   $('#src-save').textContent = t(editing ? 'source.saveEdit'
-    : { text: 'source.save', url: 'source.saveUrl', epub: 'source.saveEpub' }[srcKind]);
-  $('#src-title').placeholder = t({ text: 'source.titlePh', url: 'source.titleUrl', epub: 'source.titleEpub' }[srcKind]);
+    : { text: 'source.save', url: 'source.saveUrl', file: srcFile && isPDF(srcFile) ? 'source.savePdf' : 'source.saveEpub' }[srcKind]);
+  $('#src-title').placeholder = t({ text: 'source.titlePh', url: 'source.titleUrl', file: 'source.titleFile' }[srcKind]);
   // The sample is for getting started: offered only while the shelf is empty.
   $('#src-sample').hidden = editing || srcKind !== 'text' || state.books.length > 0;
   $('#src-delete').hidden = !editing;
@@ -1369,15 +1371,15 @@ function labelSourceDialog() {
   if (srcFile) $('#src-file-meta').textContent = t('source.fileMeta', { size: formatBytes(srcFile.size) });
 }
 
-// Web pages and EPUB books are read by the server; offline, only pasted text
-// can be added (it is saved here and sent later).
+// Web pages and EPUB books are read by the server; offline, pasted text and
+// PDFs (read here) can still be added: they are saved here and sent later.
 function updateSourceOffline() {
   const offline = !net.online;
   for (const r of document.querySelectorAll('#src-kinds input')) {
-    if (r.value !== 'text') r.disabled = offline;
+    if (r.value === 'url') r.disabled = offline;
   }
   $('#src-offline').hidden = !offline || !!editingId;
-  if (offline && srcKind !== 'text' && $('#source-dialog').open) setSourceKind('text');
+  if (offline && srcKind === 'url' && $('#source-dialog').open) setSourceKind('text');
 }
 
 const looksLikeURL = (s) => /^(https?:\/\/)?[\w-]+(\.[\w-]+)+(:\d+)?(\/\S*)?$/i.test(s.trim()) && !/\s/.test(s.trim());
@@ -1411,17 +1413,20 @@ function setSourceFile(file) {
     $('#src-file').value = '';
     name.dataset.i18n = 'source.choose';
     name.textContent = t('source.choose');
-    meta.dataset.i18n = 'source.epubNote';
-    meta.textContent = t('source.epubNote');
+    meta.dataset.i18n = 'source.fileNote';
+    meta.textContent = t('source.fileNote');
   }
   $('#src-error').textContent = '';
+  labelSourceDialog(); // "Import Book" or "Import PDF"
 }
 
-function pickEPUB(file) {
+const isEPUB = (file) => /\.epub$/i.test(file.name) || file.type === 'application/epub+zip';
+
+function pickFile(file) {
   if (!file) return;
-  if (!/\.epub$/i.test(file.name) && file.type !== 'application/epub+zip') {
+  if (!isEPUB(file) && !isPDF(file)) {
     setSourceFile(null);
-    $('#src-error').textContent = t('source.notEpub');
+    $('#src-error').textContent = t('source.notFile');
     return;
   }
   setSourceFile(file);
@@ -1474,14 +1479,17 @@ async function submitSource() {
       book = await createBook({ title, content, format: detectFormat(content) });
     } else if (srcKind === 'url') {
       book = await importURL($('#src-url').value.trim(), title);
+    } else if (isPDF(srcFile)) {
+      book = await importPDF(srcFile, title);
     } else {
       book = await importEPUB(srcFile, title);
     }
   } catch (e) {
     form.inert = false;
     busy($('#src-save'), false);
-    const field = { text: '#src-text', url: '#src-url', epub: '#src-file' }[editingId ? 'text' : srcKind];
-    return fail(e.message, $(field));
+    if (srcKind === 'file' && srcFile) setSourceFile(srcFile); // the page count goes
+    const field = { text: '#src-text', url: '#src-url', file: '#src-file' }[editingId ? 'text' : srcKind];
+    return fail(e instanceof PDFError ? t(e.key) : e.message, $(field));
   }
   form.inert = false;
   busy($('#src-save'), false);
@@ -1489,6 +1497,18 @@ async function submitSource() {
   const target = `#/read/${encodeURIComponent(book.id)}`;
   if (location.hash === target) openBook(book.id); // edited the open book: re-render it
   else location.hash = target;
+}
+
+// A PDF is read here (pdftext.js) and added like pasted Markdown, so it also
+// works offline once pdf.js has been loaded.
+async function importPDF(file, title) {
+  const meta = $('#src-file-meta');
+  meta.removeAttribute('data-i18n');
+  const pdf = await readPDF(file, { onPage: (i, n) => { meta.textContent = t('pdf.reading', { i, n }); } });
+  if (pdf.content.length > MAX_CHARS) {
+    throw new Error(t('source.tooLong', { n: pdf.content.length.toLocaleString(), max: MAX_CHARS.toLocaleString() }));
+  }
+  return createBook({ title: title.trim() || pdf.title, content: pdf.content, format: 'markdown' });
 }
 
 async function addSampleBook() {
@@ -2267,7 +2287,7 @@ async function init() {
   $('#src-text').addEventListener('input', () => { updateSrcCount(); $('#src-error').textContent = ''; });
   $('#src-kinds').addEventListener('change', (e) => {
     if (e.target.name === 'kind') setSourceKind(e.target.value);
-    (srcKind === 'url' ? $('#src-url') : srcKind === 'epub' ? $('#src-file') : $('#src-text')).focus();
+    (srcKind === 'url' ? $('#src-url') : srcKind === 'file' ? $('#src-file') : $('#src-text')).focus();
   });
   $('#src-use-link').onclick = () => {
     $('#src-url').value = $('#src-text').value.trim();
@@ -2280,14 +2300,14 @@ async function init() {
   $('#src-url').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); submitSource(); }
   });
-  $('#src-file').addEventListener('change', (e) => pickEPUB(e.target.files[0]));
+  $('#src-file').addEventListener('change', (e) => pickFile(e.target.files[0]));
   const drop = $('#src-drop');
   drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('dragging'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('dragging'));
   drop.addEventListener('drop', (e) => {
     e.preventDefault();
     drop.classList.remove('dragging');
-    pickEPUB(e.dataTransfer.files[0]);
+    pickFile(e.dataTransfer.files[0]);
   });
   $('#src-text').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submitSource();

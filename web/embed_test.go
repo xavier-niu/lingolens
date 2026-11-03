@@ -28,6 +28,11 @@ func TestServiceWorkerListsEveryAppFile(t *testing.T) {
 		"index.html":           true, // cached as './'
 		"sw.js":                true, // the service worker itself
 		"vendor/fonts/OFL.txt": true, // the font licence, not used by the page
+		"vendor/pdfjs/LICENSE": true, // pdf.js's licence
+		// pdf.js (1.8 MB) loads only when someone adds a PDF; the service worker
+		// keeps it from then on, like any file it fetches.
+		"vendor/pdfjs/pdf.min.js":        true,
+		"vendor/pdfjs/pdf.worker.min.js": true,
 	}
 	var files []string
 	err = fs.WalkDir(static, ".", func(path string, d fs.DirEntry, err error) error {

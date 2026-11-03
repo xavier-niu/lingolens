@@ -3,7 +3,7 @@
 Read English with Chinese glosses above the words you probably don't know — at your level — using your own LLM API key.
 
 - **A shelf of texts.** Each text you add gets a cover on your shelf, with reading progress and an estimated reading time for your level. Reopening a text returns you to where you stopped.
-- **Add sources.** Paste text (Markdown is detected automatically), import a web page (just the article: no menus, ads or comments), or upload a DRM-free EPUB book. Long texts with sections get a Contents list.
+- **Add sources.** Paste text (Markdown is detected automatically), import a web page (just the article: no menus, ads or comments), or add a DRM-free EPUB book or a PDF. Long texts with sections get a Contents list.
 - **Bookmarklet.** Some sites refuse requests from servers (*HTTP 403*). Click the LingoLens bookmarklet on the page instead: your browser hands the page to LingoLens, so it also works for pages you're signed in to and text added by scripts. See [Bookmarklet](#bookmarklet).
 - **Agent access.** AI agents such as Claude Code can save their replies to your shelf with a per-user token and the bundled [skill](skills/lingolens/SKILL.md).
 
@@ -93,6 +93,7 @@ Tags: `latest` (default branch), `X.Y.Z` and `X.Y` (from `vX.Y.Z` tags), branch 
 - **API keys** are encrypted with AES-256-GCM, bound to their owner's account, and never returned by the API. Back up `secret.key` (or keep `LINGOLENS_SECRET`) with the database: without it, stored keys can't be decrypted and users must re-enter them.
 - **Bookmarklet:** it posts the page only to the LingoLens origin it was made for, and the LingoLens tab accepts it only from the tab that opened it, only when the page's claimed address matches its real origin, and only after you choose *Add to Shelf*. The import request itself is an ordinary same-site JSON call, so other sites still can't add to your shelf.
 - **Web-page import** connects only to public internet addresses: loopback, private, link-local (including cloud metadata at `169.254.169.254`) and other internal ranges are refused at connect time, after DNS and on every redirect, so a pasted link can't probe the server's network. Pages are capped at 8 MB and 25 s; no proxy is used. Requests carry the headers desktop Chrome sends (many sites refuse anything else), and cookies live only for one fetch.
+- **PDFs** are read in the browser with [pdf.js](https://mozilla.github.io/pdf.js/) (JavaScript evaluation off); the file itself is never uploaded, only the text taken from it.
 - **EPUB import** refuses DRM-protected books, archives with too many entries, and any file that inflates past its limit (zip bombs). Uploads are capped at 50 MB.
 - **Agent tokens** (`llat_…`) can only add texts to their owner's shelf and check themselves (`/api/agent/*`). Browser sessions don't work on those routes, and tokens don't work anywhere else. Only a SHA-256 of each token is stored; the token is shown once when created and can be revoked in Settings.
 - **Isolation:** every query for user data is scoped to the signed-in user; tests check that one account can't read or change another's texts, progress or wordbook.
@@ -130,6 +131,12 @@ Authenticated with `Authorization: Bearer llat_…` (an agent token), never the 
 | `POST /api/agent/texts?title=` | Raw Markdown body (`Content-Type: text/markdown`), or JSON `{title?, markdown}` → `201 {id, title, format, words, url}`; `url` opens the text in the reader |
 | `GET /api/agent/whoami` | Check a token: `{ok, user, shelf}` |
 | `GET /skills/lingolens.zip` | The agent skill, ready to unzip into a skills folder (public) |
+
+## PDFs
+
+Choose **Add Source → Book or PDF** and pick a `.pdf` (up to 50 MB). LingoLens reads it in your browser and rebuilds the text: lines joined into paragraphs (also across pages and hyphenated line breaks), larger type as headings, running headers, footers and page numbers left out. The title comes from the PDF, else its first big heading, else the file name.
+
+The PDF needs text you can select: scanned pages are pictures of text, so run them through OCR first. Password-protected PDFs must be saved without the password. Tables, sidebars and footnotes come out as plain paragraphs; tidy a text afterwards with **Edit text** if needed.
 
 ## Bookmarklet
 
@@ -176,7 +183,7 @@ curl -X POST "$LINGOLENS_URL/api/agent/texts?title=Notes" \
 
 Each browser keeps a copy of the signed-in account in IndexedDB: the shelf with every text's content (downloaded in the background), glosses for paragraphs already annotated, looked-up words, the wordbook, known words and the profile. A service worker ([`sw.js`](web/static/sw.js)) keeps the app itself.
 
-Offline you can read any text on the shelf (paragraphs annotated before show their glosses; the others are glossed when you're back), open words you looked up before, save words, mark words known, add pasted text, edit or delete texts and change settings. A badge in the header says **Offline**, then **Syncing…** and **Synced**. New lookups, Ask AI, web-page and EPUB imports and account settings need a connection.
+Offline you can read any text on the shelf (paragraphs annotated before show their glosses; the others are glossed when you're back), open words you looked up before, save words, mark words known, add pasted text or a PDF (once a PDF has been read online, which loads the PDF reader), edit or delete texts and change settings. A badge in the header says **Offline**, then **Syncing…** and **Synced**. New lookups, Ask AI, web-page and EPUB imports and account settings need a connection.
 
 Changes wait in an outbox and are sent in order when the server is reachable again (checked on reconnect and every 15 s), then fresh data is fetched, so changes from other devices arrive too. Conflicts resolve simply: furthest progress wins, a reading position only replaces a newer one from another device if it is newer itself, and otherwise the last change sent wins. If the server rejects a change (say, a text it finds invalid), the app says so instead of retrying forever.
 
@@ -192,11 +199,11 @@ internal/store/       SQLite: users, sessions, agent tokens, books, wordbook, se
 internal/levels/      CEFR levels and per-level annotation guidance
 internal/llm/         provider adapters (OpenAI-compatible via net/http, Anthropic via the Go SDK)
 internal/annotate/    prompts, chunking, alignment of LLM output to exact offsets, caches, lookup
-internal/importer/    web-page (readability + SSRF-safe fetcher, or a page the bookmarklet sent) and EPUB import, HTML → Markdown
+internal/importer/    web-page (readability + SSRF-safe fetcher, or a page the bookmarklet sent) and EPUB import, HTML → Markdown (PDFs are read in the browser: web/static/pdftext.js)
 internal/server/      HTTP handlers, sessions, CSRF guard, sign-in throttling, NDJSON streaming, chat prompt
 skills/lingolens/     agent skill (SKILL.md + upload script), embedded and served as a zip; skills/install.sh installs it
 e2e/                  browser tests (Playwright): run.mjs starts a fresh server and runs the suites; fixtures/ for imports
-web/static/           UI: app.js, api.js, library.js (shelf), offline.js (device copy, outbox, sync), sw.js (service worker), i18n.js; vendored marked, DOMPurify, Literata (OFL); embedded into the binary
+web/static/           UI: app.js, api.js, library.js (shelf), offline.js (device copy, outbox, sync), sw.js (service worker), i18n.js; pdftext.js (PDF → Markdown); vendored marked, DOMPurify, pdf.js (Apache-2.0, loaded on first PDF), Literata (OFL); embedded into the binary
 ```
 
 ## Development
@@ -211,7 +218,7 @@ Tests:
 | `make e2e` | Browser tests with local Node 20+ and Playwright's Chromium (first time on Linux: `cd e2e && npx playwright install-deps chromium`) |
 | `make e2e-docker` | The same browser tests inside Playwright's Docker image; no Node needed |
 
-The browser tests build the server, start it on a free port with a throwaway data directory and the Fake model, and run nine suites: first-run setup (on its own empty server), sign-in and accounts, shelf and reader, phones and tablets, header, theme, Add Source (text, web page, EPUB, agent API), the bookmarklet (against a fixture site that refuses the server) and offline sync. `make e2e SUITES="shelf offline"` runs only those. Screenshots and the server log land in `e2e/out/` (CI uploads them when a run fails).
+The browser tests build the server, start it on a free port with a throwaway data directory and the Fake model, and run ten suites: first-run setup (on its own empty server), sign-in and accounts, shelf and reader, phones and tablets, header, theme, Add Source (text, web page, EPUB, agent API), PDFs (printed by Chromium with running headers and page numbers, and offline), the bookmarklet (against a fixture site that refuses the server) and offline sync. `make e2e SUITES="shelf offline"` runs only those. Screenshots and the server log land in `e2e/out/` (CI uploads them when a run fails).
 
 ```sh
 LINGOLENS_DEV_FAKE=1 LINGOLENS_ADMIN_EMAIL=dev@example.com LINGOLENS_ADMIN_PASSWORD='dev password' \

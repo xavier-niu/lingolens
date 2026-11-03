@@ -15,6 +15,7 @@ const APP_FILES = [
   'i18n.js',
   'api.js',
   'library.js',
+  'pdftext.js',
   'offline.js',
   'app.js',
   'vendor/marked.min.js',
