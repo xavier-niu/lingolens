@@ -289,6 +289,7 @@ function replay(name, data, ops = pendingOps) {
       } else if (o.kind === 'update' && i >= 0) {
         const changed = o.body.content !== undefined && o.meta?.contentChanged;
         data[i] = { ...data[i], ...metaFor(o.body), updatedAt: o.meta?.updatedAt || data[i].updatedAt };
+        if (o.meta?.expiresAt !== undefined) data[i].expiresAt = o.meta.expiresAt;
         if (changed) Object.assign(data[i], { progress: 0, pos: 0 });
       } else if (o.kind === 'delete' && i >= 0) {
         data.splice(i, 1);
@@ -358,6 +359,10 @@ function deriveTitle(content) {
   return 'Untitled';
 }
 
+// When a text with ttlDays deletes itself, as the server will set it.
+export const expiresFor = (ttlDays, from = Date.now()) =>
+  (ttlDays > 0 ? new Date(from + ttlDays * 864e5).toISOString().replace(/\.\d+Z$/, 'Z') : '');
+
 function metaFor(body) {
   const m = {};
   if (body.title !== undefined) m.title = (body.title || '').trim() || deriveTitle(body.content || '');
@@ -422,7 +427,7 @@ export async function createText(body) {
   }
   const id = LOCAL_ID + Math.random().toString(36).slice(2, 10);
   const now = new Date().toISOString();
-  const meta = { id, progress: 0, pos: 0, createdAt: now, updatedAt: now, lastReadAt: '', local: true };
+  const meta = { id, progress: 0, pos: 0, createdAt: now, updatedAt: now, lastReadAt: '', local: true, expiresAt: expiresFor(body.ttlDays) };
   await storeText({ id, content: body.content, format: body.format, updatedAt: now });
   await enqueue({ key: `book:${id}`, kind: 'create', id, method: 'POST', path: '/api/books', body: { ...body, clientRef: id }, meta });
   return { ...meta, ...metaFor(body), content: body.content };
@@ -444,7 +449,8 @@ export async function updateText(id, body) {
   const now = new Date().toISOString();
   const contentChanged = !old || old.content !== body.content;
   await storeText({ id, content: body.content, format: body.format, updatedAt: now });
-  await enqueue({ key: `book:${id}`, kind: 'update', id, method: 'PUT', path: bookPath(id), body, meta: { updatedAt: now, contentChanged } });
+  const expiresAt = body.ttlDays === undefined ? undefined : expiresFor(body.ttlDays);
+  await enqueue({ key: `book:${id}`, kind: 'update', id, method: 'PUT', path: bookPath(id), body, meta: { updatedAt: now, contentChanged, expiresAt } });
   const book = (await view('books', [])).find((b) => b.id === id);
   return { ...book, content: body.content };
 }

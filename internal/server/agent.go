@@ -22,6 +22,7 @@ import (
 //
 //   POST /api/agent/texts            Authorization: Bearer llat_…
 //     Content-Type: text/markdown    raw Markdown body; ?title= optional
+//                                    ?ttlDays= optional: deleted after (default 30, 0 never)
 //     Content-Type: application/json {"title": "...", "markdown": "..."}
 //   GET  /api/agent/texts            texts agents added: id, title, words, url
 //   POST /api/agent/texts/{id}/append  add to one of them, after a --- line
@@ -55,11 +56,19 @@ func (s *Server) handleAgentWhoami(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentText(w http.ResponseWriter, r *http.Request) {
-	title, content, format, ok := readAgentText(w, r)
+	title, content, format, days, ok := readAgentText(w, r)
 	if !ok {
 		return
 	}
-	b, err := s.opts.Store.CreateAgentBook(r.Context(), currentUser(r.Context()).ID, title, format, content)
+	keep := store.AgentTTL
+	if days != nil {
+		var err error
+		if keep, err = ttl(days); err != nil {
+			writeError(w, http.StatusBadRequest, sentence(err))
+			return
+		}
+	}
+	b, err := s.opts.Store.CreateAgentBook(r.Context(), currentUser(r.Context()).ID, title, format, content, keep)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, sentence(err))
 		return
@@ -86,7 +95,7 @@ func (s *Server) handleAgentListTexts(w http.ResponseWriter, r *http.Request) {
 // added, after a separator line (---). Same bodies as a new text; a title is
 // ignored. The text keeps its id, title and link.
 func (s *Server) handleAgentAppend(w http.ResponseWriter, r *http.Request) {
-	_, content, _, ok := readAgentText(w, r)
+	_, content, _, _, ok := readAgentText(w, r)
 	if !ok {
 		return
 	}
@@ -105,14 +114,15 @@ func (s *Server) handleAgentAppend(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) agentBook(r *http.Request, b *store.Book) map[string]any {
 	return map[string]any{
-		"id": b.ID, "title": b.Title, "format": b.Format, "words": b.Words, "updatedAt": b.UpdatedAt,
+		"id": b.ID, "title": b.Title, "format": b.Format, "words": b.Words, "updatedAt": b.UpdatedAt, "expiresAt": b.ExpiresAt,
 		"url": s.publicURL(r) + "/#/read/" + b.ID,
 	}
 }
 
-// readAgentText reads an agent's text: raw Markdown (?title= optional), plain
-// text, or JSON {title, markdown}. On a bad request it has answered already.
-func readAgentText(w http.ResponseWriter, r *http.Request) (title, content, format string, ok bool) {
+// readAgentText reads an agent's text: raw Markdown (?title= and ?ttlDays=
+// optional), plain text, or JSON {title, markdown, ttlDays}. On a bad request
+// it has answered already.
+func readAgentText(w http.ResponseWriter, r *http.Request) (title, content, format string, ttlDays *int, ok bool) {
 	mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	switch mt {
 	case "application/json":
@@ -121,11 +131,12 @@ func readAgentText(w http.ResponseWriter, r *http.Request) (title, content, form
 			Markdown string `json:"markdown"`
 			Content  string `json:"content"`
 			Format   string `json:"format"`
+			TTLDays  *int   `json:"ttlDays"`
 		}
 		if !decodeLimit(w, r, &req, maxBookBodyBytes) {
-			return "", "", "", false
+			return "", "", "", nil, false
 		}
-		title, content, format = req.Title, req.Markdown, "markdown"
+		title, content, format, ttlDays = req.Title, req.Markdown, "markdown", req.TTLDays
 		if content == "" {
 			content, format = req.Content, req.Format
 		}
@@ -138,17 +149,25 @@ func readAgentText(w http.ResponseWriter, r *http.Request) (title, content, form
 			} else {
 				writeError(w, http.StatusBadRequest, "The upload didn't finish.")
 			}
-			return "", "", "", false
+			return "", "", "", nil, false
 		}
 		title, content, format = r.URL.Query().Get("title"), string(body), "markdown"
+		if v := r.URL.Query().Get("ttlDays"); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "The days to keep a text (ttlDays) must be a whole number (0 for forever).")
+				return "", "", "", nil, false
+			}
+			ttlDays = &n
+		}
 		if mt == "text/plain" {
 			format = "auto"
 		}
 	default:
 		writeError(w, http.StatusUnsupportedMediaType, "Send Markdown (Content-Type: text/markdown) or JSON {\"title\", \"markdown\"}.")
-		return "", "", "", false
+		return "", "", "", nil, false
 	}
-	return title, content, format, true
+	return title, content, format, ttlDays, true
 }
 
 // GET /skills/lingolens.zip: the agent skill, ready to unpack into ~/.claude/skills.

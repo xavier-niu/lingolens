@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -761,6 +762,78 @@ func TestAgentAPI(t *testing.T) {
 	}
 	if status(t, agent("GET", "/api/agent/whoami", "", created.Token, "")) != 401 {
 		t.Fatal("revoked token still works")
+	}
+}
+
+func TestBookTTL(t *testing.T) {
+	e := newEnv(t)
+	c := e.signIn(t, "ttl@example.com", false)
+	days := func(b store.Book) float64 {
+		if b.ExpiresAt == "" {
+			return 0
+		}
+		at, err := time.Parse(time.RFC3339, b.ExpiresAt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return math.Round(time.Until(at).Hours() / 24)
+	}
+
+	b := decodeJSON[store.Book](t, e.do(t, c, "POST", "/api/books", map[string]any{"content": "Forever."}))
+	if b.ExpiresAt != "" {
+		t.Fatalf("new text expires: %q", b.ExpiresAt)
+	}
+	b = decodeJSON[store.Book](t, e.do(t, c, "POST", "/api/books", map[string]any{"content": "A week.", "ttlDays": 7}))
+	if days(b) != 7 {
+		t.Fatalf("ttlDays 7 → %v days", days(b))
+	}
+	// Editing without ttlDays keeps it; with it, changes it.
+	b = decodeJSON[store.Book](t, e.do(t, c, "PUT", "/api/books/"+b.ID, map[string]any{"content": "A week, edited."}))
+	if days(b) != 7 {
+		t.Fatalf("edit dropped the ttl: %q", b.ExpiresAt)
+	}
+	b = decodeJSON[store.Book](t, e.do(t, c, "PUT", "/api/books/"+b.ID, map[string]any{"content": "Kept.", "ttlDays": 0}))
+	if b.ExpiresAt != "" {
+		t.Fatalf("ttlDays 0 should keep it: %q", b.ExpiresAt)
+	}
+	b = decodeJSON[store.Book](t, e.do(t, c, "PUT", "/api/books/"+b.ID, map[string]any{"content": "Kept.", "ttlDays": 365}))
+	if days(b) != 365 {
+		t.Fatalf("ttlDays 365 → %v", days(b))
+	}
+	for name, body := range map[string]map[string]any{
+		"negative": {"content": "x", "ttlDays": -1},
+		"too long": {"content": "x", "ttlDays": 3651},
+	} {
+		if got := status(t, e.do(t, c, "POST", "/api/books", body)); got != 400 {
+			t.Errorf("%s: %d, want 400", name, got)
+		}
+	}
+
+	// Agents: 30 days unless they ask otherwise.
+	tok := decodeJSON[struct {
+		Token string `json:"token"`
+	}](t, e.do(t, c, "POST", "/api/me/tokens", map[string]string{"name": "A"})).Token
+	agent := func(path, body string) store.Book {
+		req, _ := http.NewRequest("POST", e.srv.URL+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "text/markdown")
+		req.Header.Set("Authorization", "Bearer "+tok)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return decodeJSON[store.Book](t, resp)
+	}
+	if b = agent("/api/agent/texts", "# Agent"); days(b) != 30 {
+		t.Fatalf("agent text: %v days", days(b))
+	}
+	if b = agent("/api/agent/texts?ttlDays=0", "# Kept"); b.ExpiresAt != "" {
+		t.Fatalf("agent ttlDays=0: %q", b.ExpiresAt)
+	}
+	if b = agent("/api/agent/texts?ttlDays=3", "# Short"); days(b) != 3 {
+		t.Fatalf("agent ttlDays=3: %v", days(b))
+	}
+	if b = agent("/api/agent/texts/"+b.ID+"/append", "More."); days(b) != 30 {
+		t.Fatalf("adding should renew to 30 days: %v", days(b))
 	}
 }
 

@@ -6,6 +6,7 @@ Read English with Chinese glosses above the words you probably don't know — at
 - **Add sources.** Paste text (Markdown is detected automatically), import a web page (just the article: no menus, ads or comments), or add a DRM-free EPUB book or a PDF. Long texts with sections get a Contents list.
 - **Bookmarklet.** Some sites refuse requests from servers (*HTTP 403*). Click the LingoLens bookmarklet on the page instead: your browser hands the page to LingoLens, so it also works for pages you're signed in to and text added by scripts. See [Bookmarklet](#bookmarklet).
 - **Agent access.** AI agents such as Claude Code can save their replies to your shelf with a per-user token and the bundled [skill](skills/lingolens/SKILL.md), and add later replies on the same topic to the same text.
+- **Texts that clean up after themselves.** Any text can be set to delete itself after a day, a week, a month, three months or a year (Add Source or Edit text → *Delete automatically*); the shelf shows the days left. Texts are kept forever unless you choose, except agents' replies, which go after 30 days unless you keep them.
 
 - **Level-aware annotations.** Pick a CEFR level (A1–C2, with Chinese exam equivalents). The higher the level, the fewer words are annotated. Glosses sit above words using `<ruby>`.
 - **Fixed expressions.** Collocations, phrasal verbs and idioms (`take into account`, `by and large`, `run out of`) are detected and glossed as a unit, with a dotted underline.
@@ -109,10 +110,10 @@ JSON in and out; streaming endpoints return NDJSON (one JSON object per line). E
 | `POST /api/auth/setup` | First-run setup: `{email, password, name?}` creates the first admin and signs in; `409` once any account exists |
 | `GET /api/me` | The user, their profile (`prefs`) and model settings (`has_key`, never the key) |
 | `PUT /api/me/prefs`, `PUT /api/me/password`, `PUT /api/me/model` | Profile `{level, lang, readSize, theme}` (theme: `system`, `light` or `dark`); password; `{preset, kind, base_url, model, api_key?}` (omit `api_key` to keep it, `""` to remove it) |
-| `GET/POST /api/books`, `GET/PUT/DELETE /api/books/{id}`, `PUT /api/books/{id}/progress` | The shelf. `format` is `text`, `markdown` or `auto` (detect); up to 2,000,000 characters. A create may carry `clientRef` (a device's id for a text added offline): sending it again returns the same book. Progress is `{pos, progress, at?}`; `progress` only grows, and `pos` is ignored if newer reading was recorded after `at` |
-| `POST /api/books/import/url` | `{url, title?}` → fetches the page and shelves its article as Markdown |
+| `GET/POST /api/books`, `GET/PUT/DELETE /api/books/{id}`, `PUT /api/books/{id}/progress` | The shelf. `format` is `text`, `markdown` or `auto` (detect); up to 2,000,000 characters. A create may carry `clientRef` (a device's id for a text added offline): sending it again returns the same book. Create and edit take `ttlDays`: the text deletes itself that many days later (1–3650), and `0` keeps it forever; a new text without it is kept forever, and an edit without it keeps the text's time. Books carry `expiresAt` (empty when kept). Progress is `{pos, progress, at?}`; `progress` only grows, and `pos` is ignored if newer reading was recorded after `at` |
+| `POST /api/books/import/url` | `{url, title?, ttlDays?}` → fetches the page and shelves its article as Markdown |
 | `POST /api/books/import/page` | `{url, html}` → shelves the article of a page the browser sent (the bookmarklet); `{url, title, selection}` keeps just the selected HTML. ≤ 8 MB |
-| `POST /api/books/import/epub?title=` | Body: the `.epub` file with `Content-Type: application/epub+zip` (≤ 50 MB) |
+| `POST /api/books/import/epub?title=&ttlDays=` | Body: the `.epub` file with `Content-Type: application/epub+zip` (≤ 50 MB) |
 | `GET/POST /api/me/tokens`, `DELETE /api/me/tokens/{id}` | Agent tokens: list (name and hint only), create `{name}` (returns the token once), revoke |
 | `GET /api/wordbook`, `PUT/DELETE /api/wordbook/{key}`, `GET/DELETE /api/known`, `PUT/DELETE /api/known/{lemma}` | Wordbook and known words |
 | `GET/POST /api/admin/users`, `PUT /api/admin/users/{id}/password`, `DELETE /api/admin/users/{id}` | Admins only |
@@ -128,9 +129,9 @@ Authenticated with `Authorization: Bearer llat_…` (an agent token), never the 
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/agent/texts?title=` | Raw Markdown body (`Content-Type: text/markdown`), or JSON `{title?, markdown}` → `201 {id, title, format, words, url}`; `url` opens the text in the reader |
+| `POST /api/agent/texts?title=&ttlDays=` | Raw Markdown body (`Content-Type: text/markdown`), or JSON `{title?, markdown, ttlDays?}` → `201 {id, title, format, words, expiresAt, url}`; `url` opens the text in the reader. The text deletes itself after `ttlDays` (default 30; 0 keeps it) |
 | `GET /api/agent/texts` | Texts agents added (not the user's own), newest change first: `[{id, title, format, words, updatedAt, url}]` |
-| `POST /api/agent/texts/{id}/append` | Add to the end of a text an agent added, after a `---` line; same bodies as a new text (a title is ignored) → `200 {id, title, …}`. `404` for the user's own texts, `413` past the length limit |
+| `POST /api/agent/texts/{id}/append` | Add to the end of a text an agent added, after a `---` line; same bodies as a new text (a title is ignored) → `200 {id, title, …}`. Starts its 30 days again (a longer time to live, or none, stays). `404` for the user's own texts, `413` past the length limit |
 | `GET /api/agent/whoami` | Check a token: `{ok, user, shelf}` |
 | `GET /skills/lingolens.zip` | The agent skill, ready to unzip into a skills folder (public) |
 

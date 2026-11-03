@@ -25,11 +25,31 @@ type Book struct {
 	CreatedAt  string  `json:"createdAt"`
 	UpdatedAt  string  `json:"updatedAt"`
 	LastReadAt string  `json:"lastReadAt"`
+	// When the text deletes itself (its time to live runs out); "" = never.
+	ExpiresAt string `json:"expiresAt"`
 }
 
 const MaxBookChars = 2_000_000 // a long novel
 
 var ErrTooLong = errors.New("the text is too long")
+
+// AgentTTL is how long a text an agent adds stays, unless the user keeps it;
+// adding to it starts the time again.
+const AgentTTL = 30 * 24 * time.Hour
+
+// MaxTTL is the longest time to live a text can be given.
+const MaxTTL = 3650 * 24 * time.Hour
+
+// expiry turns a time to live into the expires_at value; 0 is forever.
+func expiry(ttl time.Duration) string {
+	if ttl <= 0 {
+		return ""
+	}
+	return time.Now().Add(ttl).UTC().Format(time.RFC3339)
+}
+
+// live keeps expired texts out of every read, before the sweep deletes them.
+const live = `(expires_at = '' OR expires_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
 
 var wordRe = regexp.MustCompile(`[A-Za-z]+(?:['’-][A-Za-z]+)*`)
 
@@ -112,11 +132,11 @@ func ValidateBook(title, format, content string) (string, string, error) {
 	return title, format, nil
 }
 
-const bookCols = `id, title, format, words, progress, pos, created_at, updated_at, last_read_at`
+const bookCols = `id, title, format, words, progress, pos, created_at, updated_at, last_read_at, expires_at`
 
 func scanBook(row interface{ Scan(...any) error }, withContent bool) (*Book, error) {
 	var b Book
-	dest := []any{&b.ID, &b.Title, &b.Format, &b.Words, &b.Progress, &b.Pos, &b.CreatedAt, &b.UpdatedAt, &b.LastReadAt}
+	dest := []any{&b.ID, &b.Title, &b.Format, &b.Words, &b.Progress, &b.Pos, &b.CreatedAt, &b.UpdatedAt, &b.LastReadAt, &b.ExpiresAt}
 	if withContent {
 		dest = append(dest, &b.Content)
 	}
@@ -131,7 +151,7 @@ func scanBook(row interface{ Scan(...any) error }, withContent bool) (*Book, err
 
 // ListBooks returns the user's books without their content, most recently used first.
 func (s *Store) ListBooks(ctx context.Context, userID int64) ([]Book, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+bookCols+` FROM books WHERE user_id = ?
+	rows, err := s.db.QueryContext(ctx, `SELECT `+bookCols+` FROM books WHERE user_id = ? AND `+live+`
 		ORDER BY COALESCE(NULLIF(last_read_at, ''), updated_at) DESC`, userID)
 	if err != nil {
 		return nil, err
@@ -149,28 +169,28 @@ func (s *Store) ListBooks(ctx context.Context, userID int64) ([]Book, error) {
 }
 
 func (s *Store) GetBook(ctx context.Context, userID int64, id string) (*Book, error) {
-	return scanBook(s.db.QueryRowContext(ctx, `SELECT `+bookCols+`, content FROM books WHERE user_id = ? AND id = ?`, userID, id), true)
+	return scanBook(s.db.QueryRowContext(ctx, `SELECT `+bookCols+`, content FROM books WHERE user_id = ? AND id = ? AND `+live, userID, id), true)
 }
 
 func (s *Store) CreateBook(ctx context.Context, userID int64, title, format, content string) (*Book, error) {
-	return s.createBook(ctx, userID, title, format, content, "", "")
+	return s.createBook(ctx, userID, title, format, content, "", "", 0)
 }
 
 // CreateBookRef creates a book; `ref` is the creating device's own id for it (from
 // a text added offline). Creating again with the same ref returns the first book.
 func (s *Store) CreateBookRef(ctx context.Context, userID int64, title, format, content, ref string) (*Book, error) {
-	return s.createBook(ctx, userID, title, format, content, ref, "")
+	return s.createBook(ctx, userID, title, format, content, ref, "", 0)
 }
 
 // CreateAgentBook creates a book for one of the user's agents, which may later
-// add to it (AppendAgentBook).
-func (s *Store) CreateAgentBook(ctx context.Context, userID int64, title, format, content string) (*Book, error) {
-	return s.createBook(ctx, userID, title, format, content, "", originAgent)
+// add to it (AppendAgentBook). It deletes itself after ttl (0: never).
+func (s *Store) CreateAgentBook(ctx context.Context, userID int64, title, format, content string, ttl time.Duration) (*Book, error) {
+	return s.createBook(ctx, userID, title, format, content, "", originAgent, ttl)
 }
 
 const originAgent = "agent"
 
-func (s *Store) createBook(ctx context.Context, userID int64, title, format, content, ref, origin string) (*Book, error) {
+func (s *Store) createBook(ctx context.Context, userID int64, title, format, content, ref, origin string, ttl time.Duration) (*Book, error) {
 	title, format, err := ValidateBook(title, format, content)
 	if err != nil {
 		return nil, err
@@ -180,7 +200,7 @@ func (s *Store) createBook(ctx context.Context, userID int64, title, format, con
 	}
 	if ref != "" {
 		var id string
-		err := s.db.QueryRowContext(ctx, `SELECT id FROM books WHERE user_id = ? AND client_ref = ?`, userID, ref).Scan(&id)
+		err := s.db.QueryRowContext(ctx, `SELECT id FROM books WHERE user_id = ? AND client_ref = ? AND `+live, userID, ref).Scan(&id)
 		if err == nil {
 			return s.GetBook(ctx, userID, id)
 		}
@@ -189,8 +209,8 @@ func (s *Store) createBook(ctx context.Context, userID int64, title, format, con
 		}
 	}
 	id, ts := randomHex(8), now()
-	_, err = s.db.ExecContext(ctx, `INSERT INTO books (id, user_id, title, format, content, words, created_at, updated_at, client_ref, origin)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, userID, title, format, content, CountWords(content), ts, ts, ref, origin)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO books (id, user_id, title, format, content, words, created_at, updated_at, client_ref, origin, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, userID, title, format, content, CountWords(content), ts, ts, ref, origin, expiry(ttl))
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +246,7 @@ func (s *Store) UpdateBook(ctx context.Context, userID int64, id, title, format,
 // ListAgentBooks returns the texts the user's agents added, without their
 // content, most recently changed first.
 func (s *Store) ListAgentBooks(ctx context.Context, userID int64) ([]Book, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+bookCols+` FROM books WHERE user_id = ? AND origin = ?
+	rows, err := s.db.QueryContext(ctx, `SELECT `+bookCols+` FROM books WHERE user_id = ? AND origin = ? AND `+live+`
 		ORDER BY updated_at DESC, rowid DESC`, userID, originAgent)
 	if err != nil {
 		return nil, err
@@ -248,7 +268,7 @@ func (s *Store) ListAgentBooks(ctx context.Context, userID int64) ([]Book, error
 const AgentSeparator = "\n\n---\n\n"
 
 // AppendAgentBook adds more to the end of a text an agent added, after a
-// separator line. Texts the user added themselves are ErrNotFound. The reading
+// separator line, and starts its time to live again. Texts the user added themselves are ErrNotFound. The reading
 // position and progress keep pointing at the same place, now a smaller share
 // of the longer text.
 func (s *Store) AppendAgentBook(ctx context.Context, userID int64, id, more string) (*Book, error) {
@@ -261,10 +281,10 @@ func (s *Store) AppendAgentBook(ctx context.Context, userID int64, id, more stri
 		return nil, err
 	}
 	defer tx.Rollback()
-	var content, updated string
+	var content, updated, expires string
 	var progress, pos float64
-	err = tx.QueryRowContext(ctx, `SELECT content, progress, pos, updated_at FROM books WHERE user_id = ? AND id = ? AND origin = ?`,
-		userID, id, originAgent).Scan(&content, &progress, &pos, &updated)
+	err = tx.QueryRowContext(ctx, `SELECT content, progress, pos, updated_at, expires_at FROM books
+		WHERE user_id = ? AND id = ? AND origin = ? AND `+live, userID, id, originAgent).Scan(&content, &progress, &pos, &updated, &expires)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -283,14 +303,43 @@ func (s *Store) AppendAgentBook(ctx context.Context, userID int64, id, more stri
 	if last, err := time.Parse(time.RFC3339, updated); err == nil && ts <= updated {
 		ts = last.Add(time.Second).UTC().Format(time.RFC3339)
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE books SET content = ?, words = ?, progress = ?, pos = ?, updated_at = ?
-		WHERE user_id = ? AND id = ?`, next, CountWords(next), progress*share, pos*share, ts, userID, id); err != nil {
+	// A text with a time to live gets a fresh AgentTTL (never less than it had);
+	// one the user keeps forever stays so.
+	if renewed := expiry(AgentTTL); expires != "" && renewed > expires {
+		expires = renewed
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE books SET content = ?, words = ?, progress = ?, pos = ?, updated_at = ?, expires_at = ?
+		WHERE user_id = ? AND id = ?`, next, CountWords(next), progress*share, pos*share, ts, expires, userID, id); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return s.GetBook(ctx, userID, id)
+}
+
+// SetBookTTL sets when a text deletes itself: ttl from now, or never for 0.
+func (s *Store) SetBookTTL(ctx context.Context, userID int64, id string, ttl time.Duration) (*Book, error) {
+	if ttl < 0 || ttl > MaxTTL {
+		return nil, errors.New("the time to keep the text must be between 1 day and 10 years, or forever")
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE books SET expires_at = ? WHERE user_id = ? AND id = ? AND `+live, expiry(ttl), userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, ErrNotFound
+	}
+	return s.GetBook(ctx, userID, id)
+}
+
+// DeleteExpiredBooks deletes every text whose time to live has run out.
+func (s *Store) DeleteExpiredBooks(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM books WHERE NOT `+live)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 // SaveProgress records the reading position now; progress only ever increases.

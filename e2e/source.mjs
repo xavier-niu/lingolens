@@ -205,6 +205,39 @@ await page.evaluate(async (tok) => {
 }, token);
 const live = await page.waitForFunction(() => document.querySelector('#article')?.textContent.includes('A third part'), null, { timeout: 8000 }).then(() => true, () => false);
 check('added while open: shown on returning to the tab', live && (await page.$$eval('#article hr', (h) => h.length)) === 2);
+
+// ---- time to live: agents' texts delete themselves after 30 days unless kept
+check('reader says when an agent’s text goes', (await page.textContent('#book-stat')).includes('deletes in 30 days'), await page.textContent('#book-stat'));
+await page.goto(BASE + '#/');
+await page.waitForSelector('#library-view:not([hidden])');
+const agentCard = page.locator('.book', { has: page.locator('.cover-title', { hasText: 'From an Agent' }) });
+check('shelf shows the days left', (await agentCard.locator('.cover-ttl').textContent()).includes('30d'));
+check('…and only on texts that expire', (await page.$$('.cover-ttl')).length === 1);
+await page.screenshot({ path: `${OUT}/s-ttl-shelf.png` });
+await agentCard.locator('.book-link').click();
+await page.waitForSelector('#reader-view:not([hidden])');
+await page.click('#btn-menu');
+await page.click('#btn-edit');
+await page.waitForSelector('#source-dialog[open]');
+check('edit: the current time to live is offered as is', (await page.$eval('#src-ttl', (s) => s.selectedOptions[0].textContent)).startsWith('As set: on '));
+await page.screenshot({ path: `${OUT}/s-ttl-dialog.png` });
+await page.selectOption('#src-ttl', '0');
+await page.click('#src-save');
+await page.waitForFunction(() => !document.querySelector('#source-dialog').open);
+await page.waitForFunction(() => !document.querySelector('#book-stat').textContent.includes('deletes'));
+const kept = await page.evaluate((id) => fetch('/api/books/' + id).then((r) => r.json()), up.body.id);
+check('kept forever: no time to live left', kept.expiresAt === '', kept.expiresAt);
+// A new text with its own time to live.
+await page.goto(BASE + '#/');
+await page.waitForSelector('#library-view:not([hidden])');
+await page.locator('#btn-add:visible, #btn-add-empty:visible').first().click();
+await page.waitForSelector('#source-dialog[open]');
+check('new text: kept forever unless chosen', (await page.inputValue('#src-ttl')) === '0');
+await page.fill('#src-text', 'A note for this week only.');
+await page.selectOption('#src-ttl', '7');
+await page.click('#src-save');
+await page.waitForSelector('#reader-view:not([hidden])');
+check('new text with 7 days', (await page.textContent('#book-stat')).includes('deletes in 7 days'), await page.textContent('#book-stat'));
 await page.goto(BASE + '#/settings');
 await page.waitForSelector('#settings-view:not([hidden])');
 check('token hidden after leaving Settings', !(await visible('#token-new')));

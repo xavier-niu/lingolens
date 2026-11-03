@@ -63,6 +63,20 @@ The script prints a link that opens the text in the reader. Give the user that
 link. The script lives next to this file: run it from the skill directory or by
 its full path.
 
+### How long texts stay
+
+A text you save **deletes itself after 30 days**, so quick replies don't pile up
+on the shelf. Tell the user so when you give them the link. The user can keep it
+in LingoLens (Edit text → Delete automatically → Never). Choose differently only
+when the user asks:
+
+- "keep it", "save it for good", "permanently": `--ttl 0` (never deleted)
+- a time ("for a week", "for three months"): `--ttl 7`, `--ttl 90` (days, up to 3650)
+
+```bash
+scripts/upload.sh reply.md --title "Optional Title" --ttl 0
+```
+
 ## Adding to a text on the same topic
 
 When the user asks to update a topic that is already in LingoLens, or to save
@@ -92,7 +106,8 @@ place.
    scripts/upload.sh more.md --append ID
    ```
 
-   Give the user the link it prints; it's the same link as before.
+   Give the user the link it prints; it's the same link as before. Adding
+   starts the 30 days again (a longer time, or "never", stays as it is).
 
 Only texts saved by agents can be added to; the user's own texts (pasted, web
 pages, books) can't be changed and aren't listed. If adding fails with 404, the
@@ -109,8 +124,11 @@ curl -fsS -X POST "$LINGOLENS_URL/api/agent/texts?title=Optional%20Title" \
   --data-binary @reply.md
 ```
 
-JSON works too: `Content-Type: application/json` with `{"title": "…", "markdown": "…"}`.
-A successful response is `201` with `{"id", "title", "format", "words", "updatedAt", "url"}`.
+JSON works too: `Content-Type: application/json` with `{"title": "…", "markdown": "…", "ttlDays": 30}`.
+`ttlDays` (or `?ttlDays=` with raw Markdown) is how many days the text stays,
+30 when left out and 0 for never. A successful response is `201` with
+`{"id", "title", "format", "words", "updatedAt", "expiresAt", "url"}`; `expiresAt`
+is empty for a text that is kept.
 
 To add to a text, send the new part the same way (a title is ignored) to
 `POST $LINGOLENS_URL/api/agent/texts/ID/append`; it answers `200` with the same

@@ -125,6 +125,9 @@ var migrations = []string{
 	// 4: who added a text. Agents may add to texts that agents added ('agent'),
 	// never to the user's own.
 	`ALTER TABLE books ADD COLUMN origin TEXT NOT NULL DEFAULT '';`,
+	// 5: when a text is deleted on its own (RFC 3339, UTC); '' keeps it forever.
+	`ALTER TABLE books ADD COLUMN expires_at TEXT NOT NULL DEFAULT '';
+	CREATE INDEX books_expires ON books(expires_at) WHERE expires_at != '';`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

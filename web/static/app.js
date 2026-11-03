@@ -445,7 +445,35 @@ function bookStat(book, level = getLevel()) {
 }
 
 function updateBookStat() {
-  if (state.book) $('#book-stat').textContent = bookStat(state.book);
+  if (state.book) $('#book-stat').textContent = [bookStat(state.book), expiryText(state.book)].filter(Boolean).join(' · ');
+}
+
+// Texts with a time to live: whole days left, rounded up (0 once it has run out).
+const daysLeft = (b) => Math.max(0, Math.ceil((Date.parse(b.expiresAt) - Date.now()) / 864e5));
+const isExpired = (b) => !!b.expiresAt && Date.parse(b.expiresAt) <= Date.now();
+
+function expiryText(b) {
+  if (!b.expiresAt) return '';
+  const n = daysLeft(b);
+  return n <= 1 ? t('book.expiresSoon') : t('book.expires', { n });
+}
+
+// The "Delete automatically" choices; editing a text that has a time already
+// offers to leave it as it is.
+const TTL_CHOICES = [0, 1, 7, 30, 90, 365];
+function fillTTL(book) {
+  const sel = $('#src-ttl');
+  const label = (n) => (n === 0 ? t('ttl.never') : n === 1 ? t('ttl.day') : n === 365 ? t('ttl.year') : t('ttl.days', { n }));
+  const opts = TTL_CHOICES.map((n) => `<option value="${n}">${escapeHTML(label(n))}</option>`);
+  if (book?.expiresAt) opts.unshift(`<option value="keep">${escapeHTML(t('ttl.current', { d: shortDate(book.expiresAt) }))}</option>`);
+  sel.innerHTML = opts.join('');
+  sel.value = book?.expiresAt ? 'keep' : '0';
+}
+
+// The chosen time to live: days, or undefined to leave it as it is.
+function chosenTTL() {
+  const v = $('#src-ttl').value;
+  return v === 'keep' ? undefined : Number(v);
 }
 
 let openSeq = 0; // ignores a slow load if the reader has moved on
@@ -1292,7 +1320,7 @@ Of course, habits are not a panacea. They have to be taken into account alongsid
 
 // Draw the shelf from state.books; call loadShelf() to refresh from the server.
 function renderShelf() {
-  const books = state.books;
+  const books = state.books.filter((b) => !isExpired(b)); // the server deletes them; offline, hide them
   const level = getLevel();
   $('#shelf-empty').hidden = books.length > 0 || !state.booksLoaded;
   $('.shelf-head').hidden = books.length === 0;
@@ -1313,7 +1341,10 @@ function bookHTML(b, level) {
     <article class="book">
       <a class="book-link" href="#/read/${encodeURIComponent(b.id)}">
         <div class="cover" data-tint="${tintFor(b.id)}">
-          <span class="cover-words" aria-hidden="true">${escapeHTML(t('book.words', { n: b.words.toLocaleString() }))}</span>
+          <span class="cover-top">
+            <span class="cover-words" aria-hidden="true">${escapeHTML(t('book.words', { n: b.words.toLocaleString() }))}</span>
+            ${b.expiresAt ? `<span class="cover-ttl" title="${escapeHTML(expiryText(b))}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>${escapeHTML(t('book.ttlShort', { n: daysLeft(b) }))}<span class="sr-only">, ${escapeHTML(expiryText(b))}</span></span>` : ''}
+          </span>
           <span class="cover-title">${title}</span>
         </div>
       </a>
@@ -1343,6 +1374,7 @@ function openSourceDialog(book = null) {
   editingFormat = book?.format || null;
   $('#src-title').value = book?.title || '';
   $('#src-text').value = book?.content || '';
+  fillTTL(book);
   $('#src-url').value = '';
   setSourceFile(null);
   setSourceKind('text');
@@ -1474,18 +1506,19 @@ async function submitSource() {
   const form = $('#source-form');
   busy($('#src-save'), true);
   form.inert = true; // no edits while a slow import runs
+  const ttlDays = chosenTTL();
   try {
     if (editingId) {
       const format = editingFormat === 'markdown' ? 'markdown' : detectFormat(content);
-      book = await updateBook(editingId, { title, content, format });
+      book = await updateBook(editingId, { title, content, format, ttlDays });
     } else if (srcKind === 'text') {
-      book = await createBook({ title, content, format: detectFormat(content) });
+      book = await createBook({ title, content, format: detectFormat(content), ttlDays });
     } else if (srcKind === 'url') {
-      book = await importURL($('#src-url').value.trim(), title);
+      book = await importURL($('#src-url').value.trim(), title, ttlDays);
     } else if (isPDF(srcFile)) {
-      book = await importPDF(srcFile, title);
+      book = await importPDF(srcFile, title, ttlDays);
     } else {
-      book = await importEPUB(srcFile, title);
+      book = await importEPUB(srcFile, title, ttlDays);
     }
   } catch (e) {
     form.inert = false;
@@ -1504,14 +1537,14 @@ async function submitSource() {
 
 // A PDF is read here (pdftext.js) and added like pasted Markdown, so it also
 // works offline once pdf.js has been loaded.
-async function importPDF(file, title) {
+async function importPDF(file, title, ttlDays) {
   const meta = $('#src-file-meta');
   meta.removeAttribute('data-i18n');
   const pdf = await readPDF(file, { onPage: (i, n) => { meta.textContent = t('pdf.reading', { i, n }); } });
   if (pdf.content.length > MAX_CHARS) {
     throw new Error(t('source.tooLong', { n: pdf.content.length.toLocaleString(), max: MAX_CHARS.toLocaleString() }));
   }
-  return createBook({ title: title.trim() || pdf.title, content: pdf.content, format: 'markdown' });
+  return createBook({ title: title.trim() || pdf.title, content: pdf.content, format: 'markdown', ttlDays });
 }
 
 async function addSampleBook() {

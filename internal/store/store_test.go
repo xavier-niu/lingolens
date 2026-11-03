@@ -332,7 +332,7 @@ func TestAppendAgentBook(t *testing.T) {
 	u, _ := s.CreateUser(ctx, "ag@example.com", "", "password 12345", false)
 	other, _ := s.CreateUser(ctx, "ot@example.com", "", "password 12345", false)
 	mine, _ := s.CreateBook(ctx, u.ID, "Mine", "markdown", "My own notes.")
-	a, err := s.CreateAgentBook(ctx, u.ID, "Coffee", "markdown", "# Coffee\n\nPart one.\n\n")
+	a, err := s.CreateAgentBook(ctx, u.ID, "Coffee", "markdown", "# Coffee\n\nPart one.\n\n", AgentTTL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -376,4 +376,84 @@ func TestAppendAgentBook(t *testing.T) {
 	if _, err := s.AppendAgentBook(ctx, u.ID, a.ID, strings.Repeat("x", MaxBookChars)); !errors.Is(err, ErrTooLong) {
 		t.Errorf("too long: %v", err)
 	}
+}
+
+func TestBookTTL(t *testing.T) {
+	s := newTestStore(t)
+	ctx := t.Context()
+	u, _ := s.CreateUser(ctx, "ttl@example.com", "", "password 12345", false)
+	in := func(b *Book) time.Duration {
+		at, err := time.Parse(time.RFC3339, b.ExpiresAt)
+		if err != nil {
+			t.Fatalf("expiresAt %q: %v", b.ExpiresAt, err)
+		}
+		return time.Until(at)
+	}
+	near := func(d, want time.Duration) bool { return d > want-time.Minute && d <= want }
+
+	mine, _ := s.CreateBook(ctx, u.ID, "Mine", "text", "Kept forever.")
+	if mine.ExpiresAt != "" {
+		t.Fatalf("a new text expires by default: %q", mine.ExpiresAt)
+	}
+	b, err := s.SetBookTTL(ctx, u.ID, mine.ID, 7*24*time.Hour)
+	if err != nil || !near(in(b), 7*24*time.Hour) {
+		t.Fatalf("ttl 7 days: %+v, %v", b, err)
+	}
+	if b, _ = s.SetBookTTL(ctx, u.ID, mine.ID, 0); b.ExpiresAt != "" {
+		t.Fatalf("ttl 0 should keep it forever: %q", b.ExpiresAt)
+	}
+	if _, err := s.SetBookTTL(ctx, u.ID, mine.ID, -time.Hour); err == nil {
+		t.Fatal("negative ttl accepted")
+	}
+	if _, err := s.SetBookTTL(ctx, u.ID, "nope", time.Hour); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing text: %v", err)
+	}
+
+	// Agents' texts: 30 days, renewed by an addition, never shortened or added to a kept text.
+	a, _ := s.CreateAgentBook(ctx, u.ID, "Agent", "markdown", "Part one.", AgentTTL)
+	if !near(in(a), AgentTTL) {
+		t.Fatalf("agent text expires in %v", in(a))
+	}
+	s.db.ExecContext(ctx, `UPDATE books SET expires_at = ? WHERE id = ?`, expiry(24*time.Hour), a.ID)
+	if a, _ = s.AppendAgentBook(ctx, u.ID, a.ID, "Part two."); !near(in(a), AgentTTL) {
+		t.Fatalf("adding should renew to 30 days, got %v", in(a))
+	}
+	s.SetBookTTL(ctx, u.ID, a.ID, 90*24*time.Hour)
+	if a, _ = s.AppendAgentBook(ctx, u.ID, a.ID, "Part three."); !near(in(a), 90*24*time.Hour) {
+		t.Fatalf("adding shortened a 90-day ttl to %v", in(a))
+	}
+	s.SetBookTTL(ctx, u.ID, a.ID, 0)
+	if a, _ = s.AppendAgentBook(ctx, u.ID, a.ID, "Part four."); a.ExpiresAt != "" {
+		t.Fatalf("adding gave a kept text a ttl: %q", a.ExpiresAt)
+	}
+
+	// Expired: gone from every read at once, deleted by the sweep.
+	old, _ := s.CreateAgentBook(ctx, u.ID, "Old", "markdown", "Old news.", AgentTTL)
+	s.db.ExecContext(ctx, `UPDATE books SET expires_at = ? WHERE id = ?`, time.Now().Add(-time.Minute).UTC().Format(time.RFC3339), old.ID)
+	if _, err := s.GetBook(ctx, u.ID, old.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expired text still readable: %v", err)
+	}
+	for _, list := range [][]Book{must(s.ListBooks(ctx, u.ID)), must(s.ListAgentBooks(ctx, u.ID))} {
+		for _, b := range list {
+			if b.ID == old.ID {
+				t.Fatal("expired text still listed")
+			}
+		}
+	}
+	if _, err := s.AppendAgentBook(ctx, u.ID, old.ID, "more"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("added to an expired text: %v", err)
+	}
+	if n, err := s.DeleteExpiredBooks(ctx); err != nil || n != 1 {
+		t.Fatalf("sweep deleted %d, %v", n, err)
+	}
+	if list, _ := s.ListBooks(ctx, u.ID); len(list) != 2 {
+		t.Fatalf("sweep left %d texts, want 2", len(list))
+	}
+}
+
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
 }

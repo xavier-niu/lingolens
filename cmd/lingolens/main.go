@@ -134,7 +134,7 @@ func serve(args []string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	go purgeSessions(ctx, st)
+	go purgeExpired(ctx, st, logger)
 	errc := make(chan error, 1)
 	go func() {
 		logger.Info("LingoLens listening", "url", "http://"+*addr, "data", *dataDir)
@@ -190,11 +190,15 @@ func bootstrapAdmin(st *store.Store, logger *slog.Logger, devMode bool) error {
 	return nil
 }
 
-func purgeSessions(ctx context.Context, st *store.Store) {
+// purgeExpired deletes expired sessions and texts whose time to live ran out, hourly.
+func purgeExpired(ctx context.Context, st *store.Store, logger *slog.Logger) {
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()
 	for {
 		_ = st.PurgeExpiredSessions(ctx)
+		if n, err := st.DeleteExpiredBooks(ctx); err == nil && n > 0 {
+			logger.Info("deleted expired texts", "count", n)
+		}
 		select {
 		case <-ctx.Done():
 			return

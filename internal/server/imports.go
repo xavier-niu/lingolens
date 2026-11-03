@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -18,10 +19,15 @@ import (
 // POST /api/books/import/url {url, title?}: fetch a web page and shelve its article.
 func (s *Server) handleImportURL(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		URL   string `json:"url"`
-		Title string `json:"title"`
+		URL     string `json:"url"`
+		Title   string `json:"title"`
+		TTLDays *int   `json:"ttlDays"`
 	}
 	if !decode(w, r, &req) {
+		return
+	}
+	if _, err := ttl(req.TTLDays); err != nil {
+		writeError(w, http.StatusBadRequest, sentence(err))
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
@@ -31,7 +37,7 @@ func (s *Server) handleImportURL(w http.ResponseWriter, r *http.Request) {
 		s.importError(w, err)
 		return
 	}
-	s.shelve(w, r, doc, req.Title)
+	s.shelve(w, r, doc, req.Title, req.TTLDays)
 }
 
 // POST /api/books/import/page {url, html, title?, selection?}: shelve a page the
@@ -62,11 +68,20 @@ func (s *Server) handleImportPage(w http.ResponseWriter, r *http.Request) {
 		s.importError(w, err)
 		return
 	}
-	s.shelve(w, r, doc, "")
+	s.shelve(w, r, doc, "", nil)
 }
 
-// POST /api/books/import/epub?title=…, body: the .epub file (application/epub+zip).
+// POST /api/books/import/epub?title=…&ttlDays=…, body: the .epub file (application/epub+zip).
 func (s *Server) handleImportEPUB(w http.ResponseWriter, r *http.Request) {
+	var days *int
+	if v := r.URL.Query().Get("ttlDays"); v != "" {
+		n, err := strconv.Atoi(v)
+		if _, terr := ttl(&n); err != nil || terr != nil {
+			writeError(w, http.StatusBadRequest, "The days to keep a text (ttlDays) must be 0 for forever, or 1 to 3650.")
+			return
+		}
+		days = &n
+	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, importer.MaxEPUBBytes))
 	if err != nil {
 		var mbe *http.MaxBytesError
@@ -82,10 +97,10 @@ func (s *Server) handleImportEPUB(w http.ResponseWriter, r *http.Request) {
 		s.importError(w, err)
 		return
 	}
-	s.shelve(w, r, doc, r.URL.Query().Get("title"))
+	s.shelve(w, r, doc, r.URL.Query().Get("title"), days)
 }
 
-func (s *Server) shelve(w http.ResponseWriter, r *http.Request, doc *importer.Doc, title string) {
+func (s *Server) shelve(w http.ResponseWriter, r *http.Request, doc *importer.Doc, title string, ttlDays *int) {
 	if strings.TrimSpace(title) == "" {
 		title = doc.Title
 	}
@@ -95,6 +110,9 @@ func (s *Server) shelve(w http.ResponseWriter, r *http.Request, doc *importer.Do
 		return
 	}
 	b, err := s.opts.Store.CreateBook(r.Context(), currentUser(r.Context()).ID, title, doc.Format, doc.Content)
+	if err == nil {
+		b, err = s.setTTL(r, b, ttlDays)
+	}
 	if err != nil {
 		writeError(w, http.StatusBadRequest, sentence(err))
 		return

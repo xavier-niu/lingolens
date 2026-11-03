@@ -17,15 +17,17 @@ export {
   getText as getBook, deleteText as deleteBook, saveProgress,
 } from './offline.js';
 import { createText, updateText } from './offline.js';
-export const createBook = ({ title, content, format = 'text' }) => createText({ title, content, format });
-export const updateBook = (id, { title, content, format }) => updateText(id, { title, content, format });
+// ttlDays: delete the text after this many days; 0 keeps it forever. Left out
+// on an edit, the text keeps the time it has.
+export const createBook = ({ title, content, format = 'text', ttlDays }) => createText({ title, content, format, ttlDays });
+export const updateBook = (id, { title, content, format, ttlDays }) => updateText(id, { title, content, format, ttlDays });
 
 // Imports need the server (it fetches the page or reads the EPUB).
-export const importURL = (url, title) => api('POST', '/api/books/import/url', { url, title });
+export const importURL = (url, title, ttlDays) => api('POST', '/api/books/import/url', { url, title, ttlDays });
 // A page the bookmarklet sent from the user's browser: the article, or just the selection.
 export const importPage = ({ url, title, html, selection }) =>
   api('POST', '/api/books/import/page', selection ? { url, title, selection } : { url, title, html });
-export const importEPUB = (file, title) => api('POST', `/api/books/import/epub?title=${encodeURIComponent(title || '')}`, file, { type: 'application/epub+zip' });
+export const importEPUB = (file, title, ttlDays = 0) => api('POST', `/api/books/import/epub?title=${encodeURIComponent(title || '')}&ttlDays=${ttlDays}`, file, { type: 'application/epub+zip' });
 
 // Mirrors store.DetectFormat on the server: is pasted text Markdown?
 const MD_STRONG = [

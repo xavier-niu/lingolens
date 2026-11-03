@@ -247,6 +247,29 @@ type bookRequest struct {
 	// The device's own id for a text added offline; sending it again returns the
 	// same book instead of a copy.
 	ClientRef string `json:"clientRef"`
+	// Days until the text deletes itself; 0 keeps it forever. Left out: forever
+	// for a new text, unchanged for an edit.
+	TTLDays *int `json:"ttlDays"`
+}
+
+// ttl reads a ttlDays value: nil is "not given".
+func ttl(days *int) (time.Duration, error) {
+	if days == nil {
+		return 0, nil
+	}
+	if *days < 0 || time.Duration(*days)*24*time.Hour > store.MaxTTL {
+		return 0, errors.New("the days to keep a text (ttlDays) must be 0 for forever, or 1 to 3650")
+	}
+	return time.Duration(*days) * 24 * time.Hour, nil
+}
+
+// setTTL applies a ttlDays given with a create or an edit.
+func (s *Server) setTTL(r *http.Request, b *store.Book, days *int) (*store.Book, error) {
+	d, err := ttl(days)
+	if err != nil || days == nil {
+		return b, err
+	}
+	return s.opts.Store.SetBookTTL(r.Context(), currentUser(r.Context()).ID, b.ID, d)
 }
 
 func (s *Server) handleCreateBook(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +277,14 @@ func (s *Server) handleCreateBook(w http.ResponseWriter, r *http.Request) {
 	if !decodeLimit(w, r, &req, maxBookBodyBytes) {
 		return
 	}
+	if _, err := ttl(req.TTLDays); err != nil {
+		writeError(w, http.StatusBadRequest, sentence(err))
+		return
+	}
 	b, err := s.opts.Store.CreateBookRef(r.Context(), currentUser(r.Context()).ID, req.Title, req.Format, req.Content, req.ClientRef)
+	if err == nil {
+		b, err = s.setTTL(r, b, req.TTLDays)
+	}
 	if err != nil {
 		writeError(w, http.StatusBadRequest, sentence(err))
 		return
@@ -284,7 +314,14 @@ func (s *Server) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 	if !decodeLimit(w, r, &req, maxBookBodyBytes) {
 		return
 	}
+	if _, err := ttl(req.TTLDays); err != nil {
+		writeError(w, http.StatusBadRequest, sentence(err))
+		return
+	}
 	b, err := s.opts.Store.UpdateBook(r.Context(), currentUser(r.Context()).ID, r.PathValue("id"), req.Title, req.Format, req.Content)
+	if err == nil {
+		b, err = s.setTTL(r, b, req.TTLDays)
+	}
 	if err != nil {
 		s.bookError(w, err)
 		return

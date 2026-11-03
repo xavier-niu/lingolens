@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Upload Markdown to the LingoLens shelf and print the link to read it.
 #
-#   upload.sh FILE [--title TITLE]     upload a Markdown file as a new text
+#   upload.sh FILE [--title TITLE] [--ttl DAYS]
+#                                      upload a Markdown file as a new text; it is
+#                                      deleted after 30 days, or DAYS (0: keep it)
 #   upload.sh - [--title TITLE]        upload Markdown from stdin
 #   upload.sh FILE --append ID         add to the end of text ID, after a --- line
 #   upload.sh --list                   list the texts agents saved: ID, words, title
@@ -71,21 +73,26 @@ if [[ "${1:-}" == "--list" ]]; then
 fi
 
 src="${1:-}"
-[[ -n "$src" ]] || die "usage: upload.sh FILE|- [--title TITLE | --append ID] | --list | --check"
+[[ -n "$src" ]] || die "usage: upload.sh FILE|- [--title TITLE] [--ttl DAYS] | FILE|- --append ID | --list | --check"
 shift
 title=""
 append=""
+ttl=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --title) [[ $# -ge 2 ]] || die "--title needs a value"; title="$2"; shift 2 ;;
     --title=*) title="${1#--title=}"; shift ;;
     --append) [[ $# -ge 2 ]] || die "--append needs a text ID (see --list)"; append="$2"; shift 2 ;;
     --append=*) append="${1#--append=}"; shift ;;
+    --ttl) [[ $# -ge 2 ]] || die "--ttl needs a number of days (0: keep forever)"; ttl="$2"; shift 2 ;;
+    --ttl=*) ttl="${1#--ttl=}"; shift ;;
     *) die "unknown argument: $1" ;;
   esac
 done
 [[ -z "$append" || "$append" =~ ^[A-Za-z0-9_-]+$ ]] || die "not a text ID: $append"
 [[ -z "$append" || -z "$title" ]] || die "--append keeps the text's title; leave out --title"
+[[ -z "$append" || -z "$ttl" ]] || die "--append renews the text's own time; leave out --ttl"
+[[ -z "$ttl" || "$ttl" =~ ^[0-9]+$ ]] || die "--ttl takes a number of days (0: keep forever)"
 
 if [[ "$src" == "-" ]]; then
   tmp="$(mktemp)"
@@ -100,8 +107,8 @@ if [[ -n "$append" ]]; then
   path="/api/agent/texts/$append/append"
   done_msg='Added to "%s" (%s words now)\n%s\n'
 else
-  path="/api/agent/texts"
-  [[ -n "$title" ]] && path+="?title=$(urlencode "$title")"
+  path="/api/agent/texts?ttlDays=${ttl:-30}"
+  [[ -n "$title" ]] && path+="&title=$(urlencode "$title")"
   done_msg='Saved "%s" (%s words)\n%s\n'
 fi
 body="$(request POST "$path" -H "Content-Type: text/markdown; charset=utf-8" --data-binary "@$src")"
@@ -110,3 +117,6 @@ printf "$done_msg" \
   "$(printf '%s' "$body" | field title)" \
   "$(printf '%s' "$body" | sed -n 's/.*"words":\([0-9]*\).*/\1/p')" \
   "$(printf '%s' "$body" | field url)"
+expires="$(printf '%s' "$body" | field expiresAt)"
+if [[ -n "$expires" ]]; then printf 'Deleted on its own after %s (UTC) unless kept.\n' "$expires"
+else printf 'Kept until deleted.\n'; fi
