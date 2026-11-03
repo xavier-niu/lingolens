@@ -1,0 +1,13 @@
+# Security
+
+- **Passwords** are hashed with bcrypt. Failed sign-ins are limited per IP and per email (8 per 15 minutes).
+- **Sessions** are random tokens in an `HttpOnly`, `SameSite=Lax` cookie, valid for 30 days of use; the database stores only their SHA-256. Changing a password signs out the account's other sessions.
+- **Cross-site requests:** state-changing requests must send JSON or use a non-simple method, and a present `Origin` must match the host.
+- **API keys** are encrypted with AES-256-GCM, bound to their owner's account, and never returned by the API. Back up `secret.key` (or keep `LINGOLENS_SECRET`) with the database: without it, stored keys can't be decrypted and users must re-enter them.
+- **Bookmarklet:** it posts the page only to the LingoLens origin it was made for, and the LingoLens tab accepts it only from the tab that opened it, only when the page's claimed address matches its real origin, and only after you choose *Add to Shelf*. The import request itself is an ordinary same-site JSON call, so other sites still can't add to your shelf.
+- **Web-page import** connects only to public internet addresses: loopback, private, link-local (including cloud metadata at `169.254.169.254`) and other internal ranges are refused at connect time, after DNS and on every redirect, so a pasted link can't probe the server's network. Pages are capped at 8 MB and 25 s; no proxy is used. Requests carry the headers desktop Chrome sends (many sites refuse anything else), and cookies live only for one fetch.
+- **PDFs** are read in the browser with [pdf.js](https://mozilla.github.io/pdf.js/) (JavaScript evaluation off); the file itself is never uploaded, only the text taken from it.
+- **EPUB import** refuses DRM-protected books, archives with too many entries, and any file that inflates past its limit (zip bombs). Uploads are capped at 50 MB.
+- **Agent tokens** (`llat_…`) can only add texts to their owner's shelf, list and add to the texts agents added there (not the user's own, and never their content), and check themselves (`/api/agent/*`). Browser sessions don't work on those routes, and tokens don't work anywhere else. Only a SHA-256 of each token is stored; the token is shown once when created and can be revoked in Settings.
+- **Isolation:** every query for user data is scoped to the signed-in user; tests check that one account can't read or change another's texts, progress or wordbook.
+- The server calls whatever API base URL a user saves, so only give accounts to people you trust with that, and put HTTPS in front of it if it's reachable beyond your machine.
