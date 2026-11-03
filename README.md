@@ -141,7 +141,12 @@ Let Claude Code (or any agent or script) save replies to your shelf:
    ```sh
    npx skills add xavier-niu/lingolens        # this project; add -g for every project
    ```
-   Or use **Download Skill** on the same page and unzip it into the agent's skills folder (`~/.claude/skills/` for Claude Code), or copy [`skills/lingolens`](skills/lingolens) from this repository. The CLI installs the skill from GitHub, so `npx skills update` picks up new versions.
+   Without Node, use the install script (needs bash and curl). It puts the skill in `~/.claude/skills/lingolens`; pass `--dir` for another agent's skills folder, and run it again to update:
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/xavier-niu/lingolens/master/skills/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/xavier-niu/lingolens/master/skills/install.sh | bash -s -- --dir ~/.codex/skills
+   ```
+   Or use **Download Skill** on the same page and unzip it into the agent's skills folder, or copy [`skills/lingolens`](skills/lingolens) from this repository. The CLI installs the skill from GitHub, so `npx skills update` picks up new versions.
 3. Ask the agent things like "explain the present perfect and save it to LingoLens" or "write me a B1 article about coffee for LingoLens". It replies with a link to the new text.
 
 Without the skill, any script can upload:
@@ -174,7 +179,7 @@ internal/llm/         provider adapters (OpenAI-compatible via net/http, Anthrop
 internal/annotate/    prompts, chunking, alignment of LLM output to exact offsets, caches, lookup
 internal/importer/    web-page (readability + SSRF-safe fetcher) and EPUB import, HTML → Markdown
 internal/server/      HTTP handlers, sessions, CSRF guard, sign-in throttling, NDJSON streaming, chat prompt
-skills/lingolens/     agent skill (SKILL.md + upload script), embedded and served as a zip
+skills/lingolens/     agent skill (SKILL.md + upload script), embedded and served as a zip; skills/install.sh installs it
 e2e/                  browser tests (Playwright): run.mjs starts a fresh server and runs the suites; fixtures/ for imports
 web/static/           UI: app.js, api.js, library.js (shelf), offline.js (device copy, outbox, sync), sw.js (service worker), i18n.js; vendored marked, DOMPurify, Literata (OFL); embedded into the binary
 ```
