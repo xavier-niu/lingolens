@@ -1,0 +1,9 @@
+/lingolens
+/dist/
+*.test
+*.out
+.DS_Store
+/e2e/node_modules/
+/e2e/out/
+/e2e/.bin/
+/data/

@@ -1,0 +1,11 @@
+.git
+.github
+.claude
+Dockerfile
+.dockerignore
+*.md
+e2e
+/lingolens
+/dist
+/data
+!skills/**

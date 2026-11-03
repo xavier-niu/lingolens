@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1c1b19" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <script src="theme.js"></script>
+  <title>LingoLens</title>
+  <meta name="description" content="Read English with Chinese glosses pitched at your level, using your own LLM key.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231e3352'/%3E%3Crect x='7' y='7' width='9' height='3.4' rx='1.7' fill='%23e0503f'/%3E%3Crect x='6' y='13' width='12' height='5' rx='2.5' fill='%23f4f1e8'/%3E%3Crect x='20.5' y='13' width='5.5' height='5' rx='2.5' fill='%23f4f1e8' fill-opacity='.35'/%3E%3Crect x='6' y='21.5' width='7.5' height='5' rx='2.5' fill='%23f4f1e8' fill-opacity='.35'/%3E%3Crect x='16' y='21.5' width='10' height='5' rx='2.5' fill='%23f4f1e8' fill-opacity='.35'/%3E%3C/svg%3E">
+  <link rel="preload" href="vendor/fonts/literata-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-view="library">
+  <a class="skip-link" href="#main" data-i18n="a11y.skip">Skip to content</a>
+  <header class="topbar">
+    <div class="bar-start">
+      <a id="home-link" class="brand" href="#/" data-i18n-title="reader.back" data-i18n-aria="reader.back">
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect class="m-tile" width="32" height="32" rx="7"/>
+          <rect class="m-gloss" x="7" y="7" width="9" height="3.4" rx="1.7"/>
+          <rect class="m-word" x="6" y="13" width="12" height="5" rx="2.5"/>
+          <rect class="m-line" x="20.5" y="13" width="5.5" height="5" rx="2.5"/>
+          <rect class="m-line" x="6" y="21.5" width="7.5" height="5" rx="2.5"/>
+          <rect class="m-line" x="16" y="21.5" width="10" height="5" rx="2.5"/>
+        </svg>
+        <span class="wordmark library-only" translate="no" aria-hidden="true">LingoLens</span>
+      </a>
+      <!-- Where you are: Shelf / book, or Shelf / (book /) Settings. Filled by app.js. -->
+      <nav id="crumbs" class="crumbs not-library" data-i18n-aria="a11y.crumbs"><ol></ol></nav>
+    </div>
+
+    <div class="bar-end">
+      <button id="net-status" class="net-status" type="button" hidden>
+        <svg class="i-offline" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M8.5 8.6A5.5 5.5 0 0 0 6.4 13 4 4 0 0 0 7 21h10.5M19.6 18.7A3.5 3.5 0 0 0 17 13h-.3A5.5 5.5 0 0 0 11 6.5"/></svg>
+        <svg class="i-sync" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 0 1-14.3 4.9M4 12A8 8 0 0 1 18.3 7.1M18.5 3v4.3h-4.3M5.5 21v-4.3h4.3"/></svg>
+        <svg class="i-synced" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        <span id="net-label" class="net-label"></span>
+      </button>
+      <div class="bar-group reader-only">
+        <button id="btn-display" class="bar-btn" popovertarget="display-pop"
+          data-i18n-title="display.title" data-i18n-aria="display.title">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18L8 6l5 12M4.6 14h6.8M15 12.2c.6-1 1.6-1.5 2.8-1.5 1.8 0 2.9 1 2.9 2.8V18m0-3.6c-.9-.4-1.8-.6-2.8-.6-1.6 0-2.9.7-2.9 2.1s1.1 2.1 2.4 2.1c1.5 0 2.7-.8 3.3-2"/></svg>
+        </button>
+        <span class="bar-sep" aria-hidden="true"></span>
+        <button id="btn-level" class="level-chip" popovertarget="level-pop" data-i18n-title="level.switch">
+          <span id="lv-code" class="lv-code">B1</span>
+          <span id="lv-name" class="lv-name">Intermediate</span>
+          <svg class="caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
+        </button>
+      </div>
+      <button id="btn-wordbook" class="bar-btn" data-i18n-title="btn.wordbook">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-4-6 4V4.5a1 1 0 0 1 1-1z"/></svg>
+        <span class="bar-label" data-i18n="btn.wordbook">Wordbook</span>
+        <span id="wb-count" class="count"></span>
+      </button>
+      <a id="btn-gear" class="bar-btn not-reader" href="#/settings" data-i18n-title="settings.page" data-i18n-aria="settings.page">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </a>
+      <button id="btn-menu" class="bar-btn reader-only" popovertarget="menu-pop" data-i18n-title="menu.title" data-i18n-aria="menu.title">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+      </button>
+    </div>
+    <div id="read-thread" class="read-thread reader-only" aria-hidden="true"><div></div></div>
+  </header>
+
+  <div id="level-pop" class="pop level-pop" popover>
+    <p class="pop-head" data-i18n="level.head">Your English level</p>
+    <p class="pop-note" data-i18n="level.title">Higher levels show fewer glosses.</p>
+    <div id="level-list" class="level-list" role="listbox" data-i18n-aria="level.head"></div>
+    <p class="pop-foot" data-i18n="level.profileNote">This also updates your profile.</p>
+  </div>
+
+  <div id="display-pop" class="pop" popover>
+    <p class="pop-head" data-i18n="display.title">Reading options</p>
+    <label class="pop-row"><span data-i18n="toggle.words">Word glosses</span><input type="checkbox" id="show-words" role="switch" checked></label>
+    <label class="pop-row"><span data-i18n="toggle.phrases">Phrase glosses</span><input type="checkbox" id="show-phrases" role="switch" checked></label>
+    <div class="pop-row">
+      <span data-i18n="display.size">Text size</span>
+      <div class="seg" id="size-seg" role="group" data-i18n-aria="display.size">
+        <button type="button" data-size="s" data-i18n-aria="display.small"><span style="font-size:13px">A</span></button>
+        <button type="button" data-size="m" data-i18n-aria="display.medium"><span style="font-size:16px">A</span></button>
+        <button type="button" data-size="l" data-i18n-aria="display.large"><span style="font-size:19px">A</span></button>
+      </div>
+    </div>
+    <div class="pop-row">
+      <span data-i18n="theme.title">Appearance</span>
+      <div class="seg theme-seg icon-seg" role="group" data-i18n-aria="theme.title">
+        <button type="button" data-mode="system" data-i18n-aria="theme.system" data-i18n-title="theme.system"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M9 20h6M12 16.5V20"/></svg></button>
+        <button type="button" data-mode="light" data-i18n-aria="theme.light" data-i18n-title="theme.light"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></button>
+        <button type="button" data-mode="dark" data-i18n-aria="theme.dark" data-i18n-title="theme.dark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="menu-pop" class="pop menu-pop" popover>
+    <button type="button" id="btn-toc" class="menu-item" data-i18n="toc.title" hidden>Contents</button>
+    <button type="button" id="btn-edit" class="menu-item" data-i18n="btn.edit">Edit text</button>
+    <a id="btn-settings" class="menu-item" href="#/settings" data-i18n="settings.page">Settings</a>
+  </div>
+
+  <div id="banner" class="banner" role="status" hidden>
+    <span id="banner-text"></span>
+    <a id="banner-action" class="btn small" href="#/settings" data-i18n="banner.openSettings" hidden>Open settings</a>
+    <button id="banner-close" class="icon-btn" data-i18n-aria="btn.close" aria-label="Close">×</button>
+  </div>
+
+  <main id="main">
+    <section id="login-view" class="login" hidden>
+      <form id="login-form" class="login-card" novalidate>
+        <svg class="mark mark-lg" viewBox="0 0 32 32" aria-hidden="true">
+          <rect class="m-tile" width="32" height="32" rx="7"/>
+          <rect class="m-gloss" x="7" y="7" width="9" height="3.4" rx="1.7"/>
+          <rect class="m-word" x="6" y="13" width="12" height="5" rx="2.5"/>
+          <rect class="m-line" x="20.5" y="13" width="5.5" height="5" rx="2.5"/>
+          <rect class="m-line" x="6" y="21.5" width="7.5" height="5" rx="2.5"/>
+          <rect class="m-line" x="16" y="21.5" width="10" height="5" rx="2.5"/>
+        </svg>
+        <h1 data-i18n="login.title">Sign in to LingoLens</h1>
+        <p class="login-sub" data-i18n="login.sub"></p>
+        <label class="field"><span data-i18n="login.email">Email</span><input id="login-email" name="email" type="email" inputmode="email" autocomplete="username" spellcheck="false" placeholder="you@example.com"></label>
+        <label class="field"><span data-i18n="login.password">Password</span><input id="login-password" name="password" type="password" autocomplete="current-password"></label>
+        <p id="login-error" class="field-error" role="alert"></p>
+        <button id="login-submit" class="btn primary wide" type="submit" data-i18n="login.submit">Sign in</button>
+        <p class="login-note" data-i18n="login.note"></p>
+        <p id="login-setup" class="login-setup" hidden>
+          <span data-i18n="login.setup"></span>
+          <code translate="no">lingolens user add -admin -email you@example.com</code>
+        </p>
+      </form>
+      <div class="seg login-lang" id="login-lang" role="group" data-i18n-aria="menu.language">
+        <button type="button" data-lang="en">English</button>
+        <button type="button" data-lang="zh">中文</button>
+      </div>
+    </section>
+    <section id="library-view" class="library">
+      <div class="shelf-head">
+        <div>
+          <h1 data-i18n="shelf.title">Your shelf</h1>
+          <p id="shelf-summary" class="shelf-summary"></p>
+        </div>
+        <button id="btn-add" class="btn primary" data-i18n="shelf.add">Add source</button>
+      </div>
+      <div id="shelf" class="shelf"></div>
+      <div id="shelf-empty" class="shelf-empty" hidden>
+        <div class="empty-art" aria-hidden="true"><span></span><span></span><span></span></div>
+        <h2 data-i18n="shelf.emptyTitle">Your shelf is empty</h2>
+        <p data-i18n="shelf.emptyBody"></p>
+        <div class="row center">
+          <button id="btn-add-empty" class="btn primary" data-i18n="shelf.add">Add source</button>
+          <button id="btn-sample-empty" class="btn ghost" data-i18n="shelf.sample">Add a sample text</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="reader-view" class="reader" hidden>
+      <header class="reader-head">
+        <h1 id="book-title" class="book-heading"></h1>
+        <p id="book-stat" class="book-stat"></p>
+      </header>
+      <div id="progress" class="annotating" hidden>
+        <span class="spinner" aria-hidden="true"></span>
+        <span id="progress-text"></span>
+        <div class="bar"><div id="progress-fill"></div></div>
+      </div>
+      <article id="article" class="article"></article>
+    </section>
+    <section id="settings-view" class="settings-page" hidden>
+      <h1 class="page-title" data-i18n="settings.page">Settings</h1>
+
+      <section class="set-section" aria-labelledby="set-profile-h">
+        <div class="set-head">
+          <h2 id="set-profile-h" data-i18n="profile.title">Profile</h2>
+          <p data-i18n="profile.note"></p>
+        </div>
+        <div class="set-body">
+          <div class="set-block">
+            <h3 data-i18n="level.head">Your English level</h3>
+            <p class="set-help" data-i18n="level.title"></p>
+            <div id="profile-levels" class="level-cards" role="radiogroup" data-i18n-aria="level.head"></div>
+          </div>
+          <div class="set-block set-inline">
+            <div>
+              <h3 data-i18n="menu.language">Interface language</h3>
+              <p class="set-help" data-i18n="profile.langNote"></p>
+            </div>
+            <div class="seg" id="lang-seg" role="group" data-i18n-aria="menu.language">
+              <button type="button" data-lang="en">English</button>
+              <button type="button" data-lang="zh">中文</button>
+            </div>
+          </div>
+          <div class="set-block set-inline">
+            <div>
+              <h3 data-i18n="theme.title">Appearance</h3>
+              <p class="set-help" data-i18n="theme.note"></p>
+            </div>
+            <div class="seg theme-seg" id="theme-seg" role="group" data-i18n-aria="theme.title">
+              <button type="button" data-mode="system"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M9 20h6M12 16.5V20"/></svg><span data-i18n="theme.system">System</span></button>
+              <button type="button" data-mode="light"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg><span data-i18n="theme.light">Light</span></button>
+              <button type="button" data-mode="dark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><span data-i18n="theme.dark">Dark</span></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="set-section" aria-labelledby="set-model-h">
+        <div class="set-head">
+          <h2 id="set-model-h" data-i18n="settings.title">AI model</h2>
+          <p data-i18n="settings.privacy"></p>
+        </div>
+        <form id="settings-form" class="set-body set-block" novalidate>
+          <label class="field"><span data-i18n="settings.provider">Provider</span><select id="s-preset" name="provider"></select></label>
+          <label class="field"><span>Base URL</span><input id="s-base" name="base_url" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://api.example.com/v1…"></label>
+          <label class="field"><span data-i18n="settings.model">Model</span><input id="s-model" name="model" list="s-models" placeholder="e.g. deepseek-chat…" autocomplete="off" spellcheck="false"><datalist id="s-models"></datalist></label>
+          <label class="field"><span data-i18n="settings.key">API key</span>
+            <span class="key-row">
+              <input id="s-key" name="api_key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…">
+              <button type="button" id="s-key-toggle" class="btn ghost small" data-i18n="settings.show">Show</button>
+              <button type="button" id="s-key-remove" class="btn ghost small danger-link" data-i18n="settings.removeKey" hidden>Remove key</button>
+            </span>
+          </label>
+          <p class="note" id="s-note"></p>
+          <div class="row">
+            <span id="s-status" class="saved-status" role="status"></span>
+            <span class="spacer"></span>
+            <button type="submit" id="s-save" class="btn primary" data-i18n="settings.save">Save</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="set-section" aria-labelledby="set-agent-h">
+        <div class="set-head">
+          <h2 id="set-agent-h" data-i18n="agent.title">Agent Access</h2>
+          <p data-i18n="agent.note">Let AI agents such as Claude Code save their replies to your shelf, to read later with glosses.</p>
+        </div>
+        <div class="set-body">
+          <div class="set-block">
+            <form id="token-form" class="token-form" novalidate>
+              <label class="field"><span data-i18n="agent.name">Token name</span>
+                <input id="tk-name" name="token_name" type="text" autocomplete="off" spellcheck="false" maxlength="60" data-i18n-placeholder="agent.namePh"></label>
+              <button type="submit" class="btn" data-i18n="agent.create">Create Token</button>
+            </form>
+            <div id="token-new" class="token-new" hidden>
+              <p class="token-warn" data-i18n="agent.copyNow">Copy this token now. It won’t be shown again.</p>
+              <div class="token-box">
+                <code id="tk-env" translate="no"></code>
+                <button type="button" id="tk-copy" class="btn small" data-i18n="agent.copy">Copy</button>
+              </div>
+              <p class="set-help" data-i18n="agent.setup">Set these in your agent’s environment, then download the skill below and unzip it into its skills folder (for Claude Code, ~/.claude/skills).</p>
+            </div>
+            <p id="tk-status" class="field-error" role="alert"></p>
+          </div>
+          <div class="set-block">
+            <div class="set-inline token-head">
+              <div>
+                <h3 data-i18n="agent.tokens">Tokens</h3>
+                <p class="set-help" data-i18n="agent.scope">A token can only add texts to your shelf. Revoke it any time.</p>
+              </div>
+              <a href="/skills/lingolens.zip" download class="btn small ghost" data-i18n="agent.download">Download Skill</a>
+            </div>
+            <ul id="token-list" class="member-list token-list"></ul>
+            <p id="token-empty" class="set-help token-empty" data-i18n="agent.none">No tokens yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="set-section" aria-labelledby="set-account-h">
+        <div class="set-head">
+          <h2 id="set-account-h" data-i18n="account.title">Account</h2>
+          <p data-i18n="account.note"></p>
+        </div>
+        <div class="set-body">
+          <div class="set-block set-inline">
+            <div>
+              <h3 id="acct-name"></h3>
+              <p class="set-help"><span id="acct-email"></span> <span id="acct-role" class="role-tag"></span></p>
+            </div>
+            <button type="button" id="btn-logout" class="btn" data-i18n="account.signOut">Sign out</button>
+          </div>
+          <form id="password-form" class="set-block" novalidate>
+            <h3 data-i18n="account.changePw">Change password</h3>
+            <div class="field-grid">
+              <label class="field"><span data-i18n="account.currentPw">Current password</span><input id="pw-current" name="current_password" type="password" autocomplete="current-password"></label>
+              <label class="field"><span data-i18n="account.newPw">New password</span><input id="pw-new" name="new_password" type="password" autocomplete="new-password"></label>
+            </div>
+            <div class="row">
+              <span id="pw-status" class="saved-status" role="status"></span>
+              <span class="spacer"></span>
+              <button type="submit" class="btn" data-i18n="account.updatePw">Update password</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section id="members-section" class="set-section" aria-labelledby="set-members-h" hidden>
+        <div class="set-head">
+          <h2 id="set-members-h" data-i18n="members.title">Members</h2>
+          <p data-i18n="members.note"></p>
+        </div>
+        <div class="set-body">
+          <div class="set-block"><ul id="member-list" class="member-list"></ul></div>
+          <form id="member-form" class="set-block" novalidate>
+            <h3 data-i18n="members.add">Add a member</h3>
+            <div class="field-grid">
+              <label class="field"><span data-i18n="login.email">Email</span><input id="m-email" name="member_email" type="email" inputmode="email" autocomplete="off" spellcheck="false" placeholder="reader@example.com"></label>
+              <label class="field"><span data-i18n="members.name">Name</span><input id="m-name" name="member_name" type="text" autocomplete="off" placeholder="Mei…"></label>
+            </div>
+            <label class="field"><span data-i18n="members.tempPw">Temporary password</span><input id="m-password" name="member_password" type="text" autocomplete="off" spellcheck="false"></label>
+            <label class="check"><input type="checkbox" id="m-admin"> <span data-i18n="members.makeAdmin">Admin: can manage members</span></label>
+            <div class="row">
+              <span id="m-status" class="saved-status" role="status"></span>
+              <span class="spacer"></span>
+              <button type="submit" class="btn primary" data-i18n="members.create">Create account</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div id="card" class="card" role="dialog" hidden></div>
+  <button id="ask-fab" class="ask-fab" data-i18n="ask" hidden>Ask AI</button>
+
+  <!-- Shown once, the first time someone opens a text. -->
+  <div id="hint" class="hint" role="status" hidden>
+    <span class="hint-text">
+    <span class="hint-item">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><rect class="i-gloss" x="4" y="2.5" width="8" height="2.6" rx="1.3"/><rect class="i-word" x="1.5" y="7.5" width="13" height="6" rx="3"/></svg>
+      <span id="hint-word" data-i18n="hint.click">Click any word for its meaning</span>
+    </span>
+    <span class="hint-item">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><rect class="i-sel" x="3" y="5" width="10" height="6" rx="1"/><path class="i-caret" d="M3 2.5v11M13 2.5v11"/></svg>
+      <span data-i18n="hint.select">Select a sentence to ask AI</span>
+    </span>
+    </span>
+    <button id="hint-ok" class="hint-ok" type="button" data-i18n="hint.ok">Got It</button>
+  </div>
+
+  <aside id="chat" class="drawer" data-i18n-aria="chat.title" aria-label="Ask AI" hidden>
+    <header class="drawer-head">
+      <h2 data-i18n="chat.title">Ask AI</h2>
+      <button id="chat-close" class="icon-btn" data-i18n-aria="btn.close" aria-label="Close">×</button>
+    </header>
+    <blockquote id="chat-quote" class="quote"></blockquote>
+    <div id="chat-chips" class="chips"></div>
+    <div id="chat-log" class="chat-log" aria-live="polite"></div>
+    <form id="chat-form" class="chat-form">
+      <textarea id="chat-input" name="question" rows="2" autocomplete="off" data-i18n-placeholder="chat.placeholder" data-i18n-aria="chat.inputLabel"></textarea>
+      <button id="chat-send" class="btn primary" type="submit" data-i18n="chat.send">Send</button>
+    </form>
+  </aside>
+
+  <dialog id="source-dialog" class="dialog wide">
+    <form method="dialog" id="source-form" novalidate>
+      <div class="dialog-head">
+        <h2 id="source-heading">Add source</h2>
+        <button value="cancel" class="icon-btn" formnovalidate data-i18n-aria="btn.close" aria-label="Close">×</button>
+      </div>
+      <div class="source-kinds" id="src-kinds" role="radiogroup" data-i18n-aria="source.kind">
+        <label class="kind"><input type="radio" name="kind" value="text" checked>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 10h14M5 14h10M5 18h7"/></svg><span data-i18n="source.text">Text</span></label>
+        <label class="kind"><input type="radio" name="kind" value="url">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.6 3.5 5.4 3.5 8.5s-1.1 5.9-3.5 8.5c-2.4-2.6-3.5-5.4-3.5-8.5s1.1-5.9 3.5-8.5z"/></svg><span data-i18n="source.url">Web Page</span></label>
+        <label class="kind"><input type="radio" name="kind" value="epub">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5v-15zM5 19.5A1.5 1.5 0 0 0 6.5 21H19M9 7h6"/></svg><span data-i18n="source.epub">EPUB Book</span></label>
+      </div>
+
+      <p id="src-offline" class="src-note src-offline" hidden data-i18n="net.sourceOffline">You’re offline. Pasted text is saved on this device and added to your shelf when you’re back online; web pages and EPUB books need a connection.</p>
+
+      <div class="src-panel" data-kind="url" hidden>
+        <label class="field"><span data-i18n="source.link">Link</span>
+          <input id="src-url" name="url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://…"></label>
+        <p class="src-note" data-i18n="source.urlNote">We fetch the page and keep the article — menus, ads and comments are left out.</p>
+      </div>
+
+      <div class="src-panel" data-kind="epub" hidden>
+        <label class="dropzone" id="src-drop">
+          <input id="src-file" name="file" type="file" accept=".epub,application/epub+zip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 14v4.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V14"/></svg>
+          <span id="src-file-name" class="drop-title" data-i18n="source.choose">Choose an EPUB file or drop it here</span>
+          <small id="src-file-meta" data-i18n="source.epubNote">DRM-free EPUB, up to 50 MB</small>
+        </label>
+      </div>
+
+      <label class="field"><span data-i18n="source.title">Title</span><input id="src-title" name="title" type="text" autocomplete="off"></label>
+
+      <div class="src-panel" data-kind="text">
+        <label class="field"><span data-i18n="source.body">Text</span><textarea id="src-text" name="content" rows="12" spellcheck="false" autocomplete="off" data-i18n-placeholder="source.bodyPh"></textarea></label>
+        <p id="src-md" class="src-note src-detected" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span data-i18n="source.mdDetected">Markdown detected — headings, lists and emphasis will be formatted.</span>
+        </p>
+        <p id="src-link-hint" class="src-note" hidden>
+          <span data-i18n="source.linkPasted">That looks like a link.</span>
+          <button type="button" id="src-use-link" class="link-btn" data-i18n="source.importPage">Import the web page instead</button>
+        </p>
+      </div>
+
+      <p id="src-error" class="field-error" role="alert"></p>
+      <div class="row">
+        <button type="button" id="src-sample" class="btn ghost small" data-i18n="source.sample">Use a sample text</button>
+        <button type="button" id="src-delete" class="btn ghost small danger-link" data-i18n="source.delete" hidden>Delete from shelf</button>
+        <span id="src-count" class="muted small"></span>
+        <span class="spacer"></span>
+        <button value="cancel" class="btn ghost" formnovalidate data-i18n="settings.cancel">Cancel</button>
+        <button value="save" id="src-save" class="btn primary">Add to shelf</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="toc-dialog" class="dialog toc-dialog" data-i18n-aria="toc.title" aria-label="Contents">
+    <div class="dialog-head">
+      <h2 data-i18n="toc.title">Contents</h2>
+      <button id="toc-close" class="icon-btn" data-i18n-aria="btn.close" aria-label="Close">×</button>
+    </div>
+    <nav><ol id="toc-list" class="toc-list"></ol></nav>
+  </dialog>
+
+  <dialog id="wordbook" class="dialog wide">
+    <div class="dialog-head">
+      <h2 data-i18n="wb.title">Wordbook</h2>
+      <button id="wb-close" class="icon-btn" data-i18n-aria="btn.close" aria-label="Close">×</button>
+    </div>
+    <div id="wb-list" class="wb-list"></div>
+    <div class="row">
+      <span id="wb-known" class="muted small"></span>
+      <span class="spacer"></span>
+      <button id="wb-clear-known" class="btn ghost small" data-i18n="wb.clearKnown">Clear “known” words</button>
+      <button id="wb-export" class="btn ghost small" data-i18n="wb.export">Export CSV</button>
+    </div>
+  </dialog>
+
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
