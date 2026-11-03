@@ -246,17 +246,24 @@
                 <code id="tk-env" translate="no"></code>
                 <button type="button" id="tk-copy" class="btn small" data-i18n="agent.copy">Copy</button>
               </div>
-              <p class="set-help" data-i18n="agent.setup">Set these in your agent’s environment, then download the skill below and unzip it into its skills folder (for Claude Code, ~/.claude/skills).</p>
+              <p class="set-help" data-i18n="agent.setup">Set these in your agent’s environment, then install the skill (below).</p>
             </div>
             <p id="tk-status" class="field-error" role="alert"></p>
           </div>
           <div class="set-block">
-            <div class="set-inline token-head">
-              <div>
-                <h3 data-i18n="agent.tokens">Tokens</h3>
-                <p class="set-help" data-i18n="agent.scope">A token can only add texts to your shelf. Revoke it any time.</p>
-              </div>
-              <a href="/skills/lingolens.zip" download class="btn small ghost" data-i18n="agent.download">Download Skill</a>
+            <h3 data-i18n="agent.install">Install the Skill</h3>
+            <p class="set-help" data-i18n="agent.installCli">With the skills CLI, for Claude Code, Codex, Cursor and other agents:</p>
+            <div class="token-box skill-box">
+              <code id="skill-cmd" translate="no">npx skills add xavier-niu/lingolens</code>
+              <button type="button" id="skill-copy" class="btn small" data-i18n="agent.copy">Copy</button>
+            </div>
+            <p class="set-help"><span data-i18n="agent.installZip">Or download it and unzip it into the agent’s skills folder (for Claude Code, ~/.claude/skills).</span>
+              <a href="/skills/lingolens.zip" download data-i18n="agent.download">Download Skill</a></p>
+          </div>
+          <div class="set-block">
+            <div class="token-head">
+              <h3 data-i18n="agent.tokens">Tokens</h3>
+              <p class="set-help" data-i18n="agent.scope">A token can only add texts to your shelf. Revoke it any time.</p>
             </div>
             <ul id="token-list" class="member-list token-list"></ul>
             <p id="token-empty" class="set-help token-empty" data-i18n="agent.none">No tokens yet.</p>

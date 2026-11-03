@@ -1897,16 +1897,16 @@ async function createToken(e) {
   }
 }
 
-async function copyToken() {
-  const text = $('#tk-env').textContent;
+async function copyCode(code, btn) {
   try {
-    await navigator.clipboard.writeText(text);
+    await navigator.clipboard.writeText(code.textContent);
   } catch {
     // No clipboard access (e.g. plain http): select it so Ctrl/Cmd+C works.
-    getSelection().selectAllChildren($('#tk-env'));
+    getSelection().selectAllChildren(code);
     return;
   }
-  $('#tk-copy').textContent = t('agent.copied');
+  btn.textContent = t('agent.copied');
+  setTimeout(() => { btn.textContent = t('agent.copy'); }, 2000);
 }
 
 async function revokeToken(btn) {
@@ -2089,7 +2089,8 @@ async function init() {
     submitSource();
   });
   $('#token-form').addEventListener('submit', createToken);
-  $('#tk-copy').onclick = copyToken;
+  $('#tk-copy').onclick = () => copyCode($('#tk-env'), $('#tk-copy'));
+  $('#skill-copy').onclick = () => copyCode($('#skill-cmd'), $('#skill-copy'));
   $('#token-list').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-revoke]');
     if (btn) revokeToken(btn);

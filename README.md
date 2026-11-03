@@ -137,7 +137,11 @@ Let Claude Code (or any agent or script) save replies to your shelf:
    export LINGOLENS_URL=https://read.example.com
    export LINGOLENS_TOKEN=llat_…
    ```
-2. Install the skill: **Download Skill** on the same page, then unzip it into `~/.claude/skills/` (or copy [`skills/lingolens`](skills/lingolens) from this repository).
+2. Install the skill with the [skills CLI](https://github.com/vercel-labs/skills), which works for Claude Code, Codex, Cursor and other agents:
+   ```sh
+   npx skills add xavier-niu/lingolens        # this project; add -g for every project
+   ```
+   Or use **Download Skill** on the same page and unzip it into the agent's skills folder (`~/.claude/skills/` for Claude Code), or copy [`skills/lingolens`](skills/lingolens) from this repository. The CLI installs the skill from GitHub, so `npx skills update` picks up new versions.
 3. Ask the agent things like "explain the present perfect and save it to LingoLens" or "write me a B1 article about coffee for LingoLens". It replies with a link to the new text.
 
 Without the skill, any script can upload:

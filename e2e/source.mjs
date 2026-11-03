@@ -149,8 +149,10 @@ const env = await page.textContent('#tk-env');
 check('new token shown once with setup lines', /export LINGOLENS_URL=http/.test(env) && /export LINGOLENS_TOKEN=llat_/.test(env));
 check('token listed by name and hint only', (await page.textContent('#token-list')).includes('Claude Code') && !(await page.textContent('#token-list')).includes(env.split('=').pop()));
 const token = env.match(/llat_\w+/)[0];
-check('skill download link', (await page.getAttribute('.token-head a[download]', 'href')) === '/skills/lingolens.zip');
+check('skills CLI command shown', (await page.textContent('#skill-cmd')) === 'npx skills add xavier-niu/lingolens');
+check('skill download link', (await page.getAttribute('a[download][href="/skills/lingolens.zip"]', 'href')) === '/skills/lingolens.zip');
 await page.screenshot({ path: `${OUT}/s-agent.png`, fullPage: true });
+await page.locator('section.set-section:has(> .set-head #set-agent-h)').screenshot({ path: `${OUT}/s-agent-section.png` });
 
 const up = await page.evaluate(async (tok) => {
   const r = await fetch('/api/agent/texts?title=From%20an%20Agent', {
