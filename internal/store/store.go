@@ -128,6 +128,21 @@ var migrations = []string{
 	// 5: when a text is deleted on its own (RFC 3339, UTC); '' keeps it forever.
 	`ALTER TABLE books ADD COLUMN expires_at TEXT NOT NULL DEFAULT '';
 	CREATE INDEX books_expires ON books(expires_at) WHERE expires_at != '';`,
+	// 6: Ask AI conversations, so they can be read again and continued. They go
+	// with the text they were about.
+	`CREATE TABLE chats (
+		id         TEXT NOT NULL,
+		user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		book_id    TEXT REFERENCES books(id) ON DELETE CASCADE,
+		selection  TEXT NOT NULL,
+		passage    TEXT NOT NULL,
+		messages   TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		PRIMARY KEY (user_id, id)
+	);
+	CREATE INDEX chats_recent ON chats(user_id, updated_at);
+	CREATE INDEX chats_book ON chats(book_id);`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

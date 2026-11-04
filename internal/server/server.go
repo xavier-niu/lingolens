@@ -116,6 +116,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/known/{lemma}", s.requireUser(s.handleSetKnown(true)))
 	mux.HandleFunc("DELETE /api/known/{lemma}", s.requireUser(s.handleSetKnown(false)))
 	mux.HandleFunc("DELETE /api/known", s.requireUser(s.handleClearKnown))
+	mux.HandleFunc("GET /api/chats", s.requireUser(s.handleListChats))
+	mux.HandleFunc("GET /api/chats/{id}", s.requireUser(s.handleGetChat))
+	mux.HandleFunc("PUT /api/chats/{id}", s.requireUser(s.handlePutChat))
+	mux.HandleFunc("DELETE /api/chats/{id}", s.requireUser(s.handleDeleteChat))
 
 	// LLM features, using the signed-in user's provider and key
 	mux.HandleFunc("POST /api/annotate", s.requireUser(s.handleAnnotate))

@@ -960,31 +960,218 @@ function dismissHint() {
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 let chatHideTimer = 0;
 
+// Conversations are saved to the account (Ask AI history) under an id made
+// here, so the first save can happen before the server knows the chat.
+function newChatId() {
+  const b = new Uint8Array(12);
+  crypto.getRandomValues(b);
+  return [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+}
+
 function openChat(selection, passage, autoQuestion) {
   dismissHint();
   state.chat?.ctl?.abort();
-  state.chat = { selection, passage, messages: [], asked: new Set(), ctl: null };
+  const book = state.book;
+  state.chat = {
+    id: newChatId(), bookId: book ? String(book.id) : '', bookTitle: book?.title || '',
+    selection, passage, messages: [], asked: new Set(), ctl: null,
+  };
+  showConversation();
+  if (autoQuestion) sendChat(autoQuestion);
+  else {
+    $('#chat-input').focus({ preventScroll: true });
+    offerResume(state.chat);
+  }
+}
+
+// Draw state.chat in the drawer: the quote, any earlier turns, the input.
+function showConversation() {
+  const chat = state.chat;
   clearTimeout(chatHideTimer);
   const drawer = $('#chat');
   drawer.classList.remove('closing');
+  setChatMode('chat');
   const quote = $('#chat-quote');
-  quote.textContent = selection;
-  quote.classList.remove('open');
-  $('#chat-turns').innerHTML = '';
-  $('#chat-log').scrollTop = 0;
-  $('#chat-dock').classList.remove('started');
-  $('#chat-log').insertBefore($('#chat-chips'), $('#chat-turns'));
+  quote.textContent = chat.selection;
+  quote.classList.remove('open', 'clamped');
+  const link = $('#chat-book');
+  const here = document.body.dataset.view === 'reader' && String(state.book?.id) === chat.bookId;
+  link.hidden = !chat.bookId || !chat.bookTitle || here;
+  if (!link.hidden) {
+    link.textContent = chat.bookTitle;
+    link.href = `#/read/${encodeURIComponent(chat.bookId)}`;
+  }
+  $('#chat-resume').hidden = true;
+  const turns = $('#chat-turns');
+  turns.innerHTML = '';
+  for (let i = 0; i + 1 < chat.messages.length; i += 2) {
+    const turn = document.createElement('section');
+    turn.className = 'turn';
+    turns.append(turn);
+    addBubble('user', chat.messages[i].content, turn);
+    const answer = addBubble('assistant', '', turn);
+    answer.innerHTML = `<div class="blk">${renderMarkdown(chat.messages[i + 1].content)}</div>`;
+    addAnswerActions(turn, chat.messages[i + 1].content);
+  }
+  const started = chat.messages.length > 0;
+  $('#chat-dock').classList.toggle('started', started);
+  if (started) $('#chat-dock').prepend($('#chat-chips'));
+  else $('#chat-log').insertBefore($('#chat-chips'), turns);
   $('#chat-input').value = '';
   fitChatInput();
   renderChips();
   drawer.hidden = false;
   document.body.classList.add('chat-open');
+  const log = $('#chat-log');
+  log.scrollTop = started ? log.scrollHeight : 0;
   requestAnimationFrame(() => {
     quote.classList.toggle('clamped', quote.scrollHeight > quote.clientHeight + 2);
     updateChatJump();
   });
-  if (autoQuestion) sendChat(autoQuestion);
-  else $('#chat-input').focus({ preventScroll: true });
+}
+
+// Asking about something asked about before (same text, same selection):
+// offer to pick that conversation up again.
+async function offerResume(chat) {
+  if (!chat.bookId || !net.online) return;
+  let list;
+  try {
+    list = await api('GET', `/api/chats?book=${encodeURIComponent(chat.bookId)}`);
+  } catch {
+    return;
+  }
+  const prev = list.find((c) => c.selection === chat.selection.trim());
+  if (!prev || state.chat !== chat || chat.messages.length) return;
+  const btn = $('#chat-resume');
+  btn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6M3.5 4v4h4M12 7.5V12l3 2"/></svg><span>${escapeHTML(prev.questions === 1 ? t('chat.resume1') : t('chat.resume', { n: prev.questions }))}</span>`;
+  btn.onclick = () => resumeChat(prev.id);
+  btn.hidden = false;
+}
+
+async function resumeChat(id) {
+  let c;
+  try {
+    c = await api('GET', `/api/chats/${encodeURIComponent(id)}`);
+  } catch (err) {
+    showBanner(err.message);
+    return;
+  }
+  state.chat?.ctl?.abort();
+  state.chat = {
+    id: c.id, bookId: c.bookId, bookTitle: c.bookTitle, selection: c.selection, passage: c.passage,
+    messages: c.messages, asked: new Set(c.messages.filter((m) => m.role === 'user').map((m) => m.content)), ctl: null,
+  };
+  hist.items = null; // its order changes once it's continued
+  showConversation();
+}
+
+// Save after each answer. Only the latest turns are kept once a conversation
+// gets very long; the server sends the model fewer still.
+function saveChat(chat) {
+  const messages = chat.messages.slice(-MAX_SAVED_MESSAGES);
+  hist.items = null;
+  api('PUT', `/api/chats/${encodeURIComponent(chat.id)}`, {
+    bookId: chat.bookId, selection: chat.selection, passage: chat.passage, messages,
+  }).catch(() => { /* history is best effort */ });
+}
+const MAX_SAVED_MESSAGES = 120; // as the server allows
+const MAX_SENT_MESSAGES = 39; // the server takes 40; odd, so it starts with a question
+
+// ------------------------------------------------------------------ Ask AI history
+
+const hist = { scope: 'all', items: null, status: '' };
+
+function setChatMode(mode) {
+  const history = mode === 'history';
+  $('#chat').dataset.mode = mode;
+  $('#chat-history').hidden = !history;
+  $('#chat-log').hidden = history;
+  $('#chat-dock').hidden = history;
+  $('#chat-back').hidden = !(history && state.chat);
+  $('#chat-title-text').textContent = t(history ? 'chat.historyTitle' : 'chat.title');
+  $('#chat-hist-btn').setAttribute('aria-pressed', String(history));
+  $('#btn-history').setAttribute('aria-pressed', String(history));
+}
+
+async function openHistory() {
+  dismissHint();
+  hideFab();
+  clearTimeout(chatHideTimer);
+  const drawer = $('#chat');
+  drawer.classList.remove('closing');
+  setChatMode('history');
+  drawer.hidden = false;
+  document.body.classList.add('chat-open');
+  const inBook = document.body.dataset.view === 'reader' && state.book;
+  hist.scope = inBook ? 'book' : 'all';
+  if (!hist.items) {
+    hist.status = t('chat.histLoading');
+    renderHistory();
+    try {
+      hist.items = await api('GET', '/api/chats');
+      hist.status = '';
+    } catch (err) {
+      hist.status = err.offline ? t('net.needsConnection') : err.message;
+    }
+  }
+  // Nothing about this text yet: show everything instead of an empty list.
+  if (inBook && hist.items && !hist.items.some((c) => c.bookId === String(state.book.id))) hist.scope = 'all';
+  renderHistory();
+}
+
+function fmtWhen(iso) {
+  const d = new Date(iso);
+  const locale = getLang() === 'zh' ? 'zh-CN' : 'en-US';
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  const opts = { month: 'short', day: 'numeric' };
+  if (d.getFullYear() !== today.getFullYear()) opts.year = 'numeric';
+  return d.toLocaleDateString(locale, opts);
+}
+
+function renderHistory() {
+  if ($('#chat').dataset.mode !== 'history') return;
+  const inBook = document.body.dataset.view === 'reader' && state.book;
+  $('#hist-scope').hidden = !inBook || !hist.items;
+  markPressed('#hist-scope', 'scope', hist.scope);
+  const list = $('#hist-list');
+  list.innerHTML = '';
+  let items = hist.items || [];
+  if (inBook && hist.scope === 'book') items = items.filter((c) => c.bookId === String(state.book.id));
+  $('#hist-status').textContent = hist.status
+    || (hist.items && !items.length ? t(hist.scope === 'book' && inBook ? 'chat.histEmptyBook' : 'chat.histEmpty') : '');
+  for (const c of items) {
+    const li = document.createElement('li');
+    li.className = 'hist-item';
+    const showBook = c.bookTitle && !(inBook && c.bookId === String(state.book.id));
+    const meta = [showBook ? c.bookTitle : '', c.questions === 1 ? t('chat.question1') : t('chat.questions', { n: c.questions }), fmtWhen(c.updatedAt)]
+      .filter(Boolean).map(escapeHTML).join('<span aria-hidden="true"> · </span>');
+    li.innerHTML = `
+      <button type="button" class="hist-open" data-id="${escapeHTML(c.id)}">
+        <span class="hist-quote">${escapeHTML(c.selection)}</span>
+        <span class="hist-q">${escapeHTML(c.question || '')}</span>
+        <span class="hist-meta">${meta}</span>
+      </button>
+      <button type="button" class="hist-del icon-btn" data-del="${escapeHTML(c.id)}" aria-label="${escapeHTML(t('chat.delete'))}" title="${escapeHTML(t('chat.delete'))}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M9.5 7V5h5v2M6.5 7l1 12.5h9l1-12.5M10 11v5M14 11v5"/></svg>
+      </button>`;
+    list.append(li);
+  }
+}
+
+async function deleteChat(id) {
+  if (!confirm(t('chat.confirmDelete'))) return;
+  try {
+    await api('DELETE', `/api/chats/${encodeURIComponent(id)}`);
+  } catch (err) {
+    if (err.status !== 404) {
+      showBanner(err.message);
+      return;
+    }
+  }
+  hist.items = (hist.items || []).filter((c) => c.id !== id);
+  if (state.chat?.id === id) state.chat.id = newChatId(); // asking more starts a new one
+  renderHistory();
 }
 
 // Before the first question the suggestions are a list under the quote; after
@@ -1010,6 +1197,8 @@ function renderChips() {
 
 function closeChat() {
   state.chat?.ctl?.abort();
+  $('#btn-history').setAttribute('aria-pressed', 'false');
+  $('#hist-list').innerHTML = '';
   const drawer = $('#chat');
   document.body.classList.remove('chat-open');
   if (drawer.hidden) return;
@@ -1265,6 +1454,7 @@ async function sendChat(question) {
   }
   chat.messages.push({ role: 'user', content: question });
   chat.asked.add(question);
+  $('#chat-resume').hidden = true;
   $('#chat-dock').classList.add('started');
   $('#chat-dock').prepend($('#chat-chips'));
   renderChips();
@@ -1285,7 +1475,8 @@ async function sendChat(question) {
   let error = '';
   try {
     const events = await postStream('/api/chat', {
-      level: getLevel(), passage: chat.passage, selection: chat.selection, messages: chat.messages,
+      level: getLevel(), passage: chat.passage, selection: chat.selection,
+      messages: chat.messages.slice(-MAX_SENT_MESSAGES),
     }, ctl.signal);
     for await (const ev of events) {
       if (ev.type === 'delta') {
@@ -1309,6 +1500,7 @@ async function sendChat(question) {
   if (answer) {
     chat.messages.push({ role: 'assistant', content: answer });
     addAnswerActions(turn, answer);
+    saveChat(chat);
   } else {
     chat.messages.pop(); // keep user/assistant alternation for the next turn
     chat.asked.delete(question);
@@ -1992,7 +2184,11 @@ function refreshLanguage() {
     updateSrcCount();
   }
   setChatBusy(!!state.chat?.ctl);
-  if (!$('#chat').hidden && state.chat) renderChips();
+  if (!$('#chat').hidden) {
+    setChatMode($('#chat').dataset.mode || 'chat');
+    if ($('#chat').dataset.mode === 'history') renderHistory();
+    else if (state.chat) renderChips();
+  }
   if (!$('#card').hidden) renderCard();
   if ($('#wordbook').open) renderWordbook();
   if (document.body.dataset.view === 'login') {
@@ -2208,6 +2404,9 @@ async function startSession(me, { offline = false } = {}) {
 function showLogin() {
   flushProgress();
   Object.assign(state, { me: null, model: null, book: null, books: [], booksLoaded: false, wordbook: [], known: new Set() });
+  state.chat?.ctl?.abort();
+  state.chat = null;
+  hist.items = null;
   resetLazy();
   closeCard();
   hideFab();
@@ -2796,6 +2995,35 @@ async function init() {
     }
   });
   $('#chat-input').addEventListener('input', fitChatInput);
+  $('#chat-hist-btn').onclick = () => {
+    if ($('#chat').dataset.mode === 'history' && state.chat) showConversation();
+    else if ($('#chat').dataset.mode !== 'history') openHistory();
+  };
+  $('#chat-back').onclick = () => { if (state.chat) showConversation(); };
+  $('#hist-scope').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-scope]');
+    if (!b) return;
+    hist.scope = b.dataset.scope;
+    renderHistory();
+  });
+  $('#hist-list').addEventListener('click', (e) => {
+    const del = e.target.closest('[data-del]');
+    if (del) { deleteChat(del.dataset.del); return; }
+    const open = e.target.closest('[data-id]');
+    if (open) resumeChat(open.dataset.id);
+  });
+  $('#btn-history').onclick = () => {
+    if (!$('#chat').hidden && $('#chat').dataset.mode === 'history') closeChat();
+    else openHistory();
+  };
+  // A click anywhere outside the sidebar closes it (the button that opens
+  // Ask AI, and popovers and dialogs above it, don't count).
+  document.addEventListener('pointerdown', (e) => {
+    const drawer = $('#chat');
+    if (drawer.hidden || drawer.classList.contains('closing') || e.button > 0) return;
+    if (e.target.closest('#chat, #ask-fab, #btn-history, [popover], dialog, .banner')) return;
+    closeChat();
+  });
   $('#chat-log').addEventListener('scroll', updateChatJump, { passive: true });
   $('#chat-jump').onclick = () => {
     const log = $('#chat-log');

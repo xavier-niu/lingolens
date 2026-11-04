@@ -901,3 +901,52 @@ func TestOfflineSync(t *testing.T) {
 		t.Fatalf("late sync: progress %v pos %v", got.Progress, got.Pos)
 	}
 }
+
+func TestChatHistory(t *testing.T) {
+	e := newEnv(t)
+	a := e.signIn(t, "a@example.com", false)
+	b := e.signIn(t, "b@example.com", false)
+	book := decodeJSON[map[string]any](t, e.do(t, a, "POST", "/api/books", map[string]string{"title": "Habits", "content": "Small habits compound over time."}))
+	turn := []map[string]string{{"role": "user", "content": "Translate this"}, {"role": "assistant", "content": "习惯会累积。"}}
+	save := map[string]any{"bookId": book["id"], "selection": "compound", "passage": "Small habits compound over time.", "messages": turn}
+
+	c := decodeJSON[map[string]any](t, e.do(t, a, "PUT", "/api/chats/abcd1234", save))
+	if c["bookTitle"] != "Habits" || c["question"] != "Translate this" || c["messages"] != nil {
+		t.Fatalf("saved: %v", c)
+	}
+	list := decodeJSON[[]map[string]any](t, e.do(t, a, "GET", "/api/chats?book="+book["id"].(string), nil))
+	if len(list) != 1 || list[0]["id"] != "abcd1234" {
+		t.Fatalf("list: %v", list)
+	}
+	full := decodeJSON[map[string]any](t, e.do(t, a, "GET", "/api/chats/abcd1234", nil))
+	if msgs, _ := full["messages"].([]any); len(msgs) != 2 || full["passage"] == "" {
+		t.Fatalf("get: %v", full)
+	}
+	if got := status(t, e.do(t, b, "GET", "/api/chats/abcd1234", nil)); got != 404 {
+		t.Fatalf("another account read the chat: %d", got)
+	}
+	if got := status(t, e.do(t, b, "DELETE", "/api/chats/abcd1234", nil)); got != 404 {
+		t.Fatalf("another account deleted the chat: %d", got)
+	}
+
+	bad := []struct {
+		id   string
+		body map[string]any
+	}{
+		{"short", save},
+		{"abcd1234", map[string]any{"selection": "x", "messages": turn[:1]}},                              // no answer yet
+		{"abcd1234", map[string]any{"selection": "", "messages": turn}},                                   // no selection
+		{"abcd1234", map[string]any{"selection": "x", "messages": []map[string]string{turn[1], turn[0]}}}, // wrong order
+	}
+	for _, tc := range bad {
+		if got := status(t, e.do(t, a, "PUT", "/api/chats/"+tc.id, tc.body)); got != 400 {
+			t.Errorf("PUT %s %v: %d, want 400", tc.id, tc.body, got)
+		}
+	}
+	if got := status(t, e.do(t, a, "DELETE", "/api/chats/abcd1234", nil)); got != 200 {
+		t.Fatalf("delete: %d", got)
+	}
+	if list := decodeJSON[[]map[string]any](t, e.do(t, a, "GET", "/api/chats", nil)); len(list) != 0 {
+		t.Fatalf("after delete: %v", list)
+	}
+}

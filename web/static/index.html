@@ -51,6 +51,9 @@
           <svg class="caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
         </button>
       </div>
+      <button id="btn-history" class="bar-btn" data-i18n-title="chat.history" data-i18n-aria="chat.history">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6M3.5 4v4h4M12 7.5V12l3 2"/></svg>
+      </button>
       <button id="btn-wordbook" class="bar-btn" data-i18n-title="btn.wordbook">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-4-6 4V4.5a1 1 0 0 1 1-1z"/></svg>
         <span class="bar-label" data-i18n="btn.wordbook">Wordbook</span>
@@ -447,14 +450,27 @@
       <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2.5c.6 4.9 2.6 6.9 7.5 7.5-4.9.6-6.9 2.6-7.5 7.5-.6-4.9-2.6-6.9-7.5-7.5 4.9-.6 6.9-2.6 7.5-7.5zM19 15.5c.25 2 1.1 2.85 3 3.1-1.9.25-2.75 1.1-3 3.1-.25-2-1.1-2.85-3-3.1 1.9-.25 2.75-1.1 3-3.1z"/></symbol>
     </svg>
     <header class="drawer-head">
-      <h2 class="chat-title"><svg class="spark" aria-hidden="true"><use href="#i-spark"/></svg><span data-i18n="chat.title">Ask AI</span></h2>
-      <button id="chat-close" class="icon-btn" data-i18n-aria="btn.close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <button id="chat-back" class="icon-btn head-back" type="button" data-i18n-aria="chat.back" data-i18n-title="chat.back" aria-label="Back" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <h2 class="chat-title"><svg class="spark" aria-hidden="true"><use href="#i-spark"/></svg><span id="chat-title-text" data-i18n="chat.title">Ask AI</span></h2>
+      <div class="head-actions">
+        <button id="chat-hist-btn" class="icon-btn" type="button" data-i18n-aria="chat.history" data-i18n-title="chat.history" aria-label="Ask AI history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6M3.5 4v4h4M12 7.5V12l3 2"/></svg></button>
+        <button id="chat-close" class="icon-btn" data-i18n-aria="btn.close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </header>
+    <div id="chat-history" class="chat-history" hidden>
+      <div id="hist-scope" class="seg hist-scope" role="group" data-i18n-aria="chat.history">
+        <button type="button" data-scope="book" data-i18n="chat.histBook">This text</button>
+        <button type="button" data-scope="all" data-i18n="chat.histAll">All</button>
+      </div>
+      <p id="hist-status" class="hist-status" role="status"></p>
+      <ul id="hist-list" class="hist-list"></ul>
+    </div>
     <div id="chat-log" class="chat-log">
       <figure class="chat-context">
-        <figcaption data-i18n="chat.context">Selected text</figcaption>
+        <figcaption><span data-i18n="chat.context">Selected text</span><a id="chat-book" class="chat-book" hidden></a></figcaption>
         <blockquote id="chat-quote" class="quote"></blockquote>
       </figure>
+      <button id="chat-resume" class="chat-resume" type="button" hidden></button>
       <div id="chat-chips" class="chips"></div>
       <div id="chat-turns" aria-live="polite"></div>
     </div>

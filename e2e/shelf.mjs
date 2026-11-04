@@ -81,6 +81,52 @@ await page.waitForFunction(() => !document.querySelector('#chat-send.busy'));
 check('stopping ends the answer', !(await page.$('.msg.assistant.pending')) && (await page.$$('.turn')).length === 2);
 await page.click('#chat-close');
 
+// Ask AI history: saved after each answer, reopened, continued
+const savedChats = () => page.evaluate(() => fetch('/api/chats').then((r) => r.json()));
+await page.waitForFunction(() => fetch('/api/chats').then((r) => r.json()).then((l) => l.length === 1));
+check('conversation saved to the account', (await savedChats())[0].question === 'Translate this sentence');
+await page.click('#btn-history');
+await page.waitForSelector('#chat-history:not([hidden]) .hist-item');
+check('history opens from the header, on this text', await page.isVisible('#hist-scope') && (await page.textContent('.hist-quote')).length > 20);
+await page.screenshot({ path: `${OUT}/d-chat-history.png` });
+await page.click('.hist-open');
+await page.waitForSelector('#chat-log:not([hidden]) #chat-turns .turn');
+check('reopened conversation shows its answers', (await page.$$('#chat-turns .msg.assistant')).length >= 1 && await page.isVisible('#chat-dock'));
+const asked = (await savedChats())[0].questions;
+await page.fill('#chat-input', 'One more example, please.');
+await page.keyboard.press('Enter');
+await page.waitForFunction(() => document.querySelector('#chat-turns .turn:last-child .msg-actions'));
+await page.waitForFunction((n) => fetch('/api/chats').then((r) => r.json()).then((l) => l.length === 1 && l[0].questions === n + 1), asked);
+check('asking more continues the same conversation', true);
+await page.click('#chat-close');
+// Asking about the same selection again offers the earlier conversation.
+await page.evaluate(() => {
+  const p = document.querySelectorAll('#article p')[1];
+  const r = document.createRange(); r.selectNodeContents(p);
+  getSelection().removeAllRanges(); getSelection().addRange(r);
+});
+await page.mouse.move(pb.x, pb.y); await page.mouse.up();
+await page.waitForSelector('#ask-fab:not([hidden])');
+await page.click('#ask-fab');
+await page.waitForSelector('#chat-resume:not([hidden])');
+check('same selection offers to continue', (await page.textContent('#chat-resume')).includes('Continue'));
+await page.click('#chat-resume');
+await page.waitForSelector('#chat-turns .turn');
+check('continue reopens that conversation', (await page.$$('#chat-turns .turn')).length === asked + 1);
+await page.click('#chat-hist-btn');
+await page.waitForSelector('.hist-item');
+await page.mouse.click(300, 400); // outside the sidebar
+await page.waitForSelector('#chat', { state: 'hidden' });
+check('clicking outside closes the sidebar', true);
+await page.click('#btn-history');
+await page.waitForSelector('.hist-item');
+page.once('dialog', (d) => d.accept());
+await page.hover('.hist-item');
+await page.click('.hist-del');
+await page.waitForSelector('#hist-status:not(:empty)');
+check('conversation deleted from history', (await savedChats()).length === 0);
+await page.click('#chat-close');
+
 // Scroll to the end -> finished
 await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 await page.waitForTimeout(700);

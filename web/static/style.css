@@ -645,10 +645,14 @@ body.chat-open .hint { display: none; }
 .drawer.closing { animation: drawer-out .16s ease-in forwards; }
 @keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } }
 @keyframes drawer-out { to { transform: translateX(24px); opacity: 0; } }
-.drawer-head { display: flex; align-items: center; justify-content: space-between; height: 56px; padding: 0 12px 0 18px; flex-shrink: 0; }
-.chat-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+.drawer-head { display: flex; align-items: center; gap: 4px; height: 56px; padding: 0 12px 0 18px; flex-shrink: 0; }
+.drawer-head:has(.head-back:not([hidden])) { padding-left: 8px; }
+.chat-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+.head-actions { display: flex; align-items: center; gap: 2px; }
+#chat-hist-btn[aria-pressed="true"] { background: var(--hover); color: var(--ink); }
+#btn-history[aria-pressed="true"] { background: var(--hover); color: var(--ink); }
 .spark { width: 20px; height: 20px; fill: url(#spark-grad); flex-shrink: 0; }
-.drawer-head .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.drawer-head .icon-btn svg, .hist-del svg, .chat-resume svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 
 .chat-log {
   flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
@@ -667,6 +671,50 @@ body.chat-open .hint { display: none; }
 .quote::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 0 3px 3px 0; background: var(--gloss); }
 .quote.clamped { cursor: pointer; }
 .quote.open { display: block; cursor: pointer; }
+
+/* The text the conversation came from, when it isn't the one open. */
+.chat-context figcaption { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.chat-book { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); text-decoration: none; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12px; }
+.chat-book::before { content: "·"; margin-right: 6px; }
+.chat-book:hover { color: var(--ink); text-decoration: underline; }
+/* Asked about this before: pick that conversation up again. */
+.chat-resume {
+  display: flex; align-items: center; gap: 10px; width: 100%; margin: -6px 0 14px; padding: 10px 14px;
+  border: 1px dashed var(--line-strong); border-radius: var(--r); background: transparent;
+  color: var(--ink-2); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+  animation: rise .3s cubic-bezier(.2, .8, .2, 1);
+}
+.chat-resume:hover { background: var(--hover); color: var(--ink); border-style: solid; }
+.chat-resume svg { flex: none; width: 17px !important; height: 17px !important; color: var(--muted); }
+
+/* Ask AI history */
+.chat-history { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 18px 24px; animation: fade .2s ease; }
+.hist-scope { margin: 0 0 12px; width: fit-content; }
+.hist-status { margin: 24px 4px; color: var(--muted); font-size: 14px; text-align: center; line-height: 1.6; }
+.hist-status:empty { display: none; }
+.hist-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.hist-item { position: relative; animation: rise .3s cubic-bezier(.2, .8, .2, 1) backwards; }
+.hist-item:nth-child(2) { animation-delay: .03s; }
+.hist-item:nth-child(3) { animation-delay: .06s; }
+.hist-item:nth-child(n+4) { animation-delay: .09s; }
+.hist-open {
+  display: flex; flex-direction: column; gap: 5px; width: 100%; padding: 12px 44px 12px 14px;
+  border: 1px solid var(--line); border-radius: var(--r); background: var(--surface);
+  color: var(--ink); font: inherit; text-align: left; cursor: pointer;
+  transition: background-color .15s, border-color .15s;
+}
+.hist-open:hover { background: var(--hover); border-color: var(--line-strong); }
+.hist-open:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.hist-quote {
+  font-family: var(--read-font); font-size: 15px; line-height: 1.5; color: var(--ink);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+.hist-q { font-size: 13.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-q:empty { display: none; }
+.hist-meta { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-del { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity .15s; }
+.hist-item:hover .hist-del, .hist-del:focus-visible { opacity: 1; }
+.hist-del:hover { color: var(--danger); }
 
 /* Suggestions: a list before the first question, then a row above the input. */
 .chips.start { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
@@ -1002,6 +1050,7 @@ body[data-view="login"] main { padding-bottom: 40px; }
   .chat-note { display: none; }
   .icon-btn { width: 40px; height: 40px; }
   .book-del { opacity: 1; }
+  .hist-del { opacity: 1; }
   ruby.ann:hover { background: transparent; }
   ruby.ann.active { background: var(--hover); }
   .book-link:hover .cover { transform: none; box-shadow: none; }
@@ -1015,6 +1064,7 @@ body[data-view="login"] main { padding-bottom: 40px; }
 @media (max-width: 640px) {
   body[data-view="reader"] .avatar-btn { display: none; } /* room for the title; Settings is in the ⋯ menu */
   .avatar-btn { width: 34px; margin-left: 2px; }
+  .bar-end { gap: 0; } /* room for the book title; buttons keep their size */
   .net-status { padding: 0; width: 28px; justify-content: center; margin-right: 2px; }
   .net-label { display: none; }
   .hint { width: calc(100vw - 32px); gap: 12px; padding: 10px 10px 10px 14px; border-radius: var(--r-lg); white-space: normal; }

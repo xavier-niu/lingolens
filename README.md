@@ -20,6 +20,7 @@ It runs on your own server and uses your own AI key. One server can host a whole
 - Phrases like *take into account*, *by and large* and *run out of* are glossed as a whole, not word by word.
 - Tap any word, glossed or not, for its meaning in this sentence, pronunciation, other meanings and examples.
 - Select a sentence and choose **Ask AI** to ask about its grammar, a translation or more examples.
+- Your Ask AI conversations are kept in **Ask AI history**, so you can reread them and keep asking where you left off.
 
 **Bring anything to read**
 - Paste text, or Markdown with headings and lists.

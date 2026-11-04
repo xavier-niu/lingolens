@@ -19,6 +19,7 @@ JSON in and out; streaming endpoints return NDJSON (one JSON object per line). E
 | `POST /api/annotate` | `{level, segments:[{id,text}]}` → stream of `{type:"segment", id, annotations}` / `{type:"error"}` / `{type:"done"}`. Offsets are UTF-16 (JavaScript string indices). |
 | `POST /api/lookup` | `{level, term, sentence}` → dictionary entry |
 | `POST /api/chat` | `{level, passage, selection, messages}` → stream of `{type:"delta", text}` / `{type:"error"}` / `{type:"done"}` |
+| `GET /api/chats?book=`, `GET/PUT/DELETE /api/chats/{id}` | Ask AI history. The list (newest first, optionally for one text) carries `{id, bookId, bookTitle, selection, question, questions, updatedAt}`; one conversation adds `passage` and `messages`. `PUT` saves a conversation under an id the browser chose (8–64 letters, digits, `-`, `_`): `{bookId, selection, passage, messages}` with complete question/answer pairs, up to 60 of them. Conversations are deleted with their text; an account keeps its latest 500 |
 
 The LLM endpoints use the signed-in user's saved provider and key.
 
