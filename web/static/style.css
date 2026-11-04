@@ -355,7 +355,28 @@ body:not([data-view="reader"]) .reader-only,
 body:not([data-view="library"]) .library-only,
 body[data-view="library"] .not-library,
 body[data-view="reader"] .not-reader { display: none !important; }
-body[data-view="settings"] #btn-gear { background: var(--hover); color: var(--ink); }
+
+/* The signed-in person: their initial on a colour picked from their email. */
+.avatar-btn {
+  display: inline-grid; place-items: center; width: 38px; height: 38px; margin-left: 4px; padding: 0;
+  border: 0; border-radius: 50%; background: transparent; cursor: pointer;
+}
+.avatar {
+  --av: #2b4a75;
+  display: inline-grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 50%;
+  background: var(--av); color: #fff; font-size: 13.5px; font-weight: 600; line-height: 1; letter-spacing: 0;
+  transition: filter .15s, transform .15s; user-select: none;
+}
+/* Muted, saturated colours that carry a white letter in light and dark themes. */
+.avatar[data-c="1"] { --av: #2f6763; }
+.avatar[data-c="2"] { --av: #3f6b45; }
+.avatar[data-c="3"] { --av: #b0533d; }
+.avatar[data-c="4"] { --av: #9a6a1f; }
+.avatar[data-c="5"] { --av: #4b5563; }
+.avatar.lg { width: 40px; height: 40px; font-size: 17px; }
+.avatar-btn:hover .avatar, .avatar-btn[aria-expanded="true"] .avatar { filter: brightness(1.12); }
+.avatar-btn:active .avatar { transform: scale(.95); }
+.avatar-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
 .banner {
   display: flex; align-items: center; gap: 12px;
@@ -391,6 +412,15 @@ label.pop-row:hover { background: var(--hover); }
   background: transparent; color: var(--ink); text-align: left; cursor: pointer; text-decoration: none; font-size: 14px;
 }
 .menu-item:hover { background: var(--hover); }
+.menu-item svg { width: 17px; height: 17px; margin-right: 10px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--muted); }
+.account-pop { min-width: 240px; max-width: min(320px, calc(100vw - 16px)); }
+.acct-card { display: flex; align-items: center; gap: 12px; padding: 8px 10px 6px; }
+.acct-who { min-width: 0; }
+.acct-who p { margin: 0; }
+.acct-line { display: flex; align-items: center; gap: 6px; }
+.acct-pop-name { font-weight: 600; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct-pop-role { flex: none; padding: 1px 7px; border-radius: 999px; background: var(--sunken); border: 1px solid var(--line); color: var(--muted); font-size: 11px; font-weight: 600; }
+.acct-pop-email { margin-top: 2px !important; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-sep { height: 1px; background: var(--line); margin: 6px 4px; }
 
 .level-list { display: flex; flex-direction: column; min-width: 280px; }
@@ -983,6 +1013,8 @@ body[data-view="login"] main { padding-bottom: 40px; }
 }
 
 @media (max-width: 640px) {
+  body[data-view="reader"] .avatar-btn { display: none; } /* room for the title; Settings is in the ⋯ menu */
+  .avatar-btn { width: 34px; margin-left: 2px; }
   .net-status { padding: 0; width: 28px; justify-content: center; margin-right: 2px; }
   .net-label { display: none; }
   .hint { width: calc(100vw - 32px); gap: 12px; padding: 10px 10px 10px 14px; border-radius: var(--r-lg); white-space: normal; }

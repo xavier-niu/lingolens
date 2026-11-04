@@ -26,7 +26,7 @@ await page.emulateMedia({ colorScheme: 'light' });
 check('System switches live when the device does', (await bg(page)) === LIGHT);
 await page.emulateMedia({ colorScheme: 'dark' });
 
-await page.click('#btn-gear');
+await page.click('#btn-account'); await page.click('#acct-settings');
 await page.waitForSelector('#settings-view:not([hidden])');
 check('Settings shows System selected', (await pressed(page, '#theme-seg')) === 'system');
 await page.click('#theme-seg [data-mode="light"]');

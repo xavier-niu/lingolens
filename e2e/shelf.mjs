@@ -13,8 +13,15 @@ page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('401')) errors.push(m.text()); });
 
 // Empty shelf (a fresh account)
-await signIn(page, await freshUser(browser));
+const reader = await freshUser(browser);
+await signIn(page, reader);
 check('empty shelf shown', await page.isVisible('#shelf-empty'));
+check('header avatar shows the initial', (await page.textContent('#avatar')) === 'R');
+await page.click('#btn-account');
+await page.waitForSelector('#account-pop:popover-open');
+check('account menu shows who is signed in', (await page.textContent('#acct-pop-name')) === reader.email);
+await page.screenshot({ path: `${OUT}/d-account.png` });
+await page.keyboard.press('Escape');
 check('english by default', (await page.textContent('#shelf-empty h2')) === 'Your Shelf Is Empty');
 await page.screenshot({ path: `${OUT}/d-empty.png` });
 
@@ -208,7 +215,7 @@ await page.click('#home-link');
 await page.waitForSelector('#library-view:not([hidden])');
 
 // Language (now in the profile) + dark mode
-await page.click('#btn-gear');
+await page.click('#btn-account'); await page.click('#acct-settings');
 await page.click('#lang-seg [data-lang="zh"]');
 check('settings page in Chinese', (await page.textContent('.page-title')) === '设置');
 await page.screenshot({ path: `${OUT}/d-settings-zh.png` });
@@ -217,7 +224,7 @@ check('chinese shelf title', (await page.textContent('.shelf-head h1')) === '我
 await page.emulateMedia({ colorScheme: 'dark' });
 await page.waitForTimeout(400);
 await page.screenshot({ path: `${OUT}/d-shelf-dark-zh.png` });
-await page.click('#btn-gear');
+await page.click('#btn-account'); await page.click('#acct-settings');
 await page.click('#lang-seg [data-lang="en"]');
 await page.click('#home-link');
 await page.emulateMedia({ colorScheme: 'light' });

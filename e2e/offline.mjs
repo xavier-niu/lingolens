@@ -161,7 +161,7 @@ const titles = await page.$$eval('#shelf .book', (els) => els.map((e) => e.textC
 check('offline shelf: new text in, deleted text out', titles.some((x) => x.includes('Written Offline')) && !titles.some((x) => x.includes('Second Book')), titles.length + '');
 
 // a setting changed offline
-await page.click('#btn-gear');
+await page.click('#btn-account'); await page.click('#acct-settings');
 await page.waitForSelector('#settings-view:not([hidden])');
 await page.click('#theme-seg button[data-mode="dark"]');
 const pending = await idb(page, 'outbox');

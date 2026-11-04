@@ -56,11 +56,11 @@
         <span class="bar-label" data-i18n="btn.wordbook">Wordbook</span>
         <span id="wb-count" class="count"></span>
       </button>
-      <a id="btn-gear" class="bar-btn not-reader" href="#/settings" data-i18n-title="settings.page" data-i18n-aria="settings.page">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-      </a>
       <button id="btn-menu" class="bar-btn reader-only" popovertarget="menu-pop" data-i18n-title="menu.title" data-i18n-aria="menu.title">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+      </button>
+      <button id="btn-account" class="avatar-btn" popovertarget="account-pop" data-i18n-aria="account.menu">
+        <span id="avatar" class="avatar" aria-hidden="true"></span>
       </button>
     </div>
     <div id="read-thread" class="read-thread reader-only" aria-hidden="true"><div></div></div>
@@ -125,6 +125,21 @@
     <button type="button" id="btn-toc" class="menu-item" data-i18n="toc.title" hidden>Contents</button>
     <button type="button" id="btn-edit" class="menu-item" data-i18n="btn.edit">Edit text</button>
     <a id="btn-settings" class="menu-item" href="#/settings" data-i18n="settings.page">Settings</a>
+  </div>
+
+  <div id="account-pop" class="pop account-pop" popover>
+    <div class="acct-card">
+      <span id="avatar-lg" class="avatar lg" aria-hidden="true"></span>
+      <div class="acct-who">
+        <p class="acct-line"><span id="acct-pop-name" class="acct-pop-name"></span><span id="acct-pop-role" class="acct-pop-role" data-i18n="members.admin" hidden>Admin</span></p>
+        <p id="acct-pop-email" class="acct-pop-email"></p>
+      </div>
+    </div>
+    <div class="menu-sep"></div>
+    <a id="acct-settings" class="menu-item" href="#/settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span data-i18n="settings.page">Settings</span></a>
+    <button type="button" id="acct-signout" class="menu-item">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/></svg><span data-i18n="account.signOut">Sign out</span>
+    </button>
   </div>
 
   <div id="banner" class="banner" role="status" hidden>

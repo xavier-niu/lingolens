@@ -408,6 +408,27 @@ function setView(view) {
   $('#login-view').hidden = view !== 'login';
   if (view === 'settings') $('#banner-action').hidden = true; // already here
   renderCrumbs(view);
+  renderAvatar();
+}
+
+// The header avatar: the first letter of the name (or email) on a colour that
+// stays the same for each account.
+function renderAvatar() {
+  const u = state.me;
+  if (!u) return;
+  const label = (u.name || u.email || '?').trim();
+  const initial = ([...label][0] || '?').toLocaleUpperCase();
+  let h = 0;
+  for (const ch of u.email || label) h = (h * 31 + ch.codePointAt(0)) % 6;
+  for (const el of [$('#avatar'), $('#avatar-lg')]) {
+    el.textContent = initial;
+    el.dataset.c = h;
+  }
+  $('#acct-pop-name').textContent = u.name || u.email;
+  $('#acct-pop-email').textContent = u.name ? u.email : '';
+  $('#acct-pop-email').hidden = !u.name;
+  $('#acct-pop-role').hidden = !u.is_admin;
+  $('#btn-account').title = u.name ? `${u.name} (${u.email})` : u.email;
 }
 
 // Header breadcrumb after the logo: Shelf / book, or Shelf / (book /) Settings.
@@ -2063,6 +2084,7 @@ async function onSynced() {
   if (!state.me || me?.user?.id !== state.me.id) return;
   const before = { level: getLevel(), lang: state.prefs.lang, readSize: state.prefs.readSize, readWidth: state.prefs.readWidth, theme: state.prefs.theme, readFont: state.prefs.readFont, glossFont: state.prefs.glossFont };
   state.me = me.user;
+  renderAvatar();
   state.model = me.model;
   state.prefs = { ...state.prefs, ...me.user.prefs };
   state.books = books;
@@ -2792,6 +2814,11 @@ async function init() {
 
   // Settings
   $('#btn-settings').onclick = () => $('#menu-pop').hidePopover?.();
+  $('#acct-settings').onclick = () => $('#account-pop').hidePopover?.();
+  $('#acct-signout').onclick = () => {
+    $('#account-pop').hidePopover?.();
+    signOut();
+  };
   $('#profile-levels').addEventListener('click', (e) => {
     const id = e.target.closest('[data-level]')?.dataset.level;
     if (id) setLevel(id);
