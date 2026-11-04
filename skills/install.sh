@@ -76,13 +76,16 @@ mv "$dir/$NAME.new" "$dir/$NAME"
 from="$REPO@$ref"
 [[ -n "$src" ]] && from="local copy"
 printf 'Installed the LingoLens skill in %s/%s (from %s).\n' "$dir" "$NAME" "$from"
-if [[ -n "${LINGOLENS_URL:-}" && -n "${LINGOLENS_TOKEN:-}" ]]; then
-  "$dir/$NAME/scripts/upload.sh" --check || true
+# The script finds the settings in the environment or the shell startup files.
+if out="$("$dir/$NAME/scripts/upload.sh" --check 2>&1)"; then
+  printf '%s\n' "$out"
+elif [[ "$out" != *"is not set"* ]]; then
+  printf '%s\n' "$out" >&2
 else
   cat <<'EOF'
 
 Next: create a token in LingoLens (Settings → Agent Access) and set the two lines it
-shows in your shell profile or your agent's environment:
+shows in your shell profile (such as ~/.zshrc) or your agent's environment:
 
   export LINGOLENS_URL=https://read.example.com
   export LINGOLENS_TOKEN=llat_...

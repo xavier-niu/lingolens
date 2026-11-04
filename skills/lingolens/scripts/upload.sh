@@ -6,17 +6,46 @@
 #                                      deleted after 30 days, or DAYS (0: keep it)
 #   upload.sh - [--title TITLE]        upload Markdown from stdin
 #   upload.sh FILE --append ID         add to the end of text ID, after a --- line
+#   upload.sh FILE --replace ID [--title TITLE]
+#                                      rewrite text ID with FILE (a title renames it)
+#   upload.sh --get ID                 print the Markdown of text ID
 #   upload.sh --list                   list the texts agents saved: ID, words, title
 #   upload.sh --check                  check LINGOLENS_URL and LINGOLENS_TOKEN
 #
-# Needs bash and curl. Reads LINGOLENS_URL and LINGOLENS_TOKEN from the environment
-# (create a token in LingoLens: Settings → Agent Access).
+# Needs bash and curl. Reads LINGOLENS_URL and LINGOLENS_TOKEN from the environment,
+# or else from the export lines in the user's shell startup files (create a token
+# in LingoLens: Settings → Agent Access).
 set -euo pipefail
 
 die() { printf 'lingolens: %s\n' "$*" >&2; exit 1; }
 
-[[ -n "${LINGOLENS_URL:-}" ]] || die "LINGOLENS_URL is not set (e.g. export LINGOLENS_URL=https://read.example.com)."
-[[ -n "${LINGOLENS_TOKEN:-}" ]] || die "LINGOLENS_TOKEN is not set. Create a token in LingoLens: Settings → Agent Access."
+# Agents often run commands in a shell that never read ~/.zshrc or ~/.bashrc, so
+# when a variable isn't set, take it from a plain `export NAME=value` line there.
+# The value is read as text, never run: one that needs the shell ($…, `…`) is skipped.
+from_profile() {
+  local name="$1" f line val
+  for f in "${LINGOLENS_ENV_FILE:-}" "$HOME/.config/lingolens/env" "$HOME/.zshenv" \
+    "${ZDOTDIR:-$HOME}/.zshrc" "$HOME/.zprofile" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
+    [[ -n "$f" && -f "$f" && -r "$f" ]] || continue
+    line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?$name=" "$f" | tail -n 1)" || true
+    [[ -n "$line" ]] || continue
+    val="${line#*=}"
+    case "$val" in
+      \"*) val="${val#\"}"; val="${val%%\"*}" ;;
+      \'*) val="${val#\'}"; val="${val%%\'*}" ;;
+      *) val="${val%%[[:space:];]*}" ;;
+    esac
+    [[ -n "$val" && "$val" != *[\$\`\\]* ]] || continue
+    printf -v "$name" '%s' "$val"
+    found_in+=("${f/#"$HOME"/\~}")
+    return 0
+  done
+}
+found_in=()
+[[ -n "${LINGOLENS_URL:-}" ]] || from_profile LINGOLENS_URL || true
+[[ -n "${LINGOLENS_TOKEN:-}" ]] || from_profile LINGOLENS_TOKEN || true
+[[ -n "${LINGOLENS_URL:-}" ]] || die "LINGOLENS_URL is not set, in the environment or a shell startup file (e.g. export LINGOLENS_URL=https://read.example.com in ~/.zshrc)."
+[[ -n "${LINGOLENS_TOKEN:-}" ]] || die "LINGOLENS_TOKEN is not set, in the environment or a shell startup file. Create a token in LingoLens: Settings → Agent Access."
 command -v curl >/dev/null || die "curl is required."
 base="${LINGOLENS_URL%/}"
 
@@ -56,6 +85,15 @@ field() { sed -nE "s/.*\"$1\":\"(([^\"\\\\]|\\\\.)*)\".*/\\1/p"; }
 if [[ "${1:-}" == "--check" ]]; then
   body="$(request GET /api/agent/whoami)"
   printf 'OK: uploads go to the shelf of %s (%s)\n' "$(printf '%s' "$body" | field user)" "$(printf '%s' "$body" | field shelf)"
+  ((${#found_in[@]} == 0)) || printf 'Settings read from %s\n' "$(printf '%s\n' "${found_in[@]}" | sort -u | paste -sd, - | sed 's/,/, /g')"
+  exit 0
+fi
+
+if [[ "${1:-}" == "--get" || "${1:-}" == --get=* ]]; then
+  if [[ "$1" == --get=* ]]; then id="${1#--get=}"; else id="${2:-}"; fi
+  [[ "$id" =~ ^[A-Za-z0-9_-]+$ ]] || die "--get needs a text ID (see --list)"
+  md="$(request GET "/api/agent/texts/$id" -H "Accept: text/markdown")"
+  printf '%s\n' "$md"
   exit 0
 fi
 
@@ -73,10 +111,11 @@ if [[ "${1:-}" == "--list" ]]; then
 fi
 
 src="${1:-}"
-[[ -n "$src" ]] || die "usage: upload.sh FILE|- [--title TITLE] [--ttl DAYS] | FILE|- --append ID | --list | --check"
+[[ -n "$src" && "$src" != --* ]] || die "usage: upload.sh FILE|- [--title TITLE] [--ttl DAYS] | FILE|- --append ID | FILE|- --replace ID [--title TITLE] | --get ID | --list | --check"
 shift
 title=""
 append=""
+replace=""
 ttl=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -84,6 +123,8 @@ while [[ $# -gt 0 ]]; do
     --title=*) title="${1#--title=}"; shift ;;
     --append) [[ $# -ge 2 ]] || die "--append needs a text ID (see --list)"; append="$2"; shift 2 ;;
     --append=*) append="${1#--append=}"; shift ;;
+    --replace) [[ $# -ge 2 ]] || die "--replace needs a text ID (see --list)"; replace="$2"; shift 2 ;;
+    --replace=*) replace="${1#--replace=}"; shift ;;
     --ttl) [[ $# -ge 2 ]] || die "--ttl needs a number of days (0: keep forever)"; ttl="$2"; shift 2 ;;
     --ttl=*) ttl="${1#--ttl=}"; shift ;;
     *) die "unknown argument: $1" ;;
@@ -92,6 +133,9 @@ done
 [[ -z "$append" || "$append" =~ ^[A-Za-z0-9_-]+$ ]] || die "not a text ID: $append"
 [[ -z "$append" || -z "$title" ]] || die "--append keeps the text's title; leave out --title"
 [[ -z "$append" || -z "$ttl" ]] || die "--append renews the text's own time; leave out --ttl"
+[[ -z "$replace" || "$replace" =~ ^[A-Za-z0-9_-]+$ ]] || die "not a text ID: $replace"
+[[ -z "$append" || -z "$replace" ]] || die "use --append or --replace, not both"
+[[ -z "$replace" || -z "$ttl" ]] || die "--replace renews the text's own time; leave out --ttl"
 [[ -z "$ttl" || "$ttl" =~ ^[0-9]+$ ]] || die "--ttl takes a number of days (0: keep forever)"
 
 if [[ "$src" == "-" ]]; then
@@ -103,15 +147,21 @@ fi
 [[ -f "$src" ]] || die "no such file: $src"
 [[ -s "$src" ]] || die "the file is empty: $src"
 
+method=POST
 if [[ -n "$append" ]]; then
   path="/api/agent/texts/$append/append"
   done_msg='Added to "%s" (%s words now)\n%s\n'
+elif [[ -n "$replace" ]]; then
+  method=PUT
+  path="/api/agent/texts/$replace"
+  [[ -n "$title" ]] && path+="?title=$(urlencode "$title")"
+  done_msg='Rewrote "%s" (%s words now)\n%s\n'
 else
   path="/api/agent/texts?ttlDays=${ttl:-30}"
   [[ -n "$title" ]] && path+="&title=$(urlencode "$title")"
   done_msg='Saved "%s" (%s words)\n%s\n'
 fi
-body="$(request POST "$path" -H "Content-Type: text/markdown; charset=utf-8" --data-binary "@$src")"
+body="$(request "$method" "$path" -H "Content-Type: text/markdown; charset=utf-8" --data-binary "@$src")"
 
 printf "$done_msg" \
   "$(printf '%s' "$body" | field title)" \

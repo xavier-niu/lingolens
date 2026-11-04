@@ -378,6 +378,63 @@ func TestAppendAgentBook(t *testing.T) {
 	}
 }
 
+func TestReplaceAgentBook(t *testing.T) {
+	s := newTestStore(t)
+	ctx := t.Context()
+	u, _ := s.CreateUser(ctx, "rp@example.com", "", "password 12345", false)
+	other, _ := s.CreateUser(ctx, "ro@example.com", "", "password 12345", false)
+	mine, _ := s.CreateBook(ctx, u.ID, "Mine", "markdown", "My own notes.")
+	a, _ := s.CreateAgentBook(ctx, u.ID, "Coffee", "markdown", "# Coffee\n\nPart one has a mistaek.", AgentTTL)
+	if err := s.SaveProgress(ctx, u.ID, a.ID, 0.5, 0.4); err != nil {
+		t.Fatal(err)
+	}
+	s.db.ExecContext(ctx, `UPDATE books SET expires_at = ? WHERE id = ?`, expiry(24*time.Hour), a.ID)
+
+	got, err := s.GetAgentBook(ctx, u.ID, a.ID)
+	if err != nil || got.Content != a.Content || got.Content == "" {
+		t.Fatalf("get = %+v, %v", got, err)
+	}
+	b, err := s.ReplaceAgentBook(ctx, u.ID, a.ID, "", "", "# Coffee\n\nPart one has no mistake.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.ID != a.ID || b.Title != "Coffee" || b.Content != "# Coffee\n\nPart one has no mistake." || b.Words != 6 {
+		t.Fatalf("replaced = %+v", b)
+	}
+	if b.Pos != got.Pos || b.Progress != got.Progress || b.Pos == 0 {
+		t.Fatalf("pos %v, progress %v: the reader should keep their place", b.Pos, b.Progress)
+	}
+	if b.UpdatedAt <= a.UpdatedAt {
+		t.Fatalf("updatedAt %s → %s: devices wouldn't refetch", a.UpdatedAt, b.UpdatedAt)
+	}
+	if at, _ := time.Parse(time.RFC3339, b.ExpiresAt); time.Until(at) < AgentTTL-time.Minute {
+		t.Fatalf("rewriting should renew to 30 days: %s", b.ExpiresAt)
+	}
+	if b, _ = s.ReplaceAgentBook(ctx, u.ID, a.ID, "  Coffee Basics ", "", b.Content); b.Title != "Coffee Basics" {
+		t.Fatalf("renamed to %q", b.Title)
+	}
+	for name, err := range map[string]error{
+		"get the user's own text":     func() error { _, err := s.GetAgentBook(ctx, u.ID, mine.ID); return err }(),
+		"replace the user's own text": func() error { _, err := s.ReplaceAgentBook(ctx, u.ID, mine.ID, "", "", "x"); return err }(),
+		"another user's text":         func() error { _, err := s.ReplaceAgentBook(ctx, other.ID, a.ID, "", "", "x"); return err }(),
+		"another user's get":          func() error { _, err := s.GetAgentBook(ctx, other.ID, a.ID); return err }(),
+		"no such text":                func() error { _, err := s.ReplaceAgentBook(ctx, u.ID, "nope", "", "", "x"); return err }(),
+	} {
+		if !errors.Is(err, ErrNotFound) {
+			t.Errorf("%s: %v, want not found", name, err)
+		}
+	}
+	if _, err := s.ReplaceAgentBook(ctx, u.ID, a.ID, "", "", " \n"); err == nil {
+		t.Error("empty text accepted")
+	}
+	if _, err := s.ReplaceAgentBook(ctx, u.ID, a.ID, "", "", strings.Repeat("x", MaxBookChars+1)); !errors.Is(err, ErrTooLong) {
+		t.Errorf("too long: %v", err)
+	}
+	if b, _ := s.GetBook(ctx, u.ID, mine.ID); b.Content != "My own notes." {
+		t.Fatalf("the user's own text changed: %q", b.Content)
+	}
+}
+
 func TestBookTTL(t *testing.T) {
 	s := newTestStore(t)
 	ctx := t.Context()

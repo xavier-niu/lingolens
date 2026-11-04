@@ -752,6 +752,56 @@ func TestAgentAPI(t *testing.T) {
 			t.Errorf("%s: %d, want %d", name, got, tc.want)
 		}
 	}
+
+	// Reading and rewriting an agent's text: same id and link, a title renames it.
+	got := decodeJSON[map[string]any](t, agent("GET", "/api/agent/texts/"+pv, "", created.Token, ""))
+	if got["id"] != pv || !strings.HasSuffix(got["markdown"].(string), "One more line.") || got["url"] == nil {
+		t.Fatalf("get = %+v", got)
+	}
+	req, _ := http.NewRequest("GET", e.srv.URL+"/api/agent/texts/"+pv, nil)
+	req.Header.Set("Authorization", "Bearer "+created.Token)
+	req.Header.Set("Accept", "text/markdown")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/markdown") || string(raw) != got["markdown"] {
+		t.Fatalf("markdown = %q (%s)", raw, resp.Header.Get("Content-Type"))
+	}
+	resp = agent("PUT", "/api/agent/texts/"+pv, "text/markdown", created.Token, "# Phrasal verbs\n\n- **give up**: stop trying\n")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("replace: %d", status(t, resp))
+	}
+	if up = decodeJSON[map[string]any](t, resp); up["id"] != pv || up["title"] != "Phrasal Verbs" || up["url"] != got["url"] {
+		t.Fatalf("replace = %+v", up)
+	}
+	if book := decodeJSON[store.Book](t, e.do(t, c, "GET", "/api/books/"+pv, nil)); book.Content != "# Phrasal verbs\n\n- **give up**: stop trying\n" {
+		t.Fatalf("replaced content = %q", book.Content)
+	}
+	up = decodeJSON[map[string]any](t, agent("PUT", "/api/agent/texts/"+pv, "application/json", created.Token, `{"title": "Verbs", "markdown": "Short now."}`))
+	if up["title"] != "Verbs" {
+		t.Fatalf("rename = %+v", up)
+	}
+	for name, tc := range map[string]struct {
+		resp *http.Response
+		want int
+	}{
+		"get the user's own text":     {agent("GET", "/api/agent/texts/"+mine.ID, "", created.Token, ""), 404},
+		"replace the user's own text": {agent("PUT", "/api/agent/texts/"+mine.ID, "text/markdown", created.Token, "x"), 404},
+		"another user's agent, get":   {agent("GET", "/api/agent/texts/"+pv, "", otherTok, ""), 404},
+		"another user's agent, put":   {agent("PUT", "/api/agent/texts/"+pv, "text/markdown", otherTok, "x"), 404},
+		"empty rewrite":               {agent("PUT", "/api/agent/texts/"+pv, "text/markdown", created.Token, " "), 400},
+		"no token, get":               {agent("GET", "/api/agent/texts/"+pv, "", "", ""), 401},
+		"cookie on get":               {e.do(t, c, "GET", "/api/agent/texts/"+pv, nil), 401},
+		"cookie on put":               {e.do(t, c, "PUT", "/api/agent/texts/"+pv, map[string]string{"markdown": "x"}), 401},
+		"too long":                    {agent("PUT", "/api/agent/texts/"+pv, "text/markdown", created.Token, strings.Repeat("x", store.MaxBookChars+1)), 413},
+	} {
+		if got := status(t, tc.resp); got != tc.want {
+			t.Errorf("%s: %d, want %d", name, got, tc.want)
+		}
+	}
 	if book := decodeJSON[store.Book](t, e.do(t, c, "GET", "/api/books/"+mine.ID, nil)); book.Content != "My own words." {
 		t.Fatalf("the user's own text changed: %q", book.Content)
 	}

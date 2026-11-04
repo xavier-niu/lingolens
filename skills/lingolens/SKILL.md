@@ -1,6 +1,6 @@
 ---
 name: lingolens
-description: Save a reply, explanation, article or notes to the user's LingoLens shelf as a Markdown text, so they can read it later with Chinese glosses pitched at their English level, or add more to a text saved earlier on the same topic. Use when the user asks to send, save or put something "in LingoLens", "on my shelf" or "in my reading list", asks for English reading material for LingoLens (for example "write me a B1 article about coffee and put it in LingoLens"), or asks to add to or update a topic already in LingoLens.
+description: Save a reply, explanation, article or notes to the user's LingoLens shelf as a Markdown text, so they can read it later with Chinese glosses pitched at their English level, or add to, fix or rewrite a text saved there before. Use when the user asks to send, save or put something "in LingoLens", "on my shelf" or "in my reading list", asks for English reading material for LingoLens (for example "write me a B1 article about coffee and put it in LingoLens"), or asks to add to, update, correct, rewrite or retitle a text already in LingoLens.
 ---
 
 # LingoLens
@@ -8,8 +8,9 @@ description: Save a reply, explanation, article or notes to the user's LingoLens
 LingoLens is a reading app for Chinese speakers learning English. It shows a text
 with Chinese glosses above the words and phrases the reader probably doesn't know
 at their CEFR level (A1–C2), and lets them tap any word or ask AI about a
-sentence. This skill uploads Markdown to the user's shelf through the agent API,
-as a new text or added to the end of one saved before.
+sentence. This skill uploads Markdown to the user's shelf through the agent API:
+as a new text, added to the end of one saved before, or as a new version of one
+saved before.
 
 ## Setup
 
@@ -19,14 +20,25 @@ The upload needs two environment variables:
 - `LINGOLENS_TOKEN`: an agent token starting with `llat_`
 
 The user creates the token in LingoLens under **Settings → Agent Access**; the page
-shows both lines ready to copy. Check the setup with:
+shows both lines ready to copy.
+
+**Just run the script.** Your shell may not have these variables even when the
+user has set them up: commands often run in a shell that never read `~/.zshrc`
+or `~/.bashrc`. The script handles that itself. When a variable isn't in the
+environment, it reads the `export LINGOLENS_…=` line from the user's shell
+startup files (`~/.zshenv`, `~/.zshrc`, `~/.zprofile`, `~/.bashrc`,
+`~/.bash_profile`, `~/.profile`) or from `~/.config/lingolens/env`. So don't
+check `$LINGOLENS_URL` or `$LINGOLENS_TOKEN` yourself, don't source or read those
+files, and don't ask the user for them: run the script, and only if it fails,
+check the setup with:
 
 ```bash
 scripts/upload.sh --check
 ```
 
-If either variable is missing or the check fails, tell the user how to set it up
-and stop. Don't guess an address or ask them to paste the token into the chat.
+If that fails too, tell the user how to set it up (the message says what's
+missing) and stop. Don't guess an address or ask them to paste the token into the
+chat.
 
 ## Writing the text
 
@@ -77,6 +89,24 @@ when the user asks:
 scripts/upload.sh reply.md --title "Optional Title" --ttl 0
 ```
 
+## Finding a text saved before
+
+To add to or change a text, you need its ID. If it was saved in this
+conversation, the ID is the end of its link (`…/#/read/ID`). Otherwise list the
+texts agents saved, newest change first:
+
+```bash
+scripts/upload.sh --list
+```
+
+Each line is `ID`, words, last changed and title, separated by tabs. Pick the one
+whose title matches what the user means. If none matches, say so (and, when they
+asked to add to it, save a new text). If several might, ask the user which one;
+don't guess.
+
+Only texts saved by agents can be read, added to or changed. The user's own texts
+(pasted, web pages, books) aren't listed, and the API answers 404 for them.
+
 ## Adding to a text on the same topic
 
 When the user asks to update a topic that is already in LingoLens, or to save
@@ -86,17 +116,7 @@ the end of that text instead of saving a new one. LingoLens puts a separator lin
 (`---`) before the new part; the text keeps its title, link and the reader's
 place.
 
-1. **Find the text's ID.** If it was saved in this conversation, the ID is the
-   end of its link (`…/#/read/ID`). Otherwise list the texts agents saved,
-   newest first:
-
-   ```bash
-   scripts/upload.sh --list
-   ```
-
-   Each line is `ID`, words, last changed and title, separated by tabs. Pick the
-   one whose title matches the topic. If none matches, save a new text. If
-   several might, ask the user which one; don't guess.
+1. **Find the text's ID** (above).
 2. **Write only the new part.** Start it with a `##` heading saying what it adds
    (not the `#` title again), and don't repeat what the text already says. The
    same writing rules apply, at the same level as before.
@@ -109,13 +129,42 @@ place.
    Give the user the link it prints; it's the same link as before. Adding
    starts the 30 days again (a longer time, or "never", stays as it is).
 
-Only texts saved by agents can be added to; the user's own texts (pasted, web
-pages, books) can't be changed and aren't listed. If adding fails with 404, the
-text was deleted or isn't an agent's: save a new text and say why. If it fails
-with 413, the text would grow past the limit: save the new part as a new text,
-titled like "Coffee, Part 2".
+If adding fails with 404, the text was deleted or isn't an agent's: save a new
+text and say why. If it fails with 413, the text would grow past the limit: save
+the new part as a new text, titled like "Coffee, Part 2".
 
-### Without the script
+## Changing a text
+
+When the user asks to change a text saved before ("fix the mistakes in my coffee
+text", "rewrite the phrasal verbs one at A2", "rename it to …", "remove the part
+about prices"), rewrite it in place instead of saving a new copy. It keeps its
+link and the reader's place, and its 30 days start again.
+
+1. **Find the text's ID** (above).
+2. **Get what it says now:**
+
+   ```bash
+   scripts/upload.sh --get ID > text.md
+   ```
+
+   It prints the whole Markdown. Edit that, so the parts the user didn't ask
+   about stay as they were; don't rewrite it from memory. To change only the
+   title, keep the content as it is and pass `--title`.
+3. **Save the new version:**
+
+   ```bash
+   scripts/upload.sh text.md --replace ID
+   scripts/upload.sh text.md --replace ID --title "New Title"
+   ```
+
+   Without `--title` the text keeps its title. Give the user the link it
+   prints and say in a line what changed.
+
+To add a new section, prefer adding to the text (above) over rewriting it. A
+rewrite replaces the whole text, including anything added to it since you read
+it, so get it again right before you change it.
+
+## Without the script
 
 ```bash
 curl -fsS -X POST "$LINGOLENS_URL/api/agent/texts?title=Optional%20Title" \
@@ -132,14 +181,18 @@ is empty for a text that is kept.
 
 To add to a text, send the new part the same way (a title is ignored) to
 `POST $LINGOLENS_URL/api/agent/texts/ID/append`; it answers `200` with the same
-fields. `GET $LINGOLENS_URL/api/agent/texts` lists the texts agents saved, newest
-change first, with the same fields.
+fields. To rewrite one, send the whole new text the same way to
+`PUT $LINGOLENS_URL/api/agent/texts/ID` (a title renames it; none keeps it).
+`GET $LINGOLENS_URL/api/agent/texts/ID` returns one with its Markdown (with
+`Accept: text/markdown`, the Markdown alone), and
+`GET $LINGOLENS_URL/api/agent/texts` lists the texts agents saved, newest change
+first, with the same fields.
 
 | Status | Meaning |
 | --- | --- |
 | 401 | Token missing, wrong or revoked. Ask the user to create a new one. |
 | 400 | The text was rejected (for example, it was empty); the `error` field says why. |
-| 404 | Adding to a text that was deleted or that the user added themselves. Save a new text. |
+| 404 | Reading or changing a text that was deleted or that the user added themselves. Save a new text. |
 | 413 | Too large. Split it into parts and upload each one; when adding, save the new part as a new text. |
 
 ## Privacy

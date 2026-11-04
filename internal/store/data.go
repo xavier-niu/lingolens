@@ -267,49 +267,87 @@ func (s *Store) ListAgentBooks(ctx context.Context, userID int64) ([]Book, error
 // horizontal rule in Markdown.
 const AgentSeparator = "\n\n---\n\n"
 
+// GetAgentBook returns a text an agent added, with its content; the user's
+// own texts are ErrNotFound.
+func (s *Store) GetAgentBook(ctx context.Context, userID int64, id string) (*Book, error) {
+	return scanBook(s.db.QueryRowContext(ctx, `SELECT `+bookCols+`, content FROM books
+		WHERE user_id = ? AND id = ? AND origin = ? AND `+live, userID, id, originAgent), true)
+}
+
 // AppendAgentBook adds more to the end of a text an agent added, after a
-// separator line, and starts its time to live again. Texts the user added themselves are ErrNotFound. The reading
-// position and progress keep pointing at the same place, now a smaller share
-// of the longer text.
+// separator line, and starts its time to live again. Texts the user added
+// themselves are ErrNotFound. The reading position and progress keep pointing
+// at the same place, now a smaller share of the longer text.
 func (s *Store) AppendAgentBook(ctx context.Context, userID int64, id, more string) (*Book, error) {
 	more = strings.TrimSpace(more)
 	if more == "" {
 		return nil, errors.New("the text is empty")
 	}
+	return s.changeAgentBook(ctx, userID, id, func(b *Book) error {
+		content := strings.TrimRightFunc(b.Content, unicode.IsSpace)
+		next := content + AgentSeparator + more
+		if utf8.RuneCountInString(next) > MaxBookChars {
+			return ErrTooLong
+		}
+		share := float64(utf8.RuneCountInString(content)) / float64(utf8.RuneCountInString(next))
+		b.Content, b.Progress, b.Pos = next, b.Progress*share, b.Pos*share
+		return nil
+	})
+}
+
+// ReplaceAgentBook rewrites a text an agent added with new content, and a new
+// title unless title is empty, and starts its time to live again. Texts the
+// user added themselves are ErrNotFound. The reader stays at the same share of
+// the text, which is the right place when only parts of it changed.
+func (s *Store) ReplaceAgentBook(ctx context.Context, userID int64, id, title, format, content string) (*Book, error) {
+	return s.changeAgentBook(ctx, userID, id, func(b *Book) error {
+		if title == "" {
+			title = b.Title
+		}
+		if format == "" {
+			format = b.Format
+		}
+		var err error
+		if title, format, err = ValidateBook(title, format, content); err != nil {
+			return err
+		}
+		b.Title, b.Format, b.Content = title, format, content
+		return nil
+	})
+}
+
+// changeAgentBook loads a live text an agent added, lets change edit its
+// title, format, content and reading place, and saves it with a fresh
+// updated_at and time to live.
+func (s *Store) changeAgentBook(ctx context.Context, userID int64, id string, change func(*Book) error) (*Book, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
-	var content, updated, expires string
-	var progress, pos float64
-	err = tx.QueryRowContext(ctx, `SELECT content, progress, pos, updated_at, expires_at FROM books
-		WHERE user_id = ? AND id = ? AND origin = ? AND `+live, userID, id, originAgent).Scan(&content, &progress, &pos, &updated, &expires)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
+	b, err := scanBook(tx.QueryRowContext(ctx, `SELECT `+bookCols+`, content FROM books
+		WHERE user_id = ? AND id = ? AND origin = ? AND `+live, userID, id, originAgent), true)
 	if err != nil {
 		return nil, err
 	}
-	content = strings.TrimRightFunc(content, unicode.IsSpace)
-	next := content + AgentSeparator + more
-	if utf8.RuneCountInString(next) > MaxBookChars {
-		return nil, ErrTooLong
+	if err := change(b); err != nil {
+		return nil, err
 	}
-	share := float64(utf8.RuneCountInString(content)) / float64(utf8.RuneCountInString(next))
 	// Devices refetch a text when its updated_at changes, so it always moves on,
 	// even within the second of the last change.
 	ts := now()
-	if last, err := time.Parse(time.RFC3339, updated); err == nil && ts <= updated {
+	if last, err := time.Parse(time.RFC3339, b.UpdatedAt); err == nil && ts <= b.UpdatedAt {
 		ts = last.Add(time.Second).UTC().Format(time.RFC3339)
 	}
 	// A text with a time to live gets a fresh AgentTTL (never less than it had);
 	// one the user keeps forever stays so.
+	expires := b.ExpiresAt
 	if renewed := expiry(AgentTTL); expires != "" && renewed > expires {
 		expires = renewed
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE books SET content = ?, words = ?, progress = ?, pos = ?, updated_at = ?, expires_at = ?
-		WHERE user_id = ? AND id = ?`, next, CountWords(next), progress*share, pos*share, ts, expires, userID, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE books SET title = ?, format = ?, content = ?, words = ?, progress = ?, pos = ?,
+		updated_at = ?, expires_at = ? WHERE user_id = ? AND id = ?`,
+		b.Title, b.Format, b.Content, CountWords(b.Content), b.Progress, b.Pos, ts, expires, userID, id); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {

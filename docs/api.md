@@ -31,6 +31,8 @@ Authenticated with `Authorization: Bearer llat_…` (an agent token), never the 
 |---|---|
 | `POST /api/agent/texts?title=&ttlDays=` | Raw Markdown body (`Content-Type: text/markdown`), or JSON `{title?, markdown, ttlDays?}` → `201 {id, title, format, words, expiresAt, url}`; `url` opens the text in the reader. The text deletes itself after `ttlDays` (default 30; 0 keeps it) |
 | `GET /api/agent/texts` | Texts agents added (not the user's own), newest change first: `[{id, title, format, words, updatedAt, expiresAt, url}]` |
+| `GET /api/agent/texts/{id}` | One text an agent added, with its Markdown: `{id, title, …, markdown}`, or the Markdown alone with `Accept: text/markdown`. `404` for the user's own texts |
+| `PUT /api/agent/texts/{id}?title=` | Rewrite a text an agent added; same bodies as a new text. A title renames it, none keeps the old one (`ttlDays` is ignored) → `200 {id, title, …}`. Same link and reading place; starts its 30 days again. `404` for the user's own texts |
 | `POST /api/agent/texts/{id}/append` | Add to the end of a text an agent added, after a `---` line; same bodies as a new text (a title is ignored) → `200 {id, title, …}`. Starts its 30 days again (a longer time to live, or none, stays). `404` for the user's own texts, `413` past the length limit |
 | `GET /api/agent/whoami` | Check a token: `{ok, user, shelf}` |
 | `GET /skills/lingolens.zip` | The agent skill, ready to unzip into a skills folder (public) |

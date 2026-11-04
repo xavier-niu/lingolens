@@ -16,15 +16,18 @@ import (
 )
 
 // Agent API: an AI agent (or any script) holding one of the user's agent tokens
-// can add Markdown texts to their shelf, and add more to the texts agents added.
-// That is all a token can do: it can't read texts or touch the ones the user
-// added. Browser sessions don't work here and tokens don't work anywhere else.
+// can add Markdown texts to their shelf, and read, rewrite and add more to the
+// texts agents added. That is all a token can do: it can't read or touch the
+// texts the user added. Browser sessions don't work here and tokens don't work
+// anywhere else.
 //
 //   POST /api/agent/texts            Authorization: Bearer llat_…
 //     Content-Type: text/markdown    raw Markdown body; ?title= optional
 //                                    ?ttlDays= optional: deleted after (default 30, 0 never)
 //     Content-Type: application/json {"title": "...", "markdown": "..."}
 //   GET  /api/agent/texts            texts agents added: id, title, words, url
+//   GET  /api/agent/texts/{id}       one of them, with its Markdown
+//   PUT  /api/agent/texts/{id}       rewrite it: same bodies; a title renames it
 //   POST /api/agent/texts/{id}/append  add to one of them, after a --- line
 //   GET  /api/agent/whoami           check a token
 
@@ -100,15 +103,56 @@ func (s *Server) handleAgentAppend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b, err := s.opts.Store.AppendAgentBook(r.Context(), currentUser(r.Context()).ID, r.PathValue("id"), content)
+	if err != nil {
+		s.agentTextError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.agentBook(r, b))
+}
+
+// GET /api/agent/texts/{id}: a text an agent added, with its Markdown, so an
+// agent can revise it. With Accept: text/markdown, just the Markdown.
+func (s *Server) handleAgentGetText(w http.ResponseWriter, r *http.Request) {
+	b, err := s.opts.Store.GetAgentBook(r.Context(), currentUser(r.Context()).ID, r.PathValue("id"))
+	if err != nil {
+		s.agentTextError(w, err)
+		return
+	}
+	if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		io.WriteString(w, b.Content)
+		return
+	}
+	out := s.agentBook(r, b)
+	out["markdown"] = b.Content
+	writeJSON(w, http.StatusOK, out)
+}
+
+// PUT /api/agent/texts/{id}: rewrite a text an agent added. Same bodies as a
+// new text; a title renames it, no title keeps the old one. The text keeps its
+// id and link.
+func (s *Server) handleAgentReplace(w http.ResponseWriter, r *http.Request) {
+	title, content, format, _, ok := readAgentText(w, r)
+	if !ok {
+		return
+	}
+	b, err := s.opts.Store.ReplaceAgentBook(r.Context(), currentUser(r.Context()).ID, r.PathValue("id"), title, format, content)
+	if err != nil {
+		s.agentTextError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.agentBook(r, b))
+}
+
+// agentTextError answers for a failed read or change of an agent's text.
+func (s *Server) agentTextError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		writeError(w, http.StatusNotFound, "No text with this id was added by an agent. Agents can only add to texts agents added; save a new text instead.")
+		writeError(w, http.StatusNotFound, "No text with this id was added by an agent. Agents can only read and change texts agents added; save a new text instead.")
 	case errors.Is(err, store.ErrTooLong):
-		writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("Together they would be longer than %s characters. Save this part as a new text.", thousands(store.MaxBookChars)))
-	case err != nil:
-		writeError(w, http.StatusBadRequest, sentence(err))
+		writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("The text would be longer than %s characters. Save the rest as a new text.", thousands(store.MaxBookChars)))
 	default:
-		writeJSON(w, http.StatusOK, s.agentBook(r, b))
+		writeError(w, http.StatusBadRequest, sentence(err))
 	}
 }
 
