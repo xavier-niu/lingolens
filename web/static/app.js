@@ -396,7 +396,7 @@ function markScrolled() {
 function setView(view) {
   document.body.dataset.view = view;
   requestAnimationFrame(markScrolled);
-  if (view !== 'reader') hideHint();
+  if (view !== 'reader') { hideHint(); hideToast(); }
   if (view !== 'settings' && !$('#token-new').hidden) { // don't leave a token on screen
     $('#token-new').hidden = true;
     $('#tk-env').textContent = '';
@@ -514,6 +514,7 @@ async function openBook(id, { keepPlace = false } = {}) {
     return;
   }
   if (seq !== openSeq) return;
+  if (!keepPlace) hideToast();
   state.book = book;
   closeCard();
   hideFab();
@@ -952,6 +953,41 @@ function hideHint() {
 function dismissHint() {
   try { localStorage.setItem(HINT_KEY, '1'); } catch { /* ignore */ }
   hideHint();
+}
+
+// ------------------------------------------------------------------ notices
+
+let toastTimer = 0;
+
+// A short notice under the header that goes away on its own. `action` adds a
+// button: { label, run }.
+function showToast(text, { action = null, ms = 6000 } = {}) {
+  const el = $('#toast');
+  const btn = $('#toast-action');
+  el.classList.remove('leaving');
+  el.hidden = false;
+  $('#toast-text').textContent = text;
+  btn.hidden = !action;
+  btn.textContent = action ? action.label : '';
+  btn.onclick = action ? () => { hideToast(); action.run(); } : null;
+  armToast(action ? Math.max(ms, 9000) : ms);
+}
+
+function armToast(ms) {
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, ms);
+}
+
+function hideToast() {
+  clearTimeout(toastTimer);
+  const el = $('#toast');
+  if (el.hidden || el.classList.contains('leaving')) return;
+  el.classList.add('leaving');
+  setTimeout(() => {
+    if (!el.classList.contains('leaving')) return; // shown again meanwhile
+    el.hidden = true;
+    el.classList.remove('leaving');
+  }, 200);
 }
 
 // ------------------------------------------------------------------ chat
@@ -2314,20 +2350,81 @@ async function onSynced() {
   }
 }
 
-// The open text changed elsewhere (an agent added to it, another device edited
-// it): show the new version, keeping the reader's place.
+// The open text changed elsewhere (an agent added to it or rewrote it, another
+// device edited it): show the new version, keeping the reader's place, and say
+// so.
 async function refreshOpenBook(books) {
   const open = state.book;
   const fresh = open && books.find((b) => b.id === open.id);
   if (!fresh || fresh.updatedAt === open.updatedAt || document.body.dataset.view !== 'reader') return;
+  // Not while the text is being edited here; the next check picks it up.
+  if ($('#source-dialog').open && editingId === open.id) return;
   const seq = openSeq;
   const book = await getBook(open.id).catch(() => null);
   if (!book || state.book !== open || openSeq !== seq) return;
   if (book.content === open.content) {
     open.updatedAt = book.updatedAt;
+    if (book.title !== open.title) {
+      open.title = book.title;
+      $('#book-title').textContent = book.title;
+      document.title = `${book.title} – LingoLens`;
+      renderCrumbs('reader');
+      showToast(t('reader.renamed', { title: book.title }));
+    }
     return;
   }
-  openBook(open.id, { keepPlace: true });
+  // Added to the end (the old text is still all there): offer to jump to the
+  // new part, which starts at the first block the old text didn't have.
+  const old = open.content.trimEnd();
+  const added = book.content.length > old.length && book.content.startsWith(old);
+  const oldBlocks = $('#article').childElementCount;
+  await openBook(open.id, { keepPlace: true });
+  if (state.book === open || state.book?.id !== open.id || openSeq !== seq + 1) return; // didn't open
+  if (!added) {
+    showToast(t('reader.updated'));
+    return;
+  }
+  showToast(t('reader.added'), {
+    action: {
+      label: t('reader.showNew'),
+      run: () => {
+        const fresh = [...$('#article').children].slice(oldBlocks);
+        if (!fresh.length) return;
+        const top = fresh[0].getBoundingClientRect().top + window.scrollY - 80;
+        window.scrollTo({ top, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        // Light up the new part for a moment, so it's clear where it starts.
+        for (const el of fresh) {
+          if (el.tagName === 'HR') continue;
+          el.classList.remove('fresh');
+          void el.offsetWidth; // restart the animation
+          el.classList.add('fresh');
+          el.addEventListener('animationend', () => el.classList.remove('fresh'), { once: true });
+        }
+      },
+    },
+  });
+}
+
+// While the shelf or a text is on screen, look for changes made elsewhere (an
+// agent added a text or rewrote one, another device edited one) and sync when
+// there are any. Coming back to the tab syncs at once (see visibilitychange).
+const WATCH_MS = 30_000;
+let watching = false;
+
+async function checkForChanges() {
+  const view = document.body.dataset.view;
+  if (watching || document.hidden || !state.me || !state.booksLoaded || !net.online || net.pending) return;
+  if (view !== 'reader' && view !== 'library') return;
+  watching = true;
+  try {
+    const list = await api('GET', '/api/books');
+    const seen = new Map(state.books.map((b) => [b.id, b.updatedAt]));
+    if (list.length !== seen.size || list.some((b) => seen.get(b.id) !== b.updatedAt)) await sync();
+  } catch {
+    // Offline or signed out: the usual handling takes over.
+  } finally {
+    watching = false;
+  }
 }
 
 // A text added offline reached the server and got its real id.
@@ -2954,6 +3051,13 @@ async function init() {
 
   // Selection -> ask AI
   $('#hint-ok').addEventListener('click', dismissHint);
+  // A notice stays while the pointer or focus is on it.
+  const toast = $('#toast');
+  toast.addEventListener('pointerenter', () => clearTimeout(toastTimer));
+  toast.addEventListener('pointerleave', () => armToast(3000));
+  toast.addEventListener('focusin', () => clearTimeout(toastTimer));
+  toast.addEventListener('focusout', () => armToast(3000));
+  setInterval(checkForChanges, WATCH_MS);
 
   const fab = $('#ask-fab');
   document.addEventListener('mouseup', (e) => {

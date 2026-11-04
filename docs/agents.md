@@ -29,6 +29,8 @@ Ask it to add more on the same topic ("add a part about roasting to my coffee te
 
 Ask it to change a text it saved ("fix the mistakes in my coffee text", "rewrite the phrasal verbs one at A2") and it rewrites that text in place: same link, same place in your reading.
 
+If the text is open when an agent changes it, LingoLens shows the new version within 30 seconds (at once when you come back to the tab) and tells you: **New content was added at the end**, with **Show** to jump to it, or **This text was updated**.
+
 Texts saved by agents delete themselves after 30 days, so quick replies don't pile up. Adding to a text starts its 30 days again. To keep one, open it and choose **Edit text → Delete automatically → Never**, or ask the agent to keep it when saving.
 
 ## What a token can do

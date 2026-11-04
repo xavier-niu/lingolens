@@ -635,6 +635,43 @@ body.chat-open .hint { display: none; }
 @keyframes hint-in { from { opacity: 0; transform: translate(-50%, 12px); } }
 @keyframes hint-out { to { opacity: 0; transform: translate(-50%, 8px); } }
 
+/* A short notice just under the header ("This text was updated"). */
+.toast {
+  position: fixed; z-index: 26; left: 50%; top: 68px;
+  display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px);
+  min-height: 40px; padding: 6px 6px 6px 14px; border-radius: 20px; /* a pill, or rounded when it wraps */
+  background: var(--primary); color: var(--on-primary); box-shadow: var(--shadow-lg);
+  font-size: 13.5px; line-height: 1.35;
+  transform: translateX(-50%); animation: toast-in .32s cubic-bezier(.2,.8,.2,1) both;
+}
+.toast[hidden] { display: none; }
+.toast.leaving { animation: toast-out .2s ease-in both; }
+.toast:not(:has(.toast-action:not([hidden]))) { padding-right: 16px; }
+.toast-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: .85; }
+#toast-text { min-width: 0; }
+.toast-action {
+  flex: none; height: 28px; padding: 0 12px; border: 0; border-radius: 999px; cursor: pointer;
+  background: color-mix(in srgb, var(--on-primary) 16%, transparent); color: inherit; font: inherit; font-weight: 600;
+}
+.toast-action:hover { background: color-mix(in srgb, var(--on-primary) 26%, transparent); }
+.toast-action:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* Centred over the text, not under the open chat sidebar. */
+@media (min-width: 641px) {
+  body.chat-open .toast { left: calc((100vw - min(440px, 100vw)) / 2); }
+}
+/* The part just added to a text, lit up for a moment after "Show". */
+#article .fresh { border-radius: 4px; animation: fresh 2.6s ease-out both; }
+@keyframes fresh {
+  0%, 35% { background: color-mix(in srgb, var(--gloss) 12%, transparent); box-shadow: 0 0 0 6px color-mix(in srgb, var(--gloss) 12%, transparent); }
+  100% { background: transparent; box-shadow: 0 0 0 6px transparent; }
+}
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, -10px) scale(.97); } }
+@keyframes toast-out { to { opacity: 0; transform: translate(-50%, -6px); } }
+@media (prefers-reduced-motion: reduce) {
+  .toast, .toast.leaving { animation-duration: .01s; }
+  #article .fresh { animation-duration: 1.6s; }
+}
+
 /* ------------------------------------------------------------ chat drawer */
 .drawer {
   position: fixed; z-index: 30; top: 0; right: 0; bottom: 0; height: 100dvh; width: min(440px, 100vw);

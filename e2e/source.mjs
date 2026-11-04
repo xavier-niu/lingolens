@@ -205,6 +205,53 @@ await page.evaluate(async (tok) => {
 }, token);
 const live = await page.waitForFunction(() => document.querySelector('#article')?.textContent.includes('A third part'), null, { timeout: 8000 }).then(() => true, () => false);
 check('added while open: shown on returning to the tab', live && (await page.$$eval('#article hr', (h) => h.length)) === 2);
+const toastText = () => page.textContent('#toast-text');
+check('…with a notice that offers to show the new part', (await page.isVisible('#toast')) && (await toastText()) === 'New content was added at the end.' && (await page.isVisible('#toast-action')), await toastText());
+await page.screenshot({ path: `${OUT}/s-agent-toast-added.png` });
+await page.click('#toast-action');
+await page.waitForSelector('#toast', { state: 'hidden' });
+check('Show brings the new part into view and lights it up', await page.evaluate(() => {
+  const hr = document.querySelectorAll('#article hr')[1];
+  const r = hr.getBoundingClientRect();
+  return r.top >= 56 && r.bottom <= innerHeight && hr.nextElementSibling.classList.contains('fresh') && !hr.classList.contains('fresh');
+}));
+await page.screenshot({ path: `${OUT}/s-agent-show-new.png` });
+
+// Rewritten by an agent while open: the new version in place, with a notice.
+const agentPut = (query, body) => page.evaluate(async ([tok, query, body]) => {
+  const r = await fetch(`/api/agent/texts/${location.hash.split('/').pop()}${query}`, {
+    method: 'PUT', credentials: 'omit', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'text/markdown' }, body,
+  });
+  document.dispatchEvent(new Event('visibilitychange'));
+  return r.status;
+}, [token, query, body]);
+check('agent rewrites its text', (await agentPut('', '# Rewritten\n\nA shorter, corrected reply.')) === 200);
+const rewritten = await page.waitForFunction(() => document.querySelector('#article')?.textContent.includes('A shorter, corrected reply'), null, { timeout: 8000 }).then(() => true, () => false);
+check('rewritten while open: the reader shows the new version', rewritten && !(await page.textContent('#article')).includes('A third part'));
+check('…and says the text was updated', (await toastText()) === 'This text was updated. You’re reading the latest version.' && !(await page.isVisible('#toast-action')), await toastText());
+check('…keeping its title', (await page.textContent('#book-title')) === 'From an Agent');
+await page.screenshot({ path: `${OUT}/s-agent-toast-updated.png` });
+check('agent renames its text', (await agentPut('?title=From%20an%20Agent%2C%20Revised', '# Rewritten\n\nA shorter, corrected reply.')) === 200);
+const renamed = await page.waitForFunction(() => document.querySelector('#book-title').textContent === 'From an Agent, Revised', null, { timeout: 8000 }).then(() => true, () => false);
+check('renamed while open: new title with a notice', renamed && (await toastText()) === 'Renamed to “From an Agent, Revised”.', await toastText());
+
+// Without leaving the page: a check every 30 seconds picks up changes.
+const watcher = await browser.newContext({ viewport: { width: 1280, height: 900 }, storageState: await ctx.storageState() });
+const wp = await watcher.newPage();
+wp.on('pageerror', (e) => errors.push(String(e)));
+await wp.clock.install();
+await wp.goto(page.url());
+await wp.waitForFunction(() => document.querySelector('#article')?.textContent.includes('A shorter, corrected reply'));
+await wp.evaluate(async (tok) => {
+  await fetch(`/api/agent/texts/${location.hash.split('/').pop()}/append`, {
+    method: 'POST', credentials: 'omit', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'text/markdown' },
+    body: 'Added while the reader watched.',
+  });
+}, token);
+await wp.clock.fastForward(31_000);
+const watched = await wp.waitForFunction(() => document.querySelector('#article')?.textContent.includes('Added while the reader watched'), null, { timeout: 8000 }).then(() => true, () => false);
+check('open text updates on its own within 30 seconds', watched && (await wp.textContent('#toast-text')) === 'New content was added at the end.');
+await watcher.close();
 
 // ---- time to live: agents' texts delete themselves after 30 days unless kept
 check('reader says when an agent’s text goes', (await page.textContent('#book-stat')).includes('deletes in 30 days'), await page.textContent('#book-stat'));
