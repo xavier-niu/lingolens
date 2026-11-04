@@ -936,45 +936,296 @@ function dismissHint() {
 // ------------------------------------------------------------------ chat
 
 
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+let chatHideTimer = 0;
+
 function openChat(selection, passage, autoQuestion) {
   dismissHint();
   state.chat?.ctl?.abort();
-  state.chat = { selection, passage, messages: [], ctl: null };
-  $('#chat-quote').textContent = selection;
-  $('#chat-log').innerHTML = '';
+  state.chat = { selection, passage, messages: [], asked: new Set(), ctl: null };
+  clearTimeout(chatHideTimer);
+  const drawer = $('#chat');
+  drawer.classList.remove('closing');
+  const quote = $('#chat-quote');
+  quote.textContent = selection;
+  quote.classList.remove('open');
+  $('#chat-turns').innerHTML = '';
+  $('#chat-log').scrollTop = 0;
+  $('#chat-dock').classList.remove('started');
+  $('#chat-log').insertBefore($('#chat-chips'), $('#chat-turns'));
+  $('#chat-input').value = '';
+  fitChatInput();
   renderChips();
-  $('#chat').hidden = false;
+  drawer.hidden = false;
   document.body.classList.add('chat-open');
+  requestAnimationFrame(() => {
+    quote.classList.toggle('clamped', quote.scrollHeight > quote.clientHeight + 2);
+    updateChatJump();
+  });
   if (autoQuestion) sendChat(autoQuestion);
-  else $('#chat-input').focus();
+  else $('#chat-input').focus({ preventScroll: true });
 }
 
+// Before the first question the suggestions are a list under the quote; after
+// it they move above the input as a row, without the ones already asked.
 function renderChips() {
+  const chat = state.chat;
   const chips = $('#chat-chips');
+  const started = !!chat?.messages.length || !!$('#chat-turns').childElementCount;
+  chips.className = started ? 'chips follow' : 'chips start';
   chips.innerHTML = '';
   for (const c of t('chat.chips')) {
+    if (started && chat?.asked.has(c)) continue;
     const b = document.createElement('button');
     b.className = 'chip';
     b.type = 'button';
-    b.textContent = c;
+    b.innerHTML = `<span>${escapeHTML(c)}</span>${started ? '' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'}`;
     b.onclick = () => sendChat(c);
     chips.append(b);
   }
+  chips.hidden = !chips.childElementCount;
+  $('#chat-input').placeholder = t(started ? 'chat.followup' : 'chat.placeholder');
 }
 
 function closeChat() {
   state.chat?.ctl?.abort();
-  $('#chat').hidden = true;
+  const drawer = $('#chat');
   document.body.classList.remove('chat-open');
+  if (drawer.hidden) return;
+  if (reduceMotion()) { drawer.hidden = true; return; }
+  drawer.classList.add('closing');
+  clearTimeout(chatHideTimer);
+  chatHideTimer = setTimeout(() => { drawer.hidden = true; drawer.classList.remove('closing'); }, 160);
 }
 
-function addBubble(role, text = '') {
+function addBubble(role, text = '', parent = $('#chat-turns').lastElementChild || $('#chat-turns')) {
   const div = document.createElement('div');
   div.className = `msg ${role}`;
-  if (role !== 'assistant') div.textContent = text; // the answer is rendered as Markdown later
-  $('#chat-log').append(div);
-  div.scrollIntoView({ block: 'end' });
+  if (role !== 'assistant') div.textContent = text;
+  parent.append(div);
   return div;
+}
+
+// The textarea grows with what is typed, up to about six lines.
+function fitChatInput() {
+  const el = $('#chat-input');
+  el.style.height = 'auto';
+  el.style.height = `${Math.min(el.scrollHeight, 150)}px`;
+  if (!state.chat?.ctl) $('#chat-send').disabled = !el.value.trim();
+}
+
+// A new question goes to the top of the conversation, with room below for the
+// answer, so the answer is read as it arrives instead of chasing the bottom.
+function startTurn(question) {
+  const log = $('#chat-log');
+  const turns = $('#chat-turns');
+  for (const old of turns.children) old.style.minHeight = '';
+  const turn = document.createElement('section');
+  turn.className = 'turn';
+  turns.append(turn);
+  if (question) addBubble('user', question, turn);
+  const first = turns.childElementCount === 1;
+  if (!first) {
+    turn.style.minHeight = `${log.clientHeight - 32}px`;
+    log.scrollTo({ top: turn.offsetTop - 16, behavior: reduceMotion() ? 'auto' : 'smooth' });
+  }
+  return turn;
+}
+
+function updateChatJump() {
+  const log = $('#chat-log');
+  const last = $('#chat-turns').lastElementChild?.lastElementChild;
+  const below = last && last.getBoundingClientRect().bottom - log.getBoundingClientRect().bottom;
+  $('#chat-jump').hidden = !(below > 24);
+}
+
+// Streams an answer into el. Text is revealed at a smoothly varying speed that
+// trails the network by a moment, so bursts and stalls even out. Each new
+// character fades in over FADE ms; finished Markdown blocks are rendered once,
+// and only blocks with characters still fading are re-rendered. A caret shows
+// only when the stream pauses.
+const FADE = 340; // ms for a new character to fade in
+const LAG = 420; // how far, in ms of reading, the reveal trails what has arrived
+
+// Markdown cut off mid-stream: drop a dangling marker at the end (a lone "#",
+// "-", "1." or "**") and close an open bold, italic or code span, so syntax
+// never flashes on screen before it takes effect.
+function tidyTail(src) {
+  src = src.replace(/(^|\n)[ \t]*(#{1,6}|>|[-*+]|\d+[.)]?)[ \t]*$/, '$1').replace(/[*_`~]+$/, '');
+  if ((src.match(/```/g) || []).length % 2) return src; // inside a code block
+  const block = src.slice(src.lastIndexOf('\n\n') + 1).replace(/```/g, '');
+  let close = '';
+  if ((block.match(/`/g) || []).length % 2) close += '`';
+  const plain = block.replace(/`[^`]*`?/g, '');
+  const singles = plain.replace(/\*\*/g, '').replace(/^[ \t]*\*[ \t]/gm, '');
+  if ((singles.match(/\*/g) || []).length % 2) close += '*';
+  if ((plain.match(/\*\*/g) || []).length % 2) close += '**';
+  return close ? src.trimEnd() + close : src; // a closer after a space wouldn't count
+}
+
+function answerView(el) {
+  const blocks = []; // { raw, node, start, end, fading }
+  const times = []; // when each character of the answer was revealed
+  let live = null; // node of the block still being written
+  let target = '';
+  let shown = 0;
+  let ended = false;
+  let raf = 0;
+  let last = 0;
+  let speed = 0; // characters per ms
+  let carry = 0; // fractional characters not yet shown
+  let fadingNow = false; // characters on screen are still fading in
+  let resolveDone;
+  const done = new Promise((r) => { resolveDone = r; });
+  const caret = document.createElement('span');
+  caret.className = 'caret';
+  const fade = reduceMotion() ? 0 : FADE;
+
+  const html = (tok, links) => {
+    const list = [tok];
+    list.links = links;
+    return DOMPurify.sanitize(marked.parser(list, { gfm: true }));
+  };
+
+  // Wrap the youngest characters of node in spans whose opacity follows their
+  // age. Rendered text is matched back to the source from the end, skipping
+  // Markdown syntax. Returns whether anything is still fading.
+  const applyFade = (node, start, end, now) => {
+    if (!fade || end <= start || now - times[end - 1] >= fade) return false;
+    const texts = [];
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) if (walker.currentNode.data.trim()) texts.push(walker.currentNode);
+    let p = end - 1;
+    for (let k = texts.length - 1; k >= 0; k--) {
+      const tn = texts[k];
+      const str = tn.data;
+      const alpha = [];
+      let j = str.length - 1;
+      for (; j >= 0; j--) {
+        const ch = str[j];
+        let q = p;
+        while (q >= start && p - q < 8 && target[q] !== ch) q--;
+        if (q >= start && target[q] === ch) p = q;
+        const age = now - (times[Math.max(p, start)] ?? 0);
+        if (age >= fade) break;
+        const x = Math.max(0, age / fade);
+        alpha[j] = 1 - (1 - x) * (1 - x); // ease out
+        if (target[p] === ch) p--;
+      }
+      if (j === str.length - 1) return k < texts.length - 1; // everything earlier is settled
+      const frag = document.createDocumentFragment();
+      if (j >= 0) frag.append(str.slice(0, j + 1));
+      // One span per run of similar opacity keeps the DOM small.
+      for (let i = j + 1; i < str.length;) {
+        const o = Math.round(alpha[i] * 20) / 20;
+        let e = i + 1;
+        while (e < str.length && Math.round(alpha[e] * 20) / 20 === o) e++;
+        const span = document.createElement('span');
+        span.style.opacity = o;
+        span.textContent = str.slice(i, e);
+        frag.append(span);
+        i = e;
+      }
+      tn.replaceWith(frag);
+      if (j >= 0) return true;
+    }
+    return true;
+  };
+
+  const render = (b, part, links, now) => {
+    b.node.innerHTML = html(part.tok, links);
+    b.raw = part.tok.raw;
+    b.start = part.start;
+    b.end = part.end;
+    b.fading = applyFade(b.node, part.start, part.end, now);
+  };
+
+  const paint = (now) => {
+    const final = ended && shown >= target.length;
+    const src = final ? target : tidyTail(target.slice(0, shown));
+    const toks = marked.lexer(src, { gfm: true });
+    const parts = [];
+    let pos = 0;
+    for (const tok of toks) {
+      const len = tok.raw.length;
+      if (tok.type !== 'space') parts.push({ tok, start: Math.min(pos, shown), end: Math.min(pos + len, shown) });
+      pos += len;
+    }
+    const stable = final ? parts.length : Math.max(0, parts.length - 1);
+    let fading = false;
+    for (let i = 0; i < stable; i++) {
+      let b = blocks[i];
+      if (b && b.raw === parts[i].tok.raw && !b.fading) continue;
+      if (!b) {
+        // The block being written is finished: keep its node.
+        b = blocks[i] = { node: live || document.createElement('div') };
+        if (live) live = null;
+        else { b.node.className = 'blk enter'; el.append(b.node); }
+      }
+      render(b, parts[i], toks.links, now);
+      fading ||= b.fading;
+    }
+    for (const b of blocks.splice(stable)) b.node.remove();
+    const tail = final ? null : parts[stable];
+    if (!tail) {
+      live?.remove();
+      live = null;
+      if (final) caret.remove();
+      else el.append(caret);
+      return fading;
+    }
+    if (!live) {
+      live = document.createElement('div');
+      live.className = 'blk enter';
+      el.append(live);
+    }
+    const b = { node: live };
+    render(b, tail, toks.links, now);
+    let at = live;
+    while (at.lastElementChild && !/^(BR|HR|IMG|TABLE|SPAN)$/.test(at.lastElementChild.tagName)) at = at.lastElementChild;
+    at.append(caret);
+    return fading || b.fading;
+  };
+
+  const tick = (now) => {
+    raf = 0;
+    const dt = Math.min(50, last ? now - last : 16);
+    last = now;
+    const backlog = target.length - shown;
+    let revealed = 0;
+    if (backlog > 0) {
+      if (!fade) revealed = backlog;
+      else {
+        // Ease the speed toward what clears the backlog in LAG ms (faster
+        // once the stream has ended), so bursts don't jerk the text.
+        const want = Math.max(backlog / (ended ? LAG / 2 : LAG), 0.02);
+        speed += (want - speed) * Math.min(1, dt / 140);
+        carry += Math.max(speed, 0.02) * dt;
+        revealed = Math.min(backlog, Math.floor(carry));
+        carry -= revealed;
+        const c = target.charCodeAt(shown + revealed - 1);
+        if (revealed && c >= 0xd800 && c <= 0xdbff && revealed < backlog) revealed++; // keep surrogate pairs whole
+      }
+      // Spread this frame's characters over the frame, for an even fade.
+      for (let k = 0; k < revealed; k++) times[shown + k] = now - dt + (dt * (k + 1)) / revealed;
+      shown += revealed;
+    } else {
+      speed *= 0.5;
+      carry = 0;
+    }
+    el.classList.toggle('waiting', !ended && shown >= target.length);
+    if (revealed || fadingNow) fadingNow = paint(now);
+    if (revealed) updateChatJump();
+    if (shown < target.length || fadingNow) raf = requestAnimationFrame(tick);
+    else if (ended) { paint(now); updateChatJump(); resolveDone(); }
+  };
+  const kick = () => { if (!raf) { last = 0; raf = requestAnimationFrame(tick); } };
+  return {
+    push(text) { target = text; kick(); },
+    // Stop pacing: show everything received so far (it still fades in).
+    flush() { const now = performance.now(); for (let i = shown; i < target.length; i++) times[i] = now; shown = target.length; },
+    end() { ended = true; kick(); return done; },
+  };
 }
 
 async function sendChat(question) {
@@ -983,40 +1234,43 @@ async function sendChat(question) {
   if (!chat || !question || chat.ctl) return;
   const problem = providerProblem();
   if (problem) {
-    addBubble('error', problem);
+    addBubble('error', problem, startTurn(''));
     showBanner(problem, 'error', { settingsLink: true });
     return;
   }
   if (!net.online) {
-    addBubble('error', t('net.chatOffline'));
+    addBubble('error', t('net.chatOffline'), startTurn(''));
     return;
   }
   chat.messages.push({ role: 'user', content: question });
-  addBubble('user', question);
-  const bubble = addBubble('assistant');
+  chat.asked.add(question);
+  $('#chat-dock').classList.add('started');
+  $('#chat-dock').prepend($('#chat-chips'));
+  renderChips();
+  const turn = startTurn(question);
+  const bubble = addBubble('assistant', '', turn);
   bubble.classList.add('pending');
+  bubble.innerHTML = `<span class="thinking"><svg class="spark" aria-hidden="true"><use href="#i-spark"/></svg><span>${escapeHTML(t('chat.thinking'))}</span></span>`;
+  $('#chat-turns').setAttribute('aria-busy', 'true');
   $('#chat-input').value = '';
+  fitChatInput();
   setChatBusy(true);
 
   const ctl = new AbortController();
   chat.ctl = ctl;
+  const view = answerView(bubble);
+  ctl.signal.addEventListener('abort', () => view.flush());
   let answer = '';
   let error = '';
-  let raf = 0;
-  const paint = () => {
-    raf = 0;
-    bubble.innerHTML = renderMarkdown(answer);
-    const log = $('#chat-log');
-    if (log.scrollHeight - log.scrollTop - log.clientHeight < 120) log.scrollTop = log.scrollHeight;
-  };
   try {
     const events = await postStream('/api/chat', {
       level: getLevel(), passage: chat.passage, selection: chat.selection, messages: chat.messages,
     }, ctl.signal);
     for await (const ev of events) {
       if (ev.type === 'delta') {
+        if (!answer) bubble.querySelector('.thinking')?.remove();
         answer += ev.text;
-        if (!raf) raf = requestAnimationFrame(paint);
+        view.push(answer);
       } else if (ev.type === 'error') {
         error = ev.error;
       }
@@ -1024,25 +1278,54 @@ async function sendChat(question) {
   } catch (err) {
     if (err.name !== 'AbortError') error = err.message;
   }
-  if (raf) cancelAnimationFrame(raf);
-  paint();
+  bubble.querySelector('.thinking')?.remove();
+  await view.end();
   bubble.classList.remove('pending');
   if (state.chat !== chat) return; // chat was replaced meanwhile
+  $('#chat-turns').removeAttribute('aria-busy');
   chat.ctl = null;
   setChatBusy(false);
   if (answer) {
     chat.messages.push({ role: 'assistant', content: answer });
+    addAnswerActions(turn, answer);
   } else {
     chat.messages.pop(); // keep user/assistant alternation for the next turn
+    chat.asked.delete(question);
+    renderChips();
     bubble.remove();
   }
-  if (error) addBubble('error', error);
+  if (error) addBubble('error', error, turn);
+  updateChatJump();
+}
+
+function addAnswerActions(turn, answer) {
+  const row = document.createElement('div');
+  row.className = 'msg-actions';
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'msg-act';
+  const label = (key) => {
+    copy.innerHTML = key === 'chat.copied'
+      ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span>${escapeHTML(t(key))}</span>`
+      : `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/></svg><span>${escapeHTML(t(key))}</span>`;
+  };
+  label('chat.copy');
+  copy.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(answer);
+      label('chat.copied');
+      setTimeout(() => label('chat.copy'), 1600);
+    } catch { /* clipboard unavailable */ }
+  };
+  row.append(copy);
+  turn.append(row);
 }
 
 function setChatBusy(busy) {
   const btn = $('#chat-send');
-  btn.textContent = t(busy ? 'chat.stop' : 'chat.send');
-  btn.classList.toggle('primary', !busy);
+  btn.classList.toggle('busy', busy);
+  btn.setAttribute('aria-label', t(busy ? 'chat.stop' : 'chat.send'));
+  btn.disabled = busy ? false : !$('#chat-input').value.trim();
 }
 
 // ------------------------------------------------------------------ settings page
@@ -2488,6 +2771,22 @@ async function init() {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
       $('#chat-form').requestSubmit();
+    }
+  });
+  $('#chat-input').addEventListener('input', fitChatInput);
+  $('#chat-log').addEventListener('scroll', updateChatJump, { passive: true });
+  $('#chat-jump').onclick = () => {
+    const log = $('#chat-log');
+    const last = $('#chat-turns').lastElementChild?.lastElementChild;
+    if (!last) return;
+    const by = last.getBoundingClientRect().bottom - log.getBoundingClientRect().bottom + 24;
+    log.scrollBy({ top: by, behavior: reduceMotion() ? 'auto' : 'smooth' });
+  };
+  $('#chat-quote').addEventListener('click', (e) => {
+    const q = e.currentTarget;
+    if (q.classList.contains('clamped') || q.classList.contains('open')) {
+      q.classList.toggle('open');
+      q.classList.toggle('clamped');
     }
   });
 

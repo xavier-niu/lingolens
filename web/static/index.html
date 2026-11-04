@@ -427,17 +427,33 @@
   </div>
 
   <aside id="chat" class="drawer" data-i18n-aria="chat.title" aria-label="Ask AI" hidden>
+    <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+      <defs><linearGradient id="spark-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--gloss)"/><stop offset="1" style="stop-color:var(--phrase)"/></linearGradient></defs>
+      <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2.5c.6 4.9 2.6 6.9 7.5 7.5-4.9.6-6.9 2.6-7.5 7.5-.6-4.9-2.6-6.9-7.5-7.5 4.9-.6 6.9-2.6 7.5-7.5zM19 15.5c.25 2 1.1 2.85 3 3.1-1.9.25-2.75 1.1-3 3.1-.25-2-1.1-2.85-3-3.1 1.9-.25 2.75-1.1 3-3.1z"/></symbol>
+    </svg>
     <header class="drawer-head">
-      <h2 data-i18n="chat.title">Ask AI</h2>
-      <button id="chat-close" class="icon-btn" data-i18n-aria="btn.close" aria-label="Close">×</button>
+      <h2 class="chat-title"><svg class="spark" aria-hidden="true"><use href="#i-spark"/></svg><span data-i18n="chat.title">Ask AI</span></h2>
+      <button id="chat-close" class="icon-btn" data-i18n-aria="btn.close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </header>
-    <blockquote id="chat-quote" class="quote"></blockquote>
-    <div id="chat-chips" class="chips"></div>
-    <div id="chat-log" class="chat-log" aria-live="polite"></div>
-    <form id="chat-form" class="chat-form">
-      <textarea id="chat-input" name="question" rows="2" autocomplete="off" data-i18n-placeholder="chat.placeholder" data-i18n-aria="chat.inputLabel"></textarea>
-      <button id="chat-send" class="btn primary" type="submit" data-i18n="chat.send">Send</button>
-    </form>
+    <div id="chat-log" class="chat-log">
+      <figure class="chat-context">
+        <figcaption data-i18n="chat.context">Selected text</figcaption>
+        <blockquote id="chat-quote" class="quote"></blockquote>
+      </figure>
+      <div id="chat-chips" class="chips"></div>
+      <div id="chat-turns" aria-live="polite"></div>
+    </div>
+    <div id="chat-dock" class="chat-dock">
+      <button id="chat-jump" class="chat-jump" type="button" data-i18n-aria="chat.jump" aria-label="Jump to latest" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg></button>
+      <form id="chat-form" class="chat-form">
+        <textarea id="chat-input" name="question" rows="1" autocomplete="off" enterkeyhint="send" data-i18n-placeholder="chat.placeholder" data-i18n-aria="chat.inputLabel"></textarea>
+        <button id="chat-send" class="send-btn" type="submit" data-i18n-aria="chat.send" aria-label="Send" disabled>
+          <svg class="i-send" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+          <svg class="i-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+        </button>
+      </form>
+      <p class="chat-note" data-i18n="chat.note">Enter to send · Shift+Enter for a new line</p>
+    </div>
   </aside>
 
   <dialog id="source-dialog" class="dialog wide">

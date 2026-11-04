@@ -54,10 +54,24 @@ const pb = await page.$eval('#article p:nth-of-type(2)', (p) => { const b = p.ge
 await page.mouse.move(pb.x, pb.y); await page.mouse.up();
 await page.waitForSelector('#ask-fab:not([hidden])');
 await page.click('#ask-fab');
+check('chat starts with the suggestions under the quote', await page.$eval('#chat-chips', (c) => c.classList.contains('start') && c.parentElement.id === 'chat-log' && c.children.length === 4));
+check('send is disabled while the input is empty', await page.$eval('#chat-send', (b) => b.disabled));
 await page.click('#chat-chips .chip');
+await page.waitForSelector('.msg.assistant .thinking, .msg.assistant .caret', { state: 'attached' });
+check('answer shows progress while it streams', true);
 await page.waitForFunction(() => document.querySelector('.msg.assistant:not(.pending)'));
 check('chat answer streamed', (await page.textContent('.msg.assistant')).length > 10);
+check('answer is rendered as Markdown', await page.$$eval('.msg.assistant h3, .msg.assistant li', (els) => els.length >= 3));
+check('no caret or thinking left after the answer', !(await page.$('.msg.assistant .caret, .msg.assistant .thinking')));
+check('finished answer can be copied', await page.isVisible('.turn .msg-act'));
+check('suggestions move above the input, without the one asked', await page.$eval('#chat-chips', (c) => c.classList.contains('follow') && c.parentElement.id === 'chat-dock' && c.children.length === 3));
 await page.screenshot({ path: `${OUT}/d-chat.png` });
+await page.fill('#chat-input', 'Why "put off"?');
+await page.keyboard.press('Enter');
+await page.waitForSelector('#chat-send.busy');
+await page.click('#chat-send'); // stop
+await page.waitForFunction(() => !document.querySelector('#chat-send.busy'));
+check('stopping ends the answer', !(await page.$('.msg.assistant.pending')) && (await page.$$('.turn')).length === 2);
 await page.click('#chat-close');
 
 // Scroll to the end -> finished
