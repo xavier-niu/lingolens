@@ -17,6 +17,11 @@ async function makeBook(page) {
   }).then((r) => r.json()), [LONG, body]);
 }
 
+const saveWords = (page, n) => page.evaluate((n) => Promise.all(Array.from({ length: n }, (_, i) => fetch(`/api/wordbook/word${i}`, {
+  method: 'PUT', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ key: `word${i}`, lemma: `word${i}`, zh: '词' }),
+}))), n);
+
 const overlap = (a, b) => a && b && a.right > b.left + 0.5 && b.right > a.left + 0.5;
 
 let bookId;
@@ -32,7 +37,10 @@ for (const [name, opts] of [
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(String(e)));
     await signIn(page, user);
-    if (!bookId) bookId = (await makeBook(page)).id;
+    if (!bookId) {
+      bookId = (await makeBook(page)).id;
+      await saveWords(page, 12); // the count widens the wordbook button
+    }
     await page.evaluate((l) => fetch('/api/me/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: l }) }), lang);
     await page.goto(BASE + '#/read/' + bookId);
     await page.reload();
@@ -60,6 +68,39 @@ for (const [name, opts] of [
     await page.evaluate((l) => fetch('/api/me/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: l }) }), 'en');
     await ctx.close();
   }
+}
+
+// ---- the wordbook button: an icon like History, with its count beside it
+for (const [name, opts] of [['desktop', { viewport: { width: 1440, height: 900 } }], ['phone', devices['iPhone 13']]]) {
+  const ctx = await browser.newContext(opts);
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await signIn(page, await freshUser(browser));
+  const measure = () => page.evaluate(() => {
+    const box = (s) => document.querySelector(s).getBoundingClientRect().toJSON();
+    return { history: box('#btn-history'), button: box('#btn-wordbook'), icon: box('#btn-wordbook svg'), count: box('#wb-count') };
+  });
+  const sameSize = (m) => m.button.width === m.history.width && m.button.height === m.history.height;
+  const clear = (m) => m.count.left >= m.icon.right && m.count.right <= m.button.right;
+
+  // After a reload the page shows its saved copy first, then what the server has.
+  const showCount = async (n) => {
+    await saveWords(page, n);
+    await page.reload();
+    await page.waitForFunction((n) => document.querySelector('#wb-count').textContent === String(n), n);
+    return measure();
+  };
+
+  let m = await measure();
+  check(`${name}: wordbook button is the size of History`, sameSize(m), JSON.stringify(m));
+  check(`${name}: wordbook button still has a name`, await page.getByRole('button', { name: 'Wordbook' }).isVisible());
+  m = await showCount(1);
+  check(`${name}: a single digit leaves the button's size alone`, sameSize(m), JSON.stringify(m));
+  check(`${name}: a single digit covers nothing`, clear(m), JSON.stringify(m));
+  m = await showCount(128);
+  check(`${name}: a long count widens the button and stays in it`, m.button.width > m.history.width && clear(m), JSON.stringify(m));
+  await page.screenshot({ path: `${OUT}/h-wordbook-${name}.png`, clip: { x: 0, y: 0, width: page.viewportSize().width, height: 70 } });
+  await ctx.close();
 }
 
 // ---- the one-time hint
