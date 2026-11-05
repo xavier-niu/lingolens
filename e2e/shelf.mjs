@@ -214,12 +214,18 @@ const backToLong = async () => {
   await page.waitForSelector('#reader-view:not([hidden]) ruby.ann');
   await page.waitForTimeout(200);
 };
-// Waits for the scroll event too: the clock can skip seconds ahead before the browser
-// delivers it, and the app would then see the scroll as happening that much later.
+// Waits for the page to settle. Glosses landing for the paragraphs now on screen shift the
+// text and fire more scroll events, which count as a reader still scrolling, and the clock
+// can skip seconds ahead before they arrive.
 const scrollToShare = (share) => page.evaluate((share) => new Promise((done) => {
   const a = document.querySelector('#article');
-  window.addEventListener('scroll', done, { once: true });
-  setTimeout(done, 1000); // already there: no event comes
+  let quiet;
+  const finish = () => { window.removeEventListener('scroll', wait); changes.disconnect(); done(); };
+  const wait = () => { clearTimeout(quiet); quiet = setTimeout(finish, 800); };
+  const changes = new MutationObserver(wait);
+  changes.observe(a, { childList: true, subtree: true });
+  window.addEventListener('scroll', wait, { passive: true });
+  wait();
   window.scrollTo(0, a.offsetTop + a.offsetHeight * share);
 }), share);
 
@@ -246,7 +252,7 @@ check('progress follows the time spent, not the position', beforeLeaving > 0 && 
 // A text left open stops counting after a while.
 const idleBefore = await threadWidth();
 await scrollToShare(1);
-await page.clock.runFor(125_000);
+await page.clock.runFor(150_000);
 const idleSoon = await threadWidth();
 await page.clock.runFor(600_000);
 check('a text left open stops counting', idleSoon > idleBefore && idleSoon < 100 && (await threadWidth()) === idleSoon, `${idleBefore}% → ${idleSoon}% → ${await threadWidth()}%`);
