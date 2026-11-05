@@ -980,10 +980,11 @@ function dismissHint() {
 let toastTimer = 0;
 
 // A short notice under the header that goes away on its own. `action` adds a
-// button: { label, run }.
-function showToast(text, { action = null, ms = 6000 } = {}) {
+// button: { label, run }; `icon` is "update" or "spark" (Ask AI).
+function showToast(text, { action = null, ms = 6000, icon = 'update' } = {}) {
   const el = $('#toast');
   const btn = $('#toast-action');
+  for (const svg of el.querySelectorAll('[data-icon]')) svg.toggleAttribute('hidden', svg.dataset.icon !== icon); // SVG has no .hidden
   el.classList.remove('leaving');
   el.hidden = false;
   $('#toast-text').textContent = text;
@@ -1024,9 +1025,13 @@ function newChatId() {
   return [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 
+// Conversations still being answered, by id. Hiding the sidebar or moving to
+// another conversation doesn't stop an answer: it finishes and is saved.
+const liveChats = new Map();
+let drawnChat = null; // the conversation whose turns are in the sidebar
+
 function openChat(selection, passage, autoQuestion) {
   dismissHint();
-  state.chat?.ctl?.abort();
   const book = state.book;
   state.chat = {
     id: newChatId(), bookId: book ? String(book.id) : '', bookTitle: book?.title || '',
@@ -1043,6 +1048,7 @@ function openChat(selection, passage, autoQuestion) {
 // Draw state.chat in the drawer: the quote, any earlier turns, the input.
 function showConversation() {
   const chat = state.chat;
+  drawnChat = chat;
   clearTimeout(chatHideTimer);
   const drawer = $('#chat');
   drawer.classList.remove('closing');
@@ -1069,6 +1075,10 @@ function showConversation() {
     answer.innerHTML = `<div class="blk">${renderMarkdown(chat.messages[i + 1].content)}</div>`;
     addAnswerActions(turn, chat.messages[i + 1].content);
   }
+  // An answer still arriving: its turn is the one it is being written into.
+  if (chat.live) turns.append(chat.live);
+  turns.toggleAttribute('aria-busy', !!chat.ctl);
+  setChatBusy(!!chat.ctl);
   const started = chat.messages.length > 0;
   $('#chat-dock').classList.toggle('started', started);
   if (started) $('#chat-dock').prepend($('#chat-chips'));
@@ -1078,12 +1088,41 @@ function showConversation() {
   renderChips();
   drawer.hidden = false;
   document.body.classList.add('chat-open');
+  updateHistoryDot();
   const log = $('#chat-log');
   log.scrollTop = started ? log.scrollHeight : 0;
   requestAnimationFrame(() => {
     quote.classList.toggle('clamped', quote.scrollHeight > quote.clientHeight + 2);
     updateChatJump();
   });
+}
+
+// Back to a conversation: as it was left (scrolled where it was, an answer
+// still arriving) when the sidebar still holds it, otherwise drawn afresh.
+function openConversation(chat) {
+  dismissHint();
+  hideFab();
+  if (state.chat !== chat || drawnChat !== chat) {
+    state.chat = chat;
+    showConversation();
+    return;
+  }
+  clearTimeout(chatHideTimer);
+  const drawer = $('#chat');
+  drawer.classList.remove('closing');
+  setChatMode('chat');
+  drawer.hidden = false;
+  document.body.classList.add('chat-open');
+  updateHistoryDot();
+  requestAnimationFrame(updateChatJump);
+}
+
+// A dot on the header's history button while an answer arrives out of sight.
+function updateHistoryDot() {
+  const drawer = $('#chat');
+  const inView = !drawer.hidden && !drawer.classList.contains('closing') && drawer.dataset.mode === 'chat';
+  const away = [...liveChats.values()].some((c) => !(inView && c === drawnChat));
+  $('#btn-history').classList.toggle('live', away);
 }
 
 // Asking about something asked about before (same text, same selection):
@@ -1105,6 +1144,11 @@ async function offerResume(chat) {
 }
 
 async function resumeChat(id) {
+  const here = [state.chat, ...liveChats.values()].find((c) => c?.id === id);
+  if (here) {
+    openConversation(here);
+    return;
+  }
   let c;
   try {
     c = await api('GET', `/api/chats/${encodeURIComponent(id)}`);
@@ -1112,10 +1156,10 @@ async function resumeChat(id) {
     showBanner(err.message);
     return;
   }
-  state.chat?.ctl?.abort();
   state.chat = {
     id: c.id, bookId: c.bookId, bookTitle: c.bookTitle, selection: c.selection, passage: c.passage,
     messages: c.messages, asked: new Set(c.messages.filter((m) => m.role === 'user').map((m) => m.content)), ctl: null,
+    saved: true,
   };
   hist.items = null; // its order changes once it's continued
   showConversation();
@@ -1125,6 +1169,7 @@ async function resumeChat(id) {
 // gets very long; the server sends the model fewer still.
 function saveChat(chat) {
   const messages = chat.messages.slice(-MAX_SAVED_MESSAGES);
+  chat.saved = true;
   hist.items = null;
   api('PUT', `/api/chats/${encodeURIComponent(chat.id)}`, {
     bookId: chat.bookId, selection: chat.selection, passage: chat.passage, messages,
@@ -1147,6 +1192,7 @@ function setChatMode(mode) {
   $('#chat-title-text').textContent = t(history ? 'chat.historyTitle' : 'chat.title');
   $('#chat-hist-btn').setAttribute('aria-pressed', String(history));
   $('#btn-history').setAttribute('aria-pressed', String(history));
+  updateHistoryDot();
 }
 
 async function openHistory() {
@@ -1171,7 +1217,7 @@ async function openHistory() {
     }
   }
   // Nothing about this text yet: show everything instead of an empty list.
-  if (inBook && hist.items && !hist.items.some((c) => c.bookId === String(state.book.id))) hist.scope = 'all';
+  if (inBook && hist.items && !historyItems().some((c) => c.bookId === String(state.book.id))) hist.scope = 'all';
   renderHistory();
 }
 
@@ -1185,6 +1231,22 @@ function fmtWhen(iso) {
   return d.toLocaleDateString(locale, opts);
 }
 
+// The saved conversations, with this session's first: the server may not have
+// their latest turn yet, or any turn while the first answer is still arriving.
+function historyItems() {
+  const mine = [...new Set([...liveChats.values(), state.chat])].filter((c) => c?.messages.length && (c.ctl || c.saved));
+  return [
+    ...mine.map((c) => {
+      const qs = c.messages.filter((m) => m.role === 'user');
+      return {
+        id: c.id, bookId: c.bookId, bookTitle: c.bookTitle, selection: c.selection,
+        question: qs[0]?.content || '', questions: qs.length, updatedAt: c.updatedAt || new Date().toISOString(), live: !!c.ctl,
+      };
+    }),
+    ...(hist.items || []).filter((x) => !mine.some((c) => c.id === x.id)),
+  ];
+}
+
 function renderHistory() {
   if ($('#chat').dataset.mode !== 'history') return;
   const inBook = document.body.dataset.view === 'reader' && state.book;
@@ -1192,16 +1254,18 @@ function renderHistory() {
   markPressed('#hist-scope', 'scope', hist.scope);
   const list = $('#hist-list');
   list.innerHTML = '';
-  let items = hist.items || [];
+  let items = historyItems();
   if (inBook && hist.scope === 'book') items = items.filter((c) => c.bookId === String(state.book.id));
-  $('#hist-status').textContent = hist.status
+  $('#hist-status').textContent = (!items.length && hist.status)
     || (hist.items && !items.length ? t(hist.scope === 'book' && inBook ? 'chat.histEmptyBook' : 'chat.histEmpty') : '');
   for (const c of items) {
     const li = document.createElement('li');
     li.className = 'hist-item';
     const showBook = c.bookTitle && !(inBook && c.bookId === String(state.book.id));
-    const meta = [showBook ? c.bookTitle : '', c.questions === 1 ? t('chat.question1') : t('chat.questions', { n: c.questions }), fmtWhen(c.updatedAt)]
-      .filter(Boolean).map(escapeHTML).join('<span aria-hidden="true"> · </span>');
+    const sep = '<span aria-hidden="true"> · </span>';
+    const meta = [showBook ? c.bookTitle : '', c.questions === 1 ? t('chat.question1') : t('chat.questions', { n: c.questions }), c.live ? '' : fmtWhen(c.updatedAt)]
+      .filter(Boolean).map(escapeHTML).join(sep)
+      + (c.live ? `${sep}<span class="hist-live">${escapeHTML(t('chat.answering'))}</span>` : '');
     li.innerHTML = `
       <button type="button" class="hist-open" data-id="${escapeHTML(c.id)}">
         <span class="hist-quote">${escapeHTML(c.selection)}</span>
@@ -1226,7 +1290,18 @@ async function deleteChat(id) {
     }
   }
   hist.items = (hist.items || []).filter((c) => c.id !== id);
-  if (state.chat?.id === id) state.chat.id = newChatId(); // asking more starts a new one
+  // Still being answered: stop, and don't save it again.
+  const live = liveChats.get(id);
+  if (live) {
+    live.deleting = true;
+    live.ctl.abort();
+    liveChats.delete(id);
+  }
+  if (state.chat?.id === id) { // asking more starts a new one
+    state.chat.id = newChatId();
+    state.chat.saved = false;
+  }
+  updateHistoryDot();
   renderHistory();
 }
 
@@ -1251,15 +1326,20 @@ function renderChips() {
   $('#chat-input').placeholder = t(started ? 'chat.followup' : 'chat.placeholder');
 }
 
+// Hides the sidebar. An answer being written goes on (see liveChats).
 function closeChat() {
-  state.chat?.ctl?.abort();
   $('#btn-history').setAttribute('aria-pressed', 'false');
   $('#hist-list').innerHTML = '';
   const drawer = $('#chat');
   document.body.classList.remove('chat-open');
   if (drawer.hidden) return;
-  if (reduceMotion()) { drawer.hidden = true; return; }
+  if (reduceMotion()) {
+    drawer.hidden = true;
+    updateHistoryDot();
+    return;
+  }
   drawer.classList.add('closing');
+  updateHistoryDot();
   clearTimeout(chatHideTimer);
   chatHideTimer = setTimeout(() => { drawer.hidden = true; drawer.classList.remove('closing'); }, 160);
 }
@@ -1510,6 +1590,7 @@ async function sendChat(question) {
   }
   chat.messages.push({ role: 'user', content: question });
   chat.asked.add(question);
+  chat.updatedAt = new Date().toISOString();
   $('#chat-resume').hidden = true;
   $('#chat-dock').classList.add('started');
   $('#chat-dock').prepend($('#chat-chips'));
@@ -1525,6 +1606,9 @@ async function sendChat(question) {
 
   const ctl = new AbortController();
   chat.ctl = ctl;
+  chat.live = turn;
+  liveChats.set(chat.id, chat);
+  hist.items = null; // listed from here until saved
   const view = answerView(bubble);
   ctl.signal.addEventListener('abort', () => view.flush());
   let answer = '';
@@ -1549,22 +1633,38 @@ async function sendChat(question) {
   bubble.querySelector('.thinking')?.remove();
   await view.end();
   bubble.classList.remove('pending');
-  if (state.chat !== chat) return; // chat was replaced meanwhile
-  $('#chat-turns').removeAttribute('aria-busy');
+  // The conversation may be out of sight by now (sidebar hidden, another
+  // conversation open): the answer is kept and saved all the same.
   chat.ctl = null;
-  setChatBusy(false);
+  chat.live = null;
+  if (liveChats.get(chat.id) === chat) liveChats.delete(chat.id);
+  chat.updatedAt = new Date().toISOString();
   if (answer) {
     chat.messages.push({ role: 'assistant', content: answer });
     addAnswerActions(turn, answer);
-    saveChat(chat);
+    if (!chat.deleting) saveChat(chat);
+    chat.deleting = false;
   } else {
     chat.messages.pop(); // keep user/assistant alternation for the next turn
     chat.asked.delete(question);
-    renderChips();
     bubble.remove();
   }
   if (error) addBubble('error', error, turn);
-  updateChatJump();
+  updateHistoryDot();
+  const drawer = $('#chat');
+  const shown = state.chat === chat && drawnChat === chat;
+  if (shown) {
+    $('#chat-turns').removeAttribute('aria-busy');
+    setChatBusy(false);
+    if (!answer) renderChips();
+    updateChatJump();
+  }
+  if (drawer.dataset.mode === 'history' && !drawer.hidden) renderHistory();
+  // Answered out of sight: say so, with a way back to it.
+  const inView = shown && !drawer.hidden && !drawer.classList.contains('closing') && drawer.dataset.mode === 'chat';
+  if (answer && !inView && !ctl.signal.aborted && state.me) {
+    showToast(t('chat.answered'), { icon: 'spark', action: { label: t('chat.show'), run: () => openConversation(chat) } });
+  }
 }
 
 function addAnswerActions(turn, answer) {
@@ -2521,8 +2621,10 @@ async function startSession(me, { offline = false } = {}) {
 function showLogin() {
   flushProgress();
   Object.assign(state, { me: null, model: null, book: null, books: [], booksLoaded: false, wordbook: [], known: new Set() });
+  for (const c of liveChats.values()) c.ctl?.abort();
   state.chat?.ctl?.abort();
-  state.chat = null;
+  liveChats.clear();
+  state.chat = drawnChat = null;
   hist.items = null;
   resetLazy();
   closeCard();
@@ -3120,10 +3222,10 @@ async function init() {
   });
   $('#chat-input').addEventListener('input', fitChatInput);
   $('#chat-hist-btn').onclick = () => {
-    if ($('#chat').dataset.mode === 'history' && state.chat) showConversation();
+    if ($('#chat').dataset.mode === 'history' && state.chat) openConversation(state.chat);
     else if ($('#chat').dataset.mode !== 'history') openHistory();
   };
-  $('#chat-back').onclick = () => { if (state.chat) showConversation(); };
+  $('#chat-back').onclick = () => { if (state.chat) openConversation(state.chat); };
   $('#hist-scope').addEventListener('click', (e) => {
     const b = e.target.closest('[data-scope]');
     if (!b) return;
@@ -3145,7 +3247,7 @@ async function init() {
   document.addEventListener('pointerdown', (e) => {
     const drawer = $('#chat');
     if (drawer.hidden || drawer.classList.contains('closing') || e.button > 0) return;
-    if (e.target.closest('#chat, #ask-fab, #btn-history, [popover], dialog, .banner')) return;
+    if (e.target.closest('#chat, #ask-fab, #btn-history, #toast, [popover], dialog, .banner')) return;
     closeChat();
   });
   $('#chat-log').addEventListener('scroll', updateChatJump, { passive: true });

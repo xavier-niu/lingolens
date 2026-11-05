@@ -100,6 +100,7 @@ await page.waitForFunction(() => fetch('/api/chats').then((r) => r.json()).then(
 check('conversation saved to the account', (await savedChats())[0].question === 'Translate this sentence');
 await page.click('#btn-history');
 await page.waitForSelector('#chat-history:not([hidden]) .hist-item');
+await page.waitForSelector('#hist-scope:not([hidden])');
 check('history opens from the header, on this text', await page.isVisible('#hist-scope') && (await page.textContent('.hist-quote')).length > 20);
 await page.screenshot({ path: `${OUT}/d-chat-history.png` });
 await page.click('.hist-open');
@@ -111,6 +112,30 @@ await page.keyboard.press('Enter');
 await page.waitForFunction(() => document.querySelector('#chat-turns .turn:last-child .msg-actions'));
 await page.waitForFunction((n) => fetch('/api/chats').then((r) => r.json()).then((l) => l.length === 1 && l[0].questions === n + 1), asked);
 check('asking more continues the same conversation', true);
+// Hiding the sidebar doesn't stop an answer: it goes on, and says when it's done.
+await page.fill('#chat-input', 'And a harder one?');
+await page.keyboard.press('Enter');
+await page.waitForSelector('#chat-send.busy');
+await page.click('#chat-close');
+await page.waitForSelector('#chat', { state: 'hidden' });
+check('closing the sidebar leaves the answer going', await page.isVisible('#btn-history.live'));
+await page.click('#btn-history');
+await page.waitForSelector('.hist-live');
+check('history shows it being answered', (await page.textContent('.hist-item:first-child .hist-live')) === 'Answering…');
+await page.waitForTimeout(350); // the sidebar slides in
+await page.screenshot({ path: `${OUT}/d-chat-answering.png` });
+await page.click('#chat-close');
+await page.waitForSelector('#toast:not([hidden])', { timeout: 15000 });
+check('says when it has answered', (await page.textContent('#toast-text')) === 'Ask AI has answered.' && !(await page.isVisible('#btn-history.live')));
+check('…with the Ask AI icon', (await page.isVisible('#toast .toast-icon.spark')) && !(await page.isVisible('#toast [data-icon="update"]')));
+await page.waitForTimeout(350);
+await page.screenshot({ path: `${OUT}/d-chat-answered.png` });
+await page.click('#toast-action');
+await page.waitForSelector('#chat:not([hidden])');
+check('Show brings back the conversation with the whole answer', (await page.$$('#chat-turns .turn')).length === asked + 2
+  && !(await page.$('.msg.assistant.pending')) && await page.isVisible('#chat-turns .turn:last-child .msg-actions'));
+await page.waitForFunction((n) => fetch('/api/chats').then((r) => r.json()).then((l) => l.length === 1 && l[0].questions === n + 2), asked);
+check('…and it was saved', true);
 await page.click('#chat-close');
 // Asking about the same selection again offers the earlier conversation.
 await page.evaluate(() => {
@@ -125,7 +150,7 @@ await page.waitForSelector('#chat-resume:not([hidden])');
 check('same selection offers to continue', (await page.textContent('#chat-resume')).includes('Continue'));
 await page.click('#chat-resume');
 await page.waitForSelector('#chat-turns .turn');
-check('continue reopens that conversation', (await page.$$('#chat-turns .turn')).length === asked + 1);
+check('continue reopens that conversation', (await page.$$('#chat-turns .turn')).length === asked + 2);
 await page.click('#chat-hist-btn');
 await page.waitForSelector('.hist-item');
 await page.mouse.click(300, 400); // outside the sidebar

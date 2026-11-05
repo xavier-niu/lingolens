@@ -651,6 +651,8 @@ body.chat-open .hint { display: none; }
 .toast.leaving { animation: toast-out .2s ease-in both; }
 .toast:not(:has(.toast-action:not([hidden]))) { padding-right: 16px; }
 .toast-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: .85; }
+.toast-icon[hidden] { display: none; }
+.toast-icon.spark { fill: currentColor; stroke: none; }
 #toast-text { min-width: 0; }
 .toast-action {
   flex: none; height: 28px; padding: 0 12px; border: 0; border-radius: 999px; cursor: pointer;
@@ -691,6 +693,15 @@ body.chat-open .hint { display: none; }
 .head-actions { display: flex; align-items: center; gap: 2px; }
 #chat-hist-btn[aria-pressed="true"] { background: var(--hover); color: var(--ink); }
 #btn-history[aria-pressed="true"] { background: var(--hover); color: var(--ink); }
+/* An Ask AI answer arriving while the sidebar is hidden. */
+#btn-history { position: relative; }
+#btn-history.live::after {
+  content: ""; position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--gloss); box-shadow: 0 0 0 2px var(--canvas);
+  animation: live-dot 1.4s ease-in-out infinite;
+}
+@keyframes live-dot { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { #btn-history.live::after { animation: none; } }
 .spark { width: 20px; height: 20px; fill: url(#spark-grad); flex-shrink: 0; }
 .drawer-head .icon-btn svg, .hist-del svg, .chat-resume svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 
@@ -752,6 +763,7 @@ body.chat-open .hint { display: none; }
 .hist-q { font-size: 13.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hist-q:empty { display: none; }
 .hist-meta { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-live { color: var(--gloss); font-weight: 600; }
 .hist-del { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity .15s; }
 .hist-item:hover .hist-del, .hist-del:focus-visible { opacity: 1; }
 .hist-del:hover { color: var(--danger); }
