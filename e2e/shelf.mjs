@@ -3,10 +3,11 @@ import { chromium, devices } from 'playwright';
 import { BASE, freshUser, signIn, checker } from './helpers.mjs';
 const OUT = process.argv[2];
 const { check } = checker();
-const LONG = Array.from({ length: 60 }, (_, i) => `Paragraph ${i + 1}. The extraordinary committee deliberated extensively, and by and large reached unanimous conclusions about infrastructure.`).join('\n\n');
+const LONG = Array.from({ length: 120 }, (_, i) => `Paragraph ${i + 1}. The extraordinary committee deliberated extensively, and by and large reached unanimous conclusions about infrastructure.`).join('\n\n');
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+await ctx.clock.install(); // time runs as usual, and reading tests can skip ahead
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
@@ -165,17 +166,19 @@ await page.waitForSelector('#hist-status:not(:empty)');
 check('conversation deleted from history', (await savedChats()).length === 0);
 await page.click('#chat-close');
 
-// Scroll to the end -> finished
+// Time spent at the end reads the text to its end.
+const threadWidth = () => page.$eval('#read-thread > div', (d) => parseInt(d.style.width, 10) || 0);
 await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-await page.waitForTimeout(700);
-check('progress thread full at end', (await page.$eval('#read-thread > div', (d) => d.style.width)) === '100%');
+await page.clock.runFor(90_000);
+check('progress thread full after reading to the end', (await threadWidth()) === 100, `${await threadWidth()}%`);
 check('reader says finished', (await page.textContent('#book-stat')) === 'Finished');
 
-// Add a long text through the dialog
+// Back on the shelf
 await page.click('#home-link');
 await page.waitForSelector('#shelf .book');
 check('shelf marks the finished text', await page.isVisible('.book-stat.done'));
 await page.click('#btn-add');
+// Add a long text through the dialog
 check('dialog offers Text, Web Page and Book or PDF', (await page.$$eval('#src-kinds input', (xs) => xs.map((x) => x.value).join())) === 'text,url,file');
 check('Text selected by default', await page.$eval('input[value="text"]', (i) => i.checked));
 await page.click('#src-save');
@@ -188,10 +191,50 @@ await page.waitForSelector('#reader-view:not([hidden]) ruby.ann');
 check('added text opens in reader', (await page.textContent('#book-title')).startsWith('The Committee'));
 await page.waitForTimeout(600);
 const lazyBefore = await page.$$eval('#article p', (ps) => ps.filter((p) => p.querySelector('ruby.ann')).length);
-check('lazy: only nearby paragraphs annotated', lazyBefore > 0 && lazyBefore < 60, `${lazyBefore}/60`);
-// read about half
-await page.evaluate(() => { const a = document.querySelector('#article'); window.scrollTo(0, a.offsetTop + a.offsetHeight * 0.4); });
-await page.waitForTimeout(800);
+check('lazy: only nearby paragraphs annotated', lazyBefore > 0 && lazyBefore < 60, `${lazyBefore}/120`);
+const longBook = page.url();
+const savedLong = () => page.evaluate(async (id) => (await (await fetch(`/api/books/${id}`)).json()), longBook.split('/').pop());
+const backToLong = async () => {
+  await page.click('#home-link');
+  await page.waitForSelector('#shelf .book');
+  await page.goto(longBook);
+  await page.waitForSelector('#reader-view:not([hidden]) ruby.ann');
+  await page.waitForTimeout(200);
+};
+const scrollToShare = (share) => page.evaluate((share) => { const a = document.querySelector('#article'); window.scrollTo(0, a.offsetTop + a.offsetHeight * share); }, share);
+
+// A quick look at the end: it doesn't count as reading, and the place to come
+// back to stays.
+await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await page.waitForTimeout(500);
+check('a jump to the end doesn’t fill the progress thread', (await threadWidth()) < 20, `${await threadWidth()}%`);
+check('a jump to the end doesn’t finish the text', (await page.textContent('#book-stat')) !== 'Finished', await page.textContent('#book-stat'));
+await backToLong();
+check('a quick look at the end keeps the place', (await page.evaluate(() => window.scrollY)) < 200, String(await page.evaluate(() => window.scrollY)));
+const afterLook = await savedLong();
+check('a quick look at the end barely counts', afterLook.progress < 0.3, String(afterLook.progress));
+
+// Stay somewhere, and that becomes the place to come back to.
+await scrollToShare(0.4);
+await page.clock.runFor(30_000);
+const beforeLeaving = await threadWidth();
+await backToLong();
+const placeBack = await page.evaluate(() => { const a = document.querySelector('#article'); return (window.scrollY - a.offsetTop) / a.offsetHeight; });
+check('staying somewhere moves the place there', Math.abs(placeBack - 0.4) < 0.05, String(placeBack));
+check('progress follows the time spent, not the position', beforeLeaving > 0 && beforeLeaving < 40, `${beforeLeaving}%`);
+
+// A text left open stops counting after a while.
+const idleBefore = await threadWidth();
+await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await page.clock.runFor(125_000);
+const idleSoon = await threadWidth();
+await page.clock.runFor(600_000);
+check('a text left open stops counting', idleSoon > idleBefore && idleSoon < 100 && (await threadWidth()) === idleSoon, `${idleBefore}% → ${idleSoon}% → ${await threadWidth()}%`);
+// Going back over what's been read moves the place at once (checked on reopening below).
+await scrollToShare(0.3);
+await page.mouse.move(600, 500);
+await page.waitForTimeout(100);
+
 await page.click('#home-link');
 await page.waitForSelector('.book-stat:has-text("% read")');
 const stats = await page.$$eval('.book-stat', (s) => s.map((x) => x.textContent));

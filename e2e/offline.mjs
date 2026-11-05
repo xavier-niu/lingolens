@@ -14,6 +14,7 @@ const BOOK_A = Array.from({ length: 30 }, (_, i) => para(i + 1, i === 2 ? ' We h
 const BOOK_B = Array.from({ length: 6 }, (_, i) => para(i + 1)).join('\n\n');
 
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+await ctx.clock.install(); // time runs as usual, and reading tests can skip ahead
 const page = await ctx.newPage();
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('dialog', (d) => d.accept());
@@ -124,7 +125,7 @@ await page.keyboard.press('Escape');
 
 // read on: progress kept offline
 await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight * 0.6));
-await page.waitForTimeout(700);
+await page.clock.runFor(60_000);
 const progressOffline = await page.evaluate(() => document.querySelector('#read-thread > div').style.width);
 
 // other book opens from the device too (the reader is already showing book A,
@@ -214,7 +215,6 @@ check('other device: dark theme', await op.evaluate(() => document.documentEleme
 // newer reading on the other device isn't undone by an older offline position
 await other.close();
 
-// ---- a change rejected by the server is reported, not retried forever
 // ---- glosses saved under older rules go when the rules change
 await page.goto(BASE + '#/');
 await page.waitForSelector('#library-view:not([hidden])');
@@ -232,6 +232,7 @@ const glossesLeft = await idb(page, 'anns');
 check('saved glosses go when the rules change', glossesLeft === 0, String(glossesLeft));
 await page.unroute('**/api/config');
 
+// ---- a change rejected by the server is reported, not retried forever
 await ctx.setOffline(true);
 await page.goto(BASE + '#/');
 await page.waitForSelector('#library-view:not([hidden])');

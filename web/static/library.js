@@ -59,6 +59,12 @@ export function minutesLeft(book, level) {
   return left <= 0 ? 0 : Math.max(1, Math.round(left / (WPM[level] || WPM.B1)));
 }
 
+// The most of a book a reader at this level can have read in a second, as a share
+// of the book: three times their usual speed, which leaves room for fast readers.
+export function readingStep(book, level) {
+  return (3 * (WPM[level] || WPM.B1)) / 60 / Math.max(1, book.words);
+}
+
 export function isFinished(book) {
   return (book.progress || 0) >= 0.98;
 }

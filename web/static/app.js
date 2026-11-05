@@ -12,7 +12,7 @@ import {
 import {
   MAX_CHARS, MAX_EPUB_BYTES, getBook, createBook, updateBook, deleteBook, saveProgress,
   importURL, importPage, importEPUB, detectFormat,
-  minutesLeft, isFinished, tintFor, readLegacyData, hasLegacyData, clearLegacyData,
+  minutesLeft, readingStep, isFinished, tintFor, readLegacyData, hasLegacyData, clearLegacyData,
 } from './library.js';
 import { readPDF, isPDF, PDFError } from './pdftext.js';
 
@@ -502,7 +502,7 @@ let openSeq = 0; // ignores a slow load if the reader has moved on
 // keepPlace: reopening the same text after it changed; stay where the reader is.
 async function openBook(id, { keepPlace = false } = {}) {
   const seq = ++openSeq;
-  const placeY = window.scrollY;
+  const y = window.scrollY;
   flushProgress();
   let book;
   try {
@@ -516,6 +516,7 @@ async function openBook(id, { keepPlace = false } = {}) {
   if (seq !== openSeq) return;
   if (!keepPlace) hideToast();
   state.book = book;
+  placeY = null; // not back in place yet
   closeCard();
   hideFab();
   hideBanner();
@@ -538,10 +539,12 @@ async function openBook(id, { keepPlace = false } = {}) {
   // Return to where the reader left off.
   requestAnimationFrame(() => {
     const top = article.getBoundingClientRect().top + window.scrollY;
-    if (keepPlace) window.scrollTo(0, placeY);
+    if (keepPlace) window.scrollTo(0, y);
     else window.scrollTo(0, book.pos > 0 ? top + book.pos * article.offsetHeight - 96 : 0);
-    trackReading(false);
-    armShortTextTimer();
+    placeY = window.scrollY;
+    if (keepPlace) book.pos = screenInArticle().top;
+    showReadProgress(book);
+    noteInput();
   });
   startAnnotating();
   maybeShowHint();
@@ -598,46 +601,78 @@ function showLibrary() {
 
 // ------------------------------------------------------------------ reading progress
 
-let saveTimer = 0;
-let shortTextTimer = 0;
+// Progress is how much of a text the reader has had time to read, not how far they
+// have scrolled, so a jump to the end to see how long a text is doesn't finish it.
+// Each second on the page, progress moves towards the bottom of the screen at no
+// more than readingStep(): quick enough that real reading is never held back.
+const READ_TICK_MS = 1000;
+const READ_IDLE_MS = 120_000; // a text left open stops counting after this long without input
+const PLACE_SETTLE_MS = 5000; // beyond what's been read, a place counts once the screen stays there
+const SAVE_EVERY_MS = 10_000;
 
-// Where the viewport is within the article. Progress only counts once the reader
-// scrolls, so opening a book doesn't mark its first screen as read.
-function trackReading(count = true) {
-  const book = state.book;
-  if (!book) return;
+let saveTimer = 0;
+let placeY = null; // the scroll position book.pos was taken from; null while opening
+let lastInputAt = 0;
+let lastScrollAt = 0;
+
+const noteInput = () => { lastInputAt = Date.now(); };
+
+// Where the screen is within the article: the share above its top and the share
+// above its bottom.
+function screenInArticle() {
   const a = $('#article');
   const r = a.getBoundingClientRect();
   const h = a.offsetHeight || 1;
-  const pos = Math.min(1, Math.max(0, -r.top / h));
-  const seen = Math.min(1, Math.max(0, (window.innerHeight - r.top) / h));
-  $('#read-thread > div').style.width = `${Math.round(Math.max(seen, book.progress || 0) * 100)}%`;
-  book.pos = pos;
-  if (!count) return;
-  book.progress = Math.max(book.progress || 0, seen > 0.985 ? 1 : seen);
-  updateBookStat();
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(flushProgress, 400);
+  return {
+    top: Math.min(1, Math.max(0, -r.top / h)),
+    bottom: Math.min(1, Math.max(0, (window.innerHeight - r.top) / h)),
+  };
+}
+
+function showReadProgress(book) {
+  $('#read-thread > div').style.width = `${Math.round((book.progress || 0) * 100)}%`;
+}
+
+// The place to come back to follows the reader through what they've read, but a
+// look further ahead only moves it if they stay there.
+function updatePlace(book) {
+  const y = window.scrollY;
+  if (placeY === null || y === placeY) return false;
+  const { top, bottom } = screenInArticle();
+  if (bottom > (book.progress || 0) && Date.now() - lastScrollAt < PLACE_SETTLE_MS) return false;
+  placeY = y;
+  book.pos = top;
+  return true;
+}
+
+function tickReading() {
+  const book = state.book;
+  if (!book || placeY === null || document.body.dataset.view !== 'reader' || document.hidden) return;
+  if (Date.now() - lastInputAt > READ_IDLE_MS) return;
+  let changed = false;
+  const read = book.progress || 0;
+  const { bottom } = screenInArticle();
+  if (bottom > read) {
+    const next = Math.min(bottom, read + readingStep(book, getLevel()));
+    book.progress = next > 0.985 ? 1 : next;
+    showReadProgress(book);
+    updateBookStat();
+    changed = true;
+  }
+  if (updatePlace(book)) changed = true;
+  if (changed && !saveTimer) saveTimer = setTimeout(flushProgress, SAVE_EVERY_MS);
 }
 
 function flushProgress({ closing = false } = {}) {
   clearTimeout(saveTimer);
-  clearTimeout(shortTextTimer);
+  saveTimer = 0;
   const b = state.book;
-  if (!b || (b.pos === b.savedPos && b.progress === b.savedProgress)) return;
+  if (!b) return;
+  if (document.body.dataset.view === 'reader') updatePlace(b);
+  if (b.pos === b.savedPos && b.progress === b.savedProgress) return;
   b.savedPos = b.pos;
   b.savedProgress = b.progress;
   saveProgress(b.id, b.pos || 0, b.progress || 0, { closing });
-}
-
-// A text that fits on one screen can't be scrolled; count it as read after
-// half its estimated reading time.
-function armShortTextTimer() {
-  clearTimeout(shortTextTimer);
-  const book = state.book;
-  if (!book || document.documentElement.scrollHeight > window.innerHeight + 8) return;
-  const ms = Math.min(120_000, minutesLeft(book, getLevel()) * 30_000);
-  shortTextTimer = setTimeout(() => { if (state.book === book) trackReading(true); }, ms);
 }
 
 // ------------------------------------------------------------------ click any word to look it up
@@ -2960,6 +2995,7 @@ async function init() {
   } catch {
     try { serverConfig = JSON.parse(localStorage.getItem(CONFIG_KEY)) || serverConfig; } catch { /* defaults */ }
   }
+  useGlossVersion(serverConfig.gloss_version);
   // Keeps the app itself for offline use (needs HTTPS, or localhost).
   if ('serviceWorker' in navigator && window.isSecureContext) {
     navigator.serviceWorker.register('sw.js').catch(() => { /* works online without it */ });
@@ -2995,7 +3031,6 @@ async function init() {
   }
   for (const seg of document.querySelectorAll('.theme-seg')) {
     seg.addEventListener('click', (e) => {
-  useGlossVersion(serverConfig.gloss_version);
       const theme = e.target.closest('[data-mode]')?.dataset.mode;
       if (!theme) return;
       applyTheme(theme);
@@ -3138,16 +3173,23 @@ async function init() {
   $('#banner-close').onclick = hideBanner;
 
   // Reading progress
-  let scrollRaf = 0;
   window.addEventListener('scroll', () => {
     markScrolled();
-    if (!state.book || scrollRaf) return;
-    scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; trackReading(true); });
+    lastScrollAt = Date.now();
+    noteInput();
   }, { passive: true });
+  for (const type of ['pointermove', 'pointerdown', 'keydown']) {
+    window.addEventListener(type, noteInput, { passive: true });
+  }
+  setInterval(tickReading, READ_TICK_MS);
   window.addEventListener('pagehide', () => flushProgress({ closing: true }));
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) flushProgress({ closing: true });
-    else if (state.me && net.online) sync(); // back from another app, say an agent that added to this text
+    if (document.hidden) {
+      flushProgress({ closing: true });
+      return;
+    }
+    noteInput();
+    if (state.me && net.online) sync(); // back from another app, say an agent that added to this text
   });
 
   // Word card

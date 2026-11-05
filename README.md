@@ -36,6 +36,7 @@ It runs on your own server and uses your own AI key. One server can host a whole
 
 **Read anywhere, your way**
 - Works on phones, tablets and computers. You come back to where you stopped, on any device.
+- Progress counts what you've had time to read, so jumping to the end to see how long a text is doesn't mark it finished.
 - Works offline: read your whole shelf, save words and add texts without a connection. Everything syncs when you're back online.
 - Choose the English font (Literata, classic serif, sans or Atkinson Hyperlegible) and the Chinese font (黑体, 宋体 or 楷体), plus text size, line width, and a light or dark theme.
 - The interface is in English or Chinese.

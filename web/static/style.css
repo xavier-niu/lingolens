@@ -349,7 +349,7 @@ a.crumb:hover { color: var(--ink); background: var(--hover); }
 .level-chip .caret { width: 15px; height: 15px; color: var(--muted); }
 
 .read-thread { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; }
-.read-thread > div { height: 100%; width: 0; background: var(--thread); border-radius: 0 2px 2px 0; transition: width .2s linear; }
+.read-thread > div { height: 100%; width: 0; background: var(--thread); border-radius: 0 2px 2px 0; transition: width 1s linear; }
 
 body:not([data-view="reader"]) .reader-only,
 body:not([data-view="library"]) .library-only,
