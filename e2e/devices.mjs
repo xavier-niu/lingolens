@@ -31,7 +31,7 @@ for (const [label, device] of [['phone', devices['iPhone 13']], ['tablet', devic
   check(`${label}: header height reasonable`, headerH < 170, `${Math.round(headerH)}px`);
   const hdr = await page.$eval('.topbar', (h) => h.scrollWidth - h.clientWidth);
   check(`${label}: header fits without scrolling`, hdr <= 0, `${hdr}px`);
-  check(`${label}: level switch visible`, await inViewport(page, '#btn-level'));
+  check(`${label}: reading options visible`, await inViewport(page, '#btn-display'));
   const broken = await page.$$eval('ruby.ann', (rs) => rs.filter((r) => r.getClientRects().length > 1).length);
   check(`${label}: no ruby split across lines`, broken === 0, `${broken} split`);
 

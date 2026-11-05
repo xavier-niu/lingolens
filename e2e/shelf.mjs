@@ -284,21 +284,27 @@ await page.waitForTimeout(600);
 check('reopening resumes near last position', await page.evaluate(() => window.scrollY > 600), String(await page.evaluate(() => window.scrollY)));
 await page.click('#home-link');
 
-// Header: quick level switch in the reader
+// Reading options: the level
+const pressedLevel = () => page.$eval('#level-seg [aria-pressed="true"]', (b) => b.dataset.level);
 await page.click('.book-link:has-text("Why Small")');
-await page.waitForSelector('#btn-level:visible');
-await page.click('#btn-level');
-await page.waitForSelector('#level-pop:popover-open');
+await page.waitForSelector('#btn-display:visible');
+await page.click('#btn-display');
+await page.waitForSelector('#display-pop:popover-open');
 const anchored = await page.evaluate(() => {
-  const b = document.querySelector('#btn-level').getBoundingClientRect();
-  const p = document.querySelector('#level-pop').getBoundingClientRect();
+  const b = document.querySelector('#btn-display').getBoundingClientRect();
+  const p = document.querySelector('#display-pop').getBoundingClientRect();
   return Math.abs(p.right - b.right) < 2 && p.top >= b.bottom;
 });
-check('level popover opens under its chip', anchored);
+check('reading options open under their button', anchored);
+check('reading options show the current level', (await pressedLevel()) === 'B1' && (await page.textContent('#level-note')).startsWith('Intermediate'), await page.textContent('#level-note'));
 await page.screenshot({ path: `${OUT}/d-level-pop.png` });
-await page.click('#level-list [data-level="C1"]');
+await page.click('#level-seg [data-level="C1"]');
 await page.waitForTimeout(300);
-check('reader level chip switches level', (await page.textContent('#lv-code')) === 'C1');
+check('reading options switch the level', (await pressedLevel()) === 'C1' && (await page.textContent('#level-note')).startsWith('Advanced'), await page.textContent('#level-note'));
+check('switching level keeps reading options open', await page.isVisible('#display-pop'));
+check('the level just pressed keeps the focus', await page.evaluate(() => document.activeElement?.dataset.level) === 'C1');
+await page.keyboard.press('Escape');
+await page.waitForSelector('#display-pop:not(:popover-open)', { state: 'attached' });
 await page.evaluate(() => window.scrollTo(0, 400));
 await page.waitForTimeout(300);
 check('book title shown in the header breadcrumb', (await page.textContent('#crumbs [aria-current="page"]')) === 'Why Small Habits Matter');
@@ -412,7 +418,7 @@ await pp.screenshot({ path: `${OUT}/p-shelf.png` });
 const hdrOv = await pp.$eval('.topbar', (h) => h.scrollWidth - h.clientWidth);
 check('phone shelf header fits', hdrOv <= 0, `${hdrOv}px`);
 await pp.click('.book-link >> nth=0');
-await pp.waitForSelector('#btn-level:visible');
+await pp.waitForSelector('#btn-display:visible');
 const rdOv = await pp.$eval('.topbar', (h) => h.scrollWidth - h.clientWidth);
 check('phone reader header fits', rdOv <= 0, `${rdOv}px`);
 await pp.screenshot({ path: `${OUT}/p-reader.png` });

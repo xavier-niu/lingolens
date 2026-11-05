@@ -39,18 +39,9 @@
         <svg class="i-synced" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
         <span id="net-label" class="net-label"></span>
       </button>
-      <div class="bar-group reader-only">
-        <button id="btn-display" class="bar-btn" popovertarget="display-pop"
-          data-i18n-title="display.title" data-i18n-aria="display.title">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18L8 6l5 12M4.6 14h6.8M15 12.2c.6-1 1.6-1.5 2.8-1.5 1.8 0 2.9 1 2.9 2.8V18m0-3.6c-.9-.4-1.8-.6-2.8-.6-1.6 0-2.9.7-2.9 2.1s1.1 2.1 2.4 2.1c1.5 0 2.7-.8 3.3-2"/></svg>
-        </button>
-        <span class="bar-sep" aria-hidden="true"></span>
-        <button id="btn-level" class="level-chip" popovertarget="level-pop" data-i18n-title="level.switch">
-          <span id="lv-code" class="lv-code">B1</span>
-          <span id="lv-name" class="lv-name">Intermediate</span>
-          <svg class="caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
-        </button>
-      </div>
+      <button id="btn-display" class="bar-btn reader-only" popovertarget="display-pop" data-i18n-title="display.title" data-i18n-aria="display.title">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18L8 6l5 12M4.6 14h6.8M15 12.2c.6-1 1.6-1.5 2.8-1.5 1.8 0 2.9 1 2.9 2.8V18m0-3.6c-.9-.4-1.8-.6-2.8-.6-1.6 0-2.9.7-2.9 2.1s1.1 2.1 2.4 2.1c1.5 0 2.7-.8 3.3-2"/></svg>
+      </button>
       <button id="btn-history" class="bar-btn" data-i18n-title="chat.history" data-i18n-aria="chat.history">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6M3.5 4v4h4M12 7.5V12l3 2"/></svg>
       </button>
@@ -69,17 +60,15 @@
     <div id="read-thread" class="read-thread reader-only" aria-hidden="true"><div></div></div>
   </header>
 
-  <div id="level-pop" class="pop level-pop" popover>
-    <p class="pop-head" data-i18n="level.head">Your English level</p>
-    <p class="pop-note" data-i18n="level.title">Higher levels show fewer glosses.</p>
-    <div id="level-list" class="level-list" role="listbox" data-i18n-aria="level.head"></div>
-    <p class="pop-foot" data-i18n="level.profileNote">This also updates your profile.</p>
-  </div>
-
   <div id="display-pop" class="pop" popover>
     <p class="pop-head" data-i18n="display.title">Reading options</p>
     <label class="pop-row"><span data-i18n="toggle.words">Word glosses</span><input type="checkbox" id="show-words" role="switch" checked></label>
     <label class="pop-row"><span data-i18n="toggle.phrases">Phrase glosses</span><input type="checkbox" id="show-phrases" role="switch" checked></label>
+    <div class="pop-block">
+      <span data-i18n="display.level">English level</span>
+      <div class="seg font-seg level-seg" id="level-seg" role="group" data-i18n-aria="display.level"></div>
+      <p id="level-note" class="level-note"></p>
+    </div>
     <div class="pop-row">
       <span data-i18n="display.size">Text size</span>
       <div class="seg" id="size-seg" role="group" data-i18n-aria="display.size">

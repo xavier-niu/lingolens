@@ -53,7 +53,6 @@
   --success: #15803d;
   --thread: var(--gloss);  /* reading progress under the header */
   --mark-tile: var(--ink); --mark-word: var(--canvas);
-  --code-bg: var(--primary); --code-ink: var(--on-primary); /* level badge */
   --shadow-sm: 0 1px 2px rgba(24, 24, 27, .06);
   --shadow: 0 1px 2px rgba(24, 24, 27, .04), 0 8px 24px rgba(24, 24, 27, .08);
   --shadow-lg: 0 2px 4px rgba(24, 24, 27, .04), 0 16px 48px rgba(24, 24, 27, .14);
@@ -87,7 +86,7 @@
     --primary: #e3ddd2; --on-primary: #1c1b19; --gloss: #ec9a85; --phrase: #93b4dc; --phrase-line: #4a5d78;
     --focus: #93b4dc; --danger: #ec9a85; --success: #93c9a0;
     /* Header: a quiet neutral progress line, a navy logo tile, a tinted level badge. */
-    --thread: #8f877a; --mark-tile: #2c3a50; --mark-word: #e3ddd2; --code-bg: #3a3731; --code-ink: #ece6db;
+    --thread: #8f877a; --mark-tile: #2c3a50; --mark-word: #e3ddd2;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .45);
     --shadow-lg: 0 2px 4px rgba(0, 0, 0, .3), 0 16px 48px rgba(0, 0, 0, .6);
@@ -100,7 +99,7 @@
   --primary: #e3ddd2; --on-primary: #1c1b19; --gloss: #ec9a85; --phrase: #93b4dc; --phrase-line: #4a5d78;
   --focus: #93b4dc; --danger: #ec9a85; --success: #93c9a0;
     /* Header: a quiet neutral progress line, a navy logo tile, a tinted level badge. */
-    --thread: #8f877a; --mark-tile: #2c3a50; --mark-word: #e3ddd2; --code-bg: #3a3731; --code-ink: #ece6db;
+    --thread: #8f877a; --mark-tile: #2c3a50; --mark-word: #e3ddd2;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
   --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .45);
   --shadow-lg: 0 2px 4px rgba(0, 0, 0, .3), 0 16px 48px rgba(0, 0, 0, .6);
@@ -215,6 +214,7 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .pop-block > span { display: block; margin-bottom: 6px; }
 .font-seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
 .font-seg.zh { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.font-seg.level-seg { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .font-seg button { height: 34px; padding: 0 8px; font-size: 15px; font-weight: 400; color: var(--ink-2); }
 .font-seg button[data-font="literata"] { font-family: var(--font-literata); }
 .font-seg button[data-font="classic"] { font-family: var(--font-classic); }
@@ -223,6 +223,9 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .font-seg button[data-gloss="sans"] { font-family: var(--zh-sans); }
 .font-seg button[data-gloss="song"] { font-family: var(--zh-song); }
 .font-seg button[data-gloss="kai"] { font-family: var(--zh-kai); font-size: 16px; }
+.level-seg button { padding: 0; font-size: 14px; }
+/* Wraps to the popover's width instead of widening it. */
+.level-note { width: 0; min-width: 100%; margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
 /* Switching themes recolours everything at once instead of animating each control. */
 .theme-switching, .theme-switching * { transition: none !important; }
 
@@ -316,7 +319,7 @@ a.crumb:hover { color: var(--ink); background: var(--hover); }
 @media (prefers-reduced-motion: reduce) { .net-status, .net-status[data-mode="syncing"] .i-sync { animation: none; } }
 
 .bar-btn:hover, .bar-btn[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
-.bar-btn svg, .level-chip svg, .book-del svg {
+.bar-btn svg, .book-del svg {
   width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8;
   stroke-linecap: round; stroke-linejoin: round;
 }
@@ -329,26 +332,6 @@ a.crumb:hover { color: var(--ink); background: var(--hover); }
   color: var(--muted); font-size: 10px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums;
 }
 .count:empty { display: none; }
-
-/* Reading controls (text options, level) share one pill, apart from the app buttons. */
-.bar-group {
-  display: inline-flex; align-items: center; gap: 2px; height: 36px; padding: 2px; margin: 0 6px;
-  border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
-}
-.bar-group .bar-btn { height: 30px; min-width: 30px; padding: 0 8px; border-radius: 999px; }
-.bar-group .bar-btn:hover, .bar-group .bar-btn[aria-expanded="true"],
-.level-chip:hover, .level-chip[aria-expanded="true"] { background: color-mix(in srgb, var(--ink) 8%, var(--surface)); color: var(--ink); }
-.bar-sep { width: 1px; height: 16px; background: var(--line); flex: none; }
-.level-chip {
-  display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 8px 0 3px;
-  border: 0; border-radius: 999px; background: transparent; color: var(--ink);
-  cursor: pointer; font: inherit; font-size: 13.5px; font-weight: 500;
-}
-.lv-code {
-  display: inline-grid; place-items: center; height: 24px; min-width: 30px; padding: 0 6px; border-radius: 999px;
-  background: var(--code-bg); color: var(--code-ink); font-weight: 650; font-size: 12.5px; font-variant-numeric: tabular-nums;
-}
-.level-chip .caret { width: 15px; height: 15px; color: var(--muted); }
 
 .read-thread { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; }
 .read-thread > div { height: 100%; width: 0; background: var(--thread); border-radius: 0 2px 2px 0; transition: width 1s linear; }
@@ -425,21 +408,6 @@ label.pop-row:hover { background: var(--hover); }
 .acct-pop-email { margin-top: 2px !important; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-sep { height: 1px; background: var(--line); margin: 6px 4px; }
 
-.level-list { display: flex; flex-direction: column; min-width: 280px; }
-.level-opt {
-  display: grid; grid-template-columns: 40px 1fr; align-items: center; gap: 10px;
-  padding: 7px 10px 7px 6px; border: 0; background: transparent; border-radius: var(--r-sm);
-  text-align: left; cursor: pointer; color: var(--ink);
-}
-.level-opt:hover { background: var(--hover); }
-.lo-code {
-  justify-self: center; display: inline-grid; place-items: center; min-width: 32px; height: 24px; border-radius: 999px;
-  background: var(--sunken); border: 1px solid var(--line); font-weight: 650; font-size: 12.5px;
-}
-.lo-name { display: block; font-size: 14px; font-weight: 500; }
-.lo-hint { display: block; font-size: 12.5px; color: var(--muted); }
-.level-opt[aria-selected="true"] { background: var(--hover); }
-.level-opt[aria-selected="true"] .lo-code { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
 
 /* ------------------------------------------------------------ shelf */
 .library { max-width: 1040px; margin: 48px auto 0; }
@@ -1098,8 +1066,6 @@ body[data-view="login"] main { padding-bottom: 40px; }
   .btn { height: 40px; }
   .btn.small { height: 34px; }
   .bar-btn { height: 40px; min-width: 40px; }
-  .bar-group { height: 40px; }
-  .bar-group .bar-btn, .level-chip { height: 34px; min-width: 34px; }
   .chips.follow .chip { height: 34px; }
   .chat-note { display: none; }
   .icon-btn { width: 40px; height: 40px; }
@@ -1111,7 +1077,6 @@ body[data-view="login"] main { padding-bottom: 40px; }
 }
 
 @media (max-width: 900px) {
-  body[data-view="reader"] .lv-name { display: none; }
   .width-row { display: none; } /* the text already spans the screen */
 }
 
@@ -1126,11 +1091,7 @@ body[data-view="login"] main { padding-bottom: 40px; }
   .hint-ok { height: 32px; }
   input, select, textarea { font-size: 16px; } /* prevents iOS zoom on focus */
   .topbar { height: 52px; gap: 8px; padding: 0 8px 0 12px; }
-  .lv-name { display: none; }
   .crumb-home { display: none !important; } /* the logo stands in for "Shelf" */
-  .bar-group { margin: 0 2px; }
-  .level-chip { padding: 0 4px; }
-  .level-chip .caret { display: none; }
   .crumbs ol { font-size: 14.5px; }
   .library, .reader, .settings-page { margin-top: 28px; }
   .shelf { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 14px; }

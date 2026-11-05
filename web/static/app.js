@@ -2300,23 +2300,25 @@ function levelName(lv) {
   return getLang() === 'zh' ? lv.label.replace(/^\S+\s*/, '') : lv.name;
 }
 
-// The level chip in the header, and the A1–C2 ladder in its popover.
+// The level in Reading Options: A1–C2, and what the chosen one means.
 function renderLevelUI() {
+  const seg = $('#level-seg');
+  const { levels } = serverConfig;
+  if (!seg.children.length) seg.innerHTML = levels.map((l) => `<button type="button" data-level="${l.id}">${l.id}</button>`).join('');
+  // Updated in place, so the button just pressed keeps the focus.
+  for (const b of seg.children) {
+    const l = levels.find((x) => x.id === b.dataset.level);
+    b.title = levelName(l);
+    b.setAttribute('aria-label', `${l.id} ${levelName(l)}`);
+  }
   const current = getLevel();
-  const lv = serverConfig.levels.find((l) => l.id === current);
-  $('#lv-code').textContent = current;
-  $('#lv-name').textContent = lv ? levelName(lv) : '';
-  $('#level-list').innerHTML = serverConfig.levels.map((l) => `
-    <button type="button" class="level-opt" role="option" data-level="${l.id}" aria-selected="${l.id === current}">
-      <span class="lo-code">${l.id}</span>
-      <span><span class="lo-name">${escapeHTML(levelName(l))}</span>
-      <span class="lo-hint">${escapeHTML(l.hint)}, ${escapeHTML(t('level.words', { n: l.vocab.toLocaleString() }))}</span></span>
-    </button>`).join('');
+  markPressed('#level-seg', 'level', current);
+  const lv = levels.find((l) => l.id === current);
+  $('#level-note').textContent = lv ? `${levelName(lv)} · ${lv.hint}, ${t('level.words', { n: lv.vocab.toLocaleString() })}` : '';
 }
 
-// The level lives in the profile; the reader's chip is a quick way to change it.
+// The level lives in the profile; Reading Options is a quick way to change it.
 function setLevel(id) {
-  $('#level-pop').hidePopover?.();
   if (id === getLevel()) return;
   savePrefs({ level: id });
   renderLevelUI();
@@ -3040,7 +3042,7 @@ async function init() {
   window.addEventListener('resize', () => {
     for (const pop of document.querySelectorAll('[popover]:popover-open')) anchorPopover(pop);
   });
-  $('#level-list').addEventListener('click', (e) => {
+  $('#level-seg').addEventListener('click', (e) => {
     const id = e.target.closest('[data-level]')?.dataset.level;
     if (id) setLevel(id);
   });
