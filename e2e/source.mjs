@@ -1,7 +1,7 @@
 // Add Source (text with Markdown detection, web page, EPUB), Contents, and Agent Access.
 // PDFs have their own suite (pdf.mjs).
 import { chromium, devices } from 'playwright';
-import { BASE, SITE, fixture, freshUser, signIn, checker } from './helpers.mjs';
+import { BASE, SITE, fixture, freshUser, signIn, checker, articleText, waitForArticleText } from './helpers.mjs';
 
 const OUT = process.argv[2];
 const { check } = checker();
@@ -173,7 +173,7 @@ check('agent text on the shelf', (await page.textContent('#shelf')).includes('Fr
 
 // Adding to it: the reader, which keeps a copy of the text, shows the new part after a rule.
 await page.goto(BASE + '#/read/' + up.body.id);
-await page.waitForFunction(() => document.querySelector('#article')?.textContent.includes('A reply saved by an agent'));
+await waitForArticleText(page, 'A reply saved by an agent', 30000);
 const more = await page.evaluate(async (tok) => {
   const auth = { Authorization: `Bearer ${tok}` };
   const list = await fetch('/api/agent/texts', { credentials: 'omit', headers: auth }).then((r) => r.json());
@@ -187,7 +187,7 @@ check('agent lists its texts and adds to one', more.status === 200 && more.body.
 await page.goto(BASE + '#/');
 await page.waitForSelector('#library-view:not([hidden])');
 await page.goto(BASE + '#/read/' + up.body.id);
-const grown = await page.waitForFunction(() => document.querySelector('#article')?.textContent.includes('More on the same topic'), null, { timeout: 8000 }).then(() => true, () => false);
+const grown = await waitForArticleText(page, 'More on the same topic').then(() => true, () => false);
 check('reader shows the added part', grown);
 check('…after a separator line, under its own heading', await page.evaluate(() => {
   const hr = document.querySelector('#article hr');
@@ -203,7 +203,7 @@ await page.evaluate(async (tok) => {
   });
   document.dispatchEvent(new Event('visibilitychange'));
 }, token);
-const live = await page.waitForFunction(() => document.querySelector('#article')?.textContent.includes('A third part'), null, { timeout: 8000 }).then(() => true, () => false);
+const live = await waitForArticleText(page, 'A third part').then(() => true, () => false);
 check('added while open: shown on returning to the tab', live && (await page.$$eval('#article hr', (h) => h.length)) === 2);
 const toastText = () => page.textContent('#toast-text');
 check('…with a notice that offers to show the new part', (await page.isVisible('#toast')) && (await toastText()) === 'New content was added at the end.' && (await page.isVisible('#toast-action')), await toastText());
@@ -226,8 +226,8 @@ const agentPut = (query, body) => page.evaluate(async ([tok, query, body]) => {
   return r.status;
 }, [token, query, body]);
 check('agent rewrites its text', (await agentPut('', '# Rewritten\n\nA shorter, corrected reply.')) === 200);
-const rewritten = await page.waitForFunction(() => document.querySelector('#article')?.textContent.includes('A shorter, corrected reply'), null, { timeout: 8000 }).then(() => true, () => false);
-check('rewritten while open: the reader shows the new version', rewritten && !(await page.textContent('#article')).includes('A third part'));
+const rewritten = await waitForArticleText(page, 'A shorter, corrected reply').then(() => true, () => false);
+check('rewritten while open: the reader shows the new version', rewritten && !(await articleText(page)).includes('A third part'));
 check('…and says the text was updated', (await toastText()) === 'This text was updated. You’re reading the latest version.' && !(await page.isVisible('#toast-action')), await toastText());
 check('…keeping its title', (await page.textContent('#book-title')) === 'From an Agent');
 await page.screenshot({ path: `${OUT}/s-agent-toast-updated.png` });
@@ -241,7 +241,7 @@ const wp = await watcher.newPage();
 wp.on('pageerror', (e) => errors.push(String(e)));
 await wp.clock.install();
 await wp.goto(page.url());
-await wp.waitForFunction(() => document.querySelector('#article')?.textContent.includes('A shorter, corrected reply'));
+await waitForArticleText(wp, 'A shorter, corrected reply', 30000);
 await wp.evaluate(async (tok) => {
   await fetch(`/api/agent/texts/${location.hash.split('/').pop()}/append`, {
     method: 'POST', credentials: 'omit', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'text/markdown' },
@@ -249,7 +249,7 @@ await wp.evaluate(async (tok) => {
   });
 }, token);
 await wp.clock.fastForward(31_000);
-const watched = await wp.waitForFunction(() => document.querySelector('#article')?.textContent.includes('Added while the reader watched'), null, { timeout: 8000 }).then(() => true, () => false);
+const watched = await waitForArticleText(wp, 'Added while the reader watched').then(() => true, () => false);
 check('open text updates on its own within 30 seconds', watched && (await wp.textContent('#toast-text')) === 'New content was added at the end.');
 await watcher.close();
 

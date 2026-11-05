@@ -2,7 +2,7 @@
 // headings, without running headers, footers and page numbers. Test PDFs are
 // printed by Chromium itself, so they're real PDFs with embedded fonts.
 import { chromium } from 'playwright';
-import { BASE, freshUser, signIn, checker } from './helpers.mjs';
+import { BASE, freshUser, signIn, checker, articleText } from './helpers.mjs';
 import { toMarkdown } from '../web/static/pdftext.js';
 
 const OUT = process.argv[2];
@@ -95,7 +95,7 @@ check('paragraph text intact', PARAS.every((p) => blocks.includes(p)), PARAS.fin
 check('short lines (drawn bullets) stay apart', blocks.includes('Boots that keep the water out') && blocks.includes('A map of the old bridges'));
 check('title not repeated as the first heading', !blocks[0].startsWith('# '), blocks[0].slice(0, 40));
 check('headings kept', (await page.$$eval('#article h2', (h) => h.map((x) => x.textContent).join('|'))) === 'The Spring Floods|Quiet Summers|Winter Ice');
-const art = await page.textContent('#article');
+const art = await articleText(page);
 check('running header and page numbers left out', !/Field Notes|Page \d+ of \d+/.test(art));
 await page.click('#btn-menu');
 check('Contents offered', await page.isVisible('#btn-toc'));
@@ -121,7 +121,7 @@ await page.setInputFiles('#src-file', second);
 await page.fill('#src-title', 'My Offline Notes');
 await page.click('#src-save');
 await page.waitForSelector('#reader-view:not([hidden])', { timeout: 30000 });
-check('offline: PDF added to this device', (await page.textContent('#book-title')) === 'My Offline Notes' && (await page.textContent('#article')).includes('sentence 106'));
+check('offline: PDF added to this device', (await page.textContent('#book-title')) === 'My Offline Notes' && (await articleText(page)).includes('sentence 106'));
 await ctx.setOffline(false);
 await page.evaluate(() => window.dispatchEvent(new Event('online')));
 const synced = await page.waitForFunction(() => fetch('/api/books').then((r) => r.json()).then((b) => b.some((x) => x.title === 'My Offline Notes')), null, { timeout: 15000, polling: 500 }).then(() => true, () => false);

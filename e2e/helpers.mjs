@@ -51,3 +51,21 @@ export function checker() {
   };
   return { results, check };
 }
+
+// The reader's text without the glosses above its words. Glosses can arrive at
+// any moment and sit inside the text ("Paragraph〈par〉释义 6"), so a check on the
+// words themselves has to leave them out or it depends on timing.
+export const articleText = (page) => page.$eval('#article', (article) => {
+  const copy = article.cloneNode(true);
+  copy.querySelectorAll('rt').forEach((rt) => rt.remove());
+  return copy.textContent;
+});
+
+// Waits until the reader's text holds `text`; rejects after `timeout` ms.
+export const waitForArticleText = (page, text, timeout = 8000) => page.waitForFunction((text) => {
+  const article = document.querySelector('#article');
+  if (!article) return false;
+  const copy = article.cloneNode(true);
+  copy.querySelectorAll('rt').forEach((rt) => rt.remove());
+  return copy.textContent.includes(text);
+}, text, { timeout });

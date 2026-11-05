@@ -1,7 +1,7 @@
 // Offline mode: the app opens without a connection, the shelf and glosses come
 // from this browser, changes wait in the outbox and sync when back online.
 import { chromium, devices } from 'playwright';
-import { BASE, freshUser, signIn, checker, fixture } from './helpers.mjs';
+import { BASE, freshUser, signIn, checker, fixture, waitForArticleText } from './helpers.mjs';
 
 const OUT = process.argv[2];
 const { check } = checker();
@@ -77,7 +77,9 @@ await ctx.setOffline(true);
 await page.reload();
 await page.waitForSelector('#library-view:not([hidden])', { timeout: 10000 });
 check('app opens offline', true);
+await page.waitForFunction(() => document.querySelectorAll('#shelf .book').length >= 2, null, { timeout: 5000 }).catch(() => {}); // the shelf is drawn just after its view opens
 check('shelf from this device', (await page.$$('#shelf .book')).length === 2, String((await page.$$('#shelf .book')).length));
+await page.waitForSelector('#net-status:not([hidden])', { timeout: 5000 }).catch(() => {});
 check('Offline badge shown', await page.isVisible('#net-status') && (await page.textContent('#net-label')) === 'Offline');
 check('no error banner', await page.isHidden('#banner'));
 await page.screenshot({ path: `${OUT}/o-shelf-offline.png` });
@@ -129,7 +131,7 @@ const progressOffline = await page.evaluate(() => document.querySelector('#read-
 // so wait for B's title rather than for the reader view)
 await page.goto(BASE + `#/read/${b.id}`);
 await page.waitForFunction(() => document.querySelector('#book-title').textContent === 'Second Book', null, { timeout: 5000 }).catch(() => {});
-check('a book never opened online reads offline', (await page.textContent('#article')).includes('Paragraph 6'), await page.textContent('#book-title'));
+check('a book never opened online reads offline', await waitForArticleText(page, 'Paragraph 6', 5000).then(() => true, () => false), await page.textContent('#book-title'));
 
 // add a text offline
 await page.goto(BASE + '#/');
@@ -256,6 +258,7 @@ await pp.waitForSelector('#library-view:not([hidden])');
 await phone.setOffline(true);
 await pp.reload();
 await pp.waitForSelector('#library-view:not([hidden])');
+await pp.waitForSelector('#net-status:not([hidden])', { timeout: 5000 }).catch(() => {}); // drawn just after the view opens
 const fits = await pp.evaluate(() => {
   const b = document.querySelector('#net-status').getBoundingClientRect();
   return b.width > 0 && b.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth;
