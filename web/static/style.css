@@ -321,10 +321,11 @@ a.crumb:hover { color: var(--ink); background: var(--hover); }
   stroke-linecap: round; stroke-linejoin: round;
 }
 #btn-menu svg { fill: currentColor; stroke: none; }
-/* A superscript beside the icon, in the button's padding: a single digit leaves
-   the button the size of its neighbours, and longer counts widen it. */
+/* A superscript beside the icon, in the button's padding. It has room for a digit
+   in any font, so one digit leaves the button the size of its neighbours; longer
+   counts widen it. */
 .count {
-  margin: 0 -7px 0 -5px; transform: translateY(-10px);
+  min-width: 8px; margin: 0 -9px 0 -5px; transform: translateY(-10px);
   color: var(--muted); font-size: 10px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums;
 }
 .count:empty { display: none; }
