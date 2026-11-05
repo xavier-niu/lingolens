@@ -681,6 +681,9 @@ function wordAtPoint(x, y) {
   return hit ? { node, s, e, block } : null;
 }
 
+// Clicking a word without a gloss looks it up in the card only; its gloss goes
+// into the text when the reader chooses Add Gloss. Closed without that, the word
+// is plain text again (see closeCard).
 function lookupWordAt(w) {
   const { node, s, e, block } = w;
   let base = 0;
@@ -731,7 +734,7 @@ async function fetchDetail(idx) {
     if (!a.zh) {
       a.zh = data.zh;
       a.lemma = data.lemma || a.text;
-      setGloss(idx);
+      if (!a.lookup || a.glossed) setGloss(idx);
       refreshKnownMarks();
     }
   } catch (err) {
@@ -771,6 +774,9 @@ function cardHTML(a) {
   if (a.loading) body = `<div class="detail muted">${t('card.loading')}</div>`;
   else if (a.error) body = `<div class="detail error">${escapeHTML(a.error)}</div>`;
   else if (a.entry) body = entryHTML(a.entry);
+  // A word looked up by clicking: its gloss goes into the text only on request.
+  const gloss = a.lookup && a.zh
+    ? `<button class="btn small gloss-btn${a.glossed ? '' : ' primary'}" data-act="gloss">${t(a.glossed ? 'card.removeGloss' : 'card.addGloss')}</button>` : '';
   const speak = 'speechSynthesis' in window
     ? `<button class="btn small ghost speak" data-act="speak" title="${t('card.speak')}">🔊</button>` : '';
   return `
@@ -779,7 +785,7 @@ function cardHTML(a) {
       ${a.ipa ? `<span class="ipa">/${escapeHTML(a.ipa)}/</span>` : ''}
       ${a.pos ? `<span class="pos">${escapeHTML(a.pos)}</span>` : ''}
     </div>
-    ${a.zh ? `<div class="zh">${escapeHTML(a.zh)}</div>` : ''}
+    ${a.zh ? `<div class="zh-row"><div class="zh">${escapeHTML(a.zh)}</div>${gloss}</div>` : ''}
     ${a.zh && a.text.toLowerCase() !== key ? `<div class="surface">${escapeHTML(t('card.surface', { t: a.text }))}</div>` : ''}
     ${body}
     <div class="actions">
@@ -813,9 +819,18 @@ function renderCard() {
 }
 
 function closeCard() {
+  const idx = state.activeAnn;
   $('#card').hidden = true;
   document.querySelector('ruby.ann.active')?.classList.remove('active');
   state.activeAnn = null;
+  // A word looked up without adding its gloss goes back to plain text.
+  const a = state.anns[idx];
+  const el = a?.lookup && !a.glossed && rubyEl(idx);
+  if (el) {
+    const parent = el.parentNode;
+    el.replaceWith(a.text);
+    parent.normalize();
+  }
 }
 
 function positionNear(el, rect, above = false) {
@@ -841,6 +856,11 @@ function onCardAction(act) {
   const seg = state.segments.get(a.segId);
   if (act === 'detail') {
     fetchDetail(idx);
+  } else if (act === 'gloss') {
+    a.glossed = !a.glossed;
+    if (a.glossed) setGloss(idx);
+    else rubyEl(idx)?.querySelector('rt')?.remove();
+    renderCard();
   } else if (act === 'known') {
     const known = !state.known.has(key);
     if (known) state.known.add(key);

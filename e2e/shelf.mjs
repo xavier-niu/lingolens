@@ -48,8 +48,21 @@ const pt = await page.evaluate(() => {
 await page.mouse.click(pt.x, pt.y);
 await page.waitForSelector('#card:not([hidden]) .detail h4');
 check('lookup card for un-annotated word', (await page.textContent('#card .lemma')) === 'dinner');
+// Its gloss goes into the text only when asked for.
+const dinnerGlosses = () => page.$$eval('#article ruby.ann', (rs) => rs.filter((r) => r.firstChild?.textContent === 'dinner').map((r) => r.querySelector('rt')?.textContent || ''));
+check('looking a word up leaves the text as it is', (await dinnerGlosses()).every((g) => g === ''));
+check('the card offers to add the gloss', (await page.textContent('#card [data-act="gloss"]')) === 'Add Gloss');
 await page.screenshot({ path: `${OUT}/d-card.png` });
 await page.keyboard.press('Escape');
+check('closed without adding: plain text again', (await dinnerGlosses()).length === 0);
+await page.mouse.click(pt.x, pt.y);
+await page.waitForSelector('#card:not([hidden]) [data-act="gloss"]');
+await page.click('#card [data-act="gloss"]');
+check('Add Gloss puts the gloss above the word', (await dinnerGlosses())[0]?.length > 0);
+check('…and offers to take it away again', (await page.textContent('#card [data-act="gloss"]')) === 'Remove Gloss');
+await page.screenshot({ path: `${OUT}/d-card-glossed.png` });
+await page.keyboard.press('Escape');
+check('an added gloss stays', (await dinnerGlosses())[0]?.length > 0);
 
 // Select a paragraph -> Ask AI
 await page.evaluate(() => {
