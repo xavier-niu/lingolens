@@ -49,8 +49,12 @@ for (const [label, device] of [['phone', devices['iPhone 13']], ['tablet', devic
     return null;
   });
   await page.touchscreen.tap(pt.x, pt.y);
+  await page.waitForSelector('#card:not([hidden]) [data-act="detail"]', { timeout: 5000 });
+  check(`${label}: tap word opens its card`, (await page.textContent('#card .lemma')) === 'dinner');
+  check(`${label}: card with Look Up in viewport`, await inViewport(page, '#card'));
+  await page.tap('#card [data-act="detail"]');
   await page.waitForSelector('#card:not([hidden]) .detail h4', { timeout: 5000 });
-  check(`${label}: tap word opens card with details`, (await page.textContent('#card .lemma')) === 'dinner');
+  check(`${label}: Look Up fills the card`, (await page.textContent('#card .zh')).length > 0);
   check(`${label}: card fully in viewport`, await inViewport(page, '#card'));
   await page.screenshot({ path: `${OUT}/${label}-card.png` });
 

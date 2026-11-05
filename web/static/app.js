@@ -716,9 +716,10 @@ function wordAtPoint(x, y) {
   return hit ? { node, s, e, block } : null;
 }
 
-// Clicking a word without a gloss looks it up in the card only; its gloss goes
-// into the text when the reader chooses Add Gloss. Closed without that, the word
-// is plain text again (see closeCard).
+// Clicking a word without a gloss opens its card and spends nothing: the model is
+// asked only when the reader chooses Look Up. Its gloss goes into the text when
+// they choose Add Gloss. Closed without that, the word is plain text again (see
+// closeCard).
 function lookupWordAt(w) {
   const { node, s, e, block } = w;
   let base = 0;
@@ -736,7 +737,37 @@ function lookupWordAt(w) {
   const ruby = makeRuby(mid.data, a, idx);
   mid.replaceWith(ruby);
   openCard(ruby);
-  fetchDetail(idx);
+  showSavedLookup(idx);
+}
+
+function lookupSentence(a) {
+  const seg = state.segments.get(a.segId);
+  return seg ? sentenceAround(seg.text, a.start, a.end) : a.text;
+}
+
+// Looked up before in this sentence: the answer is on this device and costs
+// nothing. Offline, an explanation from another sentence is better than none.
+const savedLookup = (a) => cachedLookup(getLevel(), a.text, lookupSentence(a), { anySentence: !net.online });
+
+async function showSavedLookup(idx) {
+  const a = state.anns[idx];
+  const data = await savedLookup(a);
+  if (!data || state.activeAnn !== idx || a.entry || a.loading) return;
+  applyLookup(idx, data);
+  renderCard();
+}
+
+function applyLookup(idx, data) {
+  const a = state.anns[idx];
+  a.entry = data;
+  a.ipa ||= data.ipa || '';
+  a.pos ||= data.pos || '';
+  if (!a.zh) {
+    a.zh = data.zh;
+    a.lemma = data.lemma || a.text;
+    if (!a.lookup || a.glossed) setGloss(idx);
+    refreshKnownMarks();
+  }
 }
 
 async function fetchDetail(idx) {
@@ -752,26 +783,15 @@ async function fetchDetail(idx) {
   a.loading = true;
   a.error = '';
   renderCard();
-  const seg = state.segments.get(a.segId);
   const level = getLevel();
-  const sentence = seg ? sentenceAround(seg.text, a.start, a.end) : a.text;
+  const sentence = lookupSentence(a);
   try {
-    // Looked up before in this sentence: no need to ask again. Offline, an
-    // explanation from another sentence is better than none.
-    let data = await cachedLookup(level, a.text, sentence, { anySentence: !net.online });
+    let data = await savedLookup(a);
     if (!data) {
       data = await api('POST', '/api/lookup', { level, term: a.text, sentence });
       saveLookup(level, a.text, sentence, data);
     }
-    a.entry = data;
-    a.ipa ||= data.ipa || '';
-    a.pos ||= data.pos || '';
-    if (!a.zh) {
-      a.zh = data.zh;
-      a.lemma = data.lemma || a.text;
-      if (!a.lookup || a.glossed) setGloss(idx);
-      refreshKnownMarks();
-    }
+    applyLookup(idx, data);
   } catch (err) {
     a.error = err.offline ? t('net.lookupOffline') : err.message;
   } finally {
@@ -814,6 +834,10 @@ function cardHTML(a) {
     ? `<button class="btn small gloss-btn${a.glossed ? '' : ' primary'}" data-act="gloss">${t(a.glossed ? 'card.removeGloss' : 'card.addGloss')}</button>` : '';
   const speak = 'speechSynthesis' in window
     ? `<button class="btn small ghost speak" data-act="speak" title="${t('card.speak')}">🔊</button>` : '';
+  // No meaning yet means nothing has been asked: this is the card's first step.
+  const fetchBtn = a.zh
+    ? `<button class="btn small" data-act="detail">${t(a.error ? 'card.retry' : 'card.details')}</button>`
+    : `<button class="btn small primary" data-act="detail">${t(a.error ? 'card.retry' : 'card.lookUp')}</button>`;
   return `
     <div class="head">
       <span class="lemma">${escapeHTML(a.lemma)}</span>
@@ -824,7 +848,7 @@ function cardHTML(a) {
     ${a.zh && a.text.toLowerCase() !== key ? `<div class="surface">${escapeHTML(t('card.surface', { t: a.text }))}</div>` : ''}
     ${body}
     <div class="actions">
-      ${!a.entry && !a.loading ? `<button class="btn small" data-act="detail">${t(a.error ? 'card.retry' : 'card.details')}</button>` : ''}
+      ${!a.entry && !a.loading ? fetchBtn : ''}
       ${a.zh ? `<button class="btn small" data-act="save">${t(saved ? 'card.saved' : 'card.save')}</button>` : ''}
       ${a.zh ? `<button class="btn small" data-act="known">${t(known ? 'card.unknown' : 'card.known')}</button>` : ''}
       <button class="btn small" data-act="ask">${t('ask')}</button>

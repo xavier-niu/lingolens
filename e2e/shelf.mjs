@@ -46,9 +46,21 @@ const pt = await page.evaluate(() => {
     }
   }
 });
+let lookups = 0;
+page.on('request', (r) => { if (r.url().endsWith('/api/lookup')) lookups++; });
 await page.mouse.click(pt.x, pt.y);
+await page.waitForSelector('#card:not([hidden]) [data-act="detail"]');
+check('card for un-annotated word', (await page.textContent('#card .lemma')) === 'dinner');
+check('the card offers to look the word up', (await page.textContent('#card [data-act="detail"]')) === 'Look Up');
+await page.waitForTimeout(300);
+check('clicking a word asks the model nothing', lookups === 0 && !(await page.$('#card .detail')), String(lookups));
+check('the card still offers Ask AI', await page.isVisible('#card [data-act="ask"]'));
+await page.screenshot({ path: `${OUT}/d-card-new.png` });
+await page.click('#card [data-act="detail"]');
 await page.waitForSelector('#card:not([hidden]) .detail h4');
-check('lookup card for un-annotated word', (await page.textContent('#card .lemma')) === 'dinner');
+check('Look Up fills the card', (await page.textContent('#card .zh')).length > 0);
+check('Look Up asks the model once', lookups === 1, String(lookups));
+check('…and the button is gone', !(await page.$('#card [data-act="detail"]')));
 // Its gloss goes into the text only when asked for.
 const dinnerGlosses = () => page.$$eval('#article ruby.ann', (rs) => rs.filter((r) => r.firstChild?.textContent === 'dinner').map((r) => r.querySelector('rt')?.textContent || ''));
 check('looking a word up leaves the text as it is', (await dinnerGlosses()).every((g) => g === ''));
@@ -58,6 +70,7 @@ await page.keyboard.press('Escape');
 check('closed without adding: plain text again', (await dinnerGlosses()).length === 0);
 await page.mouse.click(pt.x, pt.y);
 await page.waitForSelector('#card:not([hidden]) [data-act="gloss"]');
+check('a word looked up before shows at no cost', lookups === 1 && !!(await page.$('#card .detail h4')), String(lookups));
 await page.click('#card [data-act="gloss"]');
 check('Add Gloss puts the gloss above the word', (await dinnerGlosses())[0]?.length > 0);
 check('…and offers to take it away again', (await page.textContent('#card [data-act="gloss"]')) === 'Remove Gloss');

@@ -60,6 +60,7 @@ await page.waitForFunction(() => document.querySelector('#progress').hidden);
 const glossesOnline = await page.$$eval('#article ruby.ann', (r) => r.length);
 const pt = await wordPoint(page, 'dinner');
 await page.mouse.click(pt.x, pt.y);
+await page.click('#card [data-act="detail"]');
 await page.waitForSelector('#card:not([hidden]) .detail h4');
 await page.keyboard.press('Escape');
 await page.goto(BASE + '#/');
@@ -114,6 +115,7 @@ await page.keyboard.press('Escape');
 // a new word needs the network
 const pt3 = await wordPoint(page, 'river');
 await page.mouse.click(pt3.x, pt3.y);
+await page.click('#card [data-act="detail"]');
 await page.waitForSelector('#card:not([hidden]) .detail.error');
 check('new lookup explains it needs a connection', (await page.textContent('#card .detail.error')).includes('offline'));
 await page.click('#card [data-act="ask"]');
