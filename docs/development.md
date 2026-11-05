@@ -34,7 +34,7 @@ The browser tests build the server, start it on a free port with a throwaway dat
 ```
 cmd/lingolens/        main: serve, and the `user` subcommands
 internal/store/       SQLite: users, sessions, agent tokens, books, wordbook, settings; API-key encryption; Markdown detection
-internal/levels/      CEFR levels and per-level annotation guidance
+internal/levels/      CEFR levels, per-level annotation guidance, and the words each level knows (words.txt, from genwords.go)
 internal/llm/         provider adapters (OpenAI-compatible via net/http, Anthropic via the Go SDK)
 internal/annotate/    prompts, chunking, alignment of LLM output to exact offsets, caches, lookup
 internal/importer/    web-page (readability + SSRF-safe fetcher, or a page the bookmarklet sent) and EPUB import, HTML → Markdown (PDFs are read in the browser: web/static/pdftext.js)

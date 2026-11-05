@@ -100,6 +100,7 @@ export async function openUser(id) {
   } catch {
     db = null;
   }
+  await dropOldGlosses();
   await countPending();
   navigator.storage?.persist?.().catch(() => {});
 }
@@ -168,6 +169,20 @@ export function hash(str) {
 // ------------------------------------------------------------------ glosses and lookups
 
 const annKey = (level, text) => `${level}|${hash(text)}`;
+
+// The rules glosses are made by (the server's gloss_version). Glosses saved under
+// other rules are dropped, so a change to the rules reaches texts read before.
+let glossVersion = '';
+export function useGlossVersion(version) { glossVersion = version || ''; }
+
+function dropOldGlosses() {
+  if (!glossVersion) return undefined;
+  return quiet(tx(['kv', 'anns'], 'readwrite', async (kv, anns) => {
+    if (await done(kv.get('glossVersion')) === glossVersion) return;
+    anns.clear();
+    kv.put(glossVersion, 'glossVersion');
+  }));
+}
 
 // Cached glosses for these paragraphs: Map text -> annotations.
 export async function cachedAnns(level, texts) {

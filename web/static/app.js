@@ -6,7 +6,7 @@ import { t, getLang, setLang, applyI18n } from './i18n.js';
 import { api, postStream, net } from './api.js';
 import {
   openUser, forgetUser, finishPendingLogout, cachedMe, rememberMe, loadData, sync, flush,
-  cachedAnns, saveAnns, cachedLookup, saveLookup,
+  cachedAnns, saveAnns, cachedLookup, saveLookup, useGlossVersion,
   savePrefs as queuePrefs, putWord, deleteWord, setKnown, clearKnown, LOCAL_ID,
 } from './offline.js';
 import {
@@ -2995,6 +2995,7 @@ async function init() {
   }
   for (const seg of document.querySelectorAll('.theme-seg')) {
     seg.addEventListener('click', (e) => {
+  useGlossVersion(serverConfig.gloss_version);
       const theme = e.target.closest('[data-mode]')?.dataset.mode;
       if (!theme) return;
       applyTheme(theme);

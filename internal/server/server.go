@@ -150,6 +150,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"levels":        levels.All,
 		"default_level": levels.Default,
+		"gloss_version": annotate.PromptVersion,
 		"allow_fake":    s.opts.AllowFake,
 		"needs_setup":   s.needsSetup(r),
 	})

@@ -132,6 +132,49 @@ func TestStreamFakeAndCache(t *testing.T) {
 	}
 }
 
+// stubLLM answers every completion with the same JSON.
+type stubLLM struct{ answer string }
+
+func (c stubLLM) CompleteJSON(context.Context, string, string, map[string]any) ([]byte, error) {
+	return []byte(c.answer), nil
+}
+
+func (stubLLM) StreamChat(context.Context, string, []llm.Message, func(string) error) error {
+	return nil
+}
+
+// However generous the model is, a word the level knows gets no gloss.
+func TestStreamDropsWordsTheLevelKnows(t *testing.T) {
+	text := "People took the simple table, and it made sense to the perfunctory clerk."
+	client := stubLLM{`{"segments":[{"id":"s0","items":[
+		{"text":"People","kind":"word","lemma":"people","pos":"n.","ipa":"","zh":"人们"},
+		{"text":"took","kind":"word","lemma":"take","pos":"v.","ipa":"","zh":"拿"},
+		{"text":"simple","kind":"word","lemma":"to simple","pos":"adj.","ipa":"","zh":"简单的"},
+		{"text":"made sense","kind":"phrase","lemma":"make sense","pos":"phr.","ipa":"","zh":"讲得通"},
+		{"text":"perfunctory","kind":"word","lemma":"perfunctory","pos":"adj.","ipa":"","zh":"敷衍的"}
+	]}]}`}
+	run := func(level string) []string {
+		var got []string
+		err := NewService().Stream(context.Background(), client, llm.Config{Kind: "stub"}, levels.Get(level),
+			[]Segment{{"s0", text}}, func(r Result) error {
+				for _, a := range r.Annotations {
+					got = append(got, a.Text)
+				}
+				return nil
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	if got := strings.Join(run("C1"), ","); got != "made sense,perfunctory" {
+		t.Errorf("C1 kept %q", got)
+	}
+	if got := run("A1"); len(got) != 3 { // "people" and "take" are known; "simple" isn't yet
+		t.Errorf("A1 kept %q", got)
+	}
+}
+
 func TestSystemPromptMentionsLevel(t *testing.T) {
 	p := SystemPrompt(levels.Get("c1"))
 	if !strings.Contains(p, "CEFR C1") || !strings.Contains(p, "phrase") {

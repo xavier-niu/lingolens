@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 
@@ -143,9 +144,22 @@ func (s *Service) annotateChunk(ctx context.Context, client llm.Client, cfg llm.
 	}
 	out := make(map[string][]Item, len(resp.Segments))
 	for _, sg := range resp.Segments {
-		out[sg.ID] = sg.Items
+		out[sg.ID] = dropKnown(sg.Items, lv)
 	}
 	return out, nil
+}
+
+// dropKnown removes single words this level certainly knows, so a simple word can't
+// get a gloss however generous the model is. Phrases stay: easy words can make a
+// hard phrase.
+func dropKnown(items []Item, lv levels.Level) []Item {
+	return slices.DeleteFunc(items, func(it Item) bool {
+		if len(strings.Fields(it.Text)) != 1 {
+			return false
+		}
+		lemma := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(it.Lemma)), "to ")
+		return lv.Knows(it.Text) || lv.Knows(lemma)
+	})
 }
 
 // Stream annotates segments and calls emit for each result, in completion order.

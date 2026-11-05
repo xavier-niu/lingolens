@@ -215,6 +215,23 @@ check('other device: dark theme', await op.evaluate(() => document.documentEleme
 await other.close();
 
 // ---- a change rejected by the server is reported, not retried forever
+// ---- glosses saved under older rules go when the rules change
+await page.goto(BASE + '#/');
+await page.waitForSelector('#library-view:not([hidden])');
+await page.reload();
+await page.waitForSelector('#library-view:not([hidden])');
+const glossesKept = await idb(page, 'anns');
+check('saved glosses stay while the rules do', glossesKept > 0, String(glossesKept));
+await page.route('**/api/config', async (route) => {
+  const res = await route.fetch();
+  await route.fulfill({ response: res, json: { ...(await res.json()), gloss_version: 'newer' } });
+});
+await page.reload();
+await page.waitForSelector('#library-view:not([hidden])');
+const glossesLeft = await idb(page, 'anns');
+check('saved glosses go when the rules change', glossesLeft === 0, String(glossesLeft));
+await page.unroute('**/api/config');
+
 await ctx.setOffline(true);
 await page.goto(BASE + '#/');
 await page.waitForSelector('#library-view:not([hidden])');

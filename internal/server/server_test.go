@@ -121,10 +121,11 @@ func readEvents(t *testing.T, resp *http.Response) []map[string]any {
 func TestConfigAndStatic(t *testing.T) {
 	e := newEnv(t)
 	cfg := decodeJSON[struct {
-		Levels     []struct{ ID string } `json:"levels"`
-		NeedsSetup bool                  `json:"needs_setup"`
+		Levels       []struct{ ID string } `json:"levels"`
+		GlossVersion string                `json:"gloss_version"`
+		NeedsSetup   bool                  `json:"needs_setup"`
 	}](t, e.do(t, e.client(), "GET", "/api/config", nil))
-	if len(cfg.Levels) != 6 || !cfg.NeedsSetup {
+	if len(cfg.Levels) != 6 || !cfg.NeedsSetup || cfg.GlossVersion == "" {
 		t.Fatalf("config = %+v", cfg)
 	}
 	if status(t, e.do(t, e.client(), "GET", "/", nil)) != 200 {

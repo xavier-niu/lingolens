@@ -16,7 +16,7 @@ It runs on your own server and uses your own AI key. One server can host a whole
 ## What you can do
 
 **Read at your level**
-- Choose your level from A1 to C2, shown with familiar Chinese equivalents such as 高考, 四级 / 六级 and 雅思 / 托福. The higher your level, the fewer words get glosses.
+- Choose your level from A1 to C2, shown with familiar Chinese equivalents such as 高考, 四级 / 六级 and 雅思 / 托福. The higher your level, the fewer words get glosses, and words your level certainly knows never get one.
 - Phrases like *take into account*, *by and large* and *run out of* are glossed as a whole, not word by word.
 - Tap any word, glossed or not, for its meaning in this sentence, pronunciation, other meanings and examples.
 - Select a sentence and choose **Ask AI** to ask about its grammar, a translation or more examples.

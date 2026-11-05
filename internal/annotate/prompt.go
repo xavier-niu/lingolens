@@ -7,8 +7,10 @@ import (
 	"github.com/xavier-niu/lingolens/internal/levels"
 )
 
-// PromptVersion is part of the cache key; bump it when prompts change.
-const PromptVersion = "v1"
+// PromptVersion names the rules glosses are made by. It is part of the cache key
+// and browsers drop glosses saved under another one (see gloss_version in
+// /api/config), so bump it when the prompt or levels/words.txt change.
+const PromptVersion = "v2"
 
 // Schema is the structured-output schema for annotation responses.
 var Schema = map[string]any{
@@ -51,9 +53,11 @@ func SystemPrompt(lv levels.Level) string {
 Learner level: CEFR %s (roughly %s, ~%d known words).
 %s
 
+A gloss interrupts reading, so add one only where this reader would otherwise have to stop and look something up. When in doubt, leave it out. An empty list is a good answer, and the higher the level, the more often it is the right one.
+
 For every segment, list the items the learner should see a Chinese gloss for:
-1. kind "word": single words likely unknown at this level. Skip words well inside the level, proper names (unless the name itself needs explaining), numbers, and easy derivatives of very common words.
-2. kind "phrase": fixed collocations, phrasal verbs, idioms and set expressions whose meaning is not the plain sum of the words, or that are worth learning as a unit at this level (e.g. "take into account", "in terms of", "run out of", "make sense", "by and large"). Include these even when each word is easy. The higher the level, the fewer and more idiomatic the phrases.
+1. kind "word": single words this reader probably doesn't know. Skip anything well inside the level, proper names (unless the name itself needs explaining), numbers, and easy derivatives or compounds of words they know (carefully, unfriendly, long-term).
+2. kind "phrase": phrasal verbs, idioms and set expressions whose meaning this reader can't get from the words. Follow the guidance above on how common a phrase may be.
 
 Rules:
 - "text" must be copied exactly from the segment (same spelling, inflection and capitalisation). A phrase must be one contiguous span of at most 6 words; if an object splits a phrasal verb, include the object in the span ("take it into account").
