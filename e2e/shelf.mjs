@@ -201,11 +201,18 @@ const backToLong = async () => {
   await page.waitForSelector('#reader-view:not([hidden]) ruby.ann');
   await page.waitForTimeout(200);
 };
-const scrollToShare = (share) => page.evaluate((share) => { const a = document.querySelector('#article'); window.scrollTo(0, a.offsetTop + a.offsetHeight * share); }, share);
+// Waits for the scroll event too: the clock can skip seconds ahead before the browser
+// delivers it, and the app would then see the scroll as happening that much later.
+const scrollToShare = (share) => page.evaluate((share) => new Promise((done) => {
+  const a = document.querySelector('#article');
+  window.addEventListener('scroll', done, { once: true });
+  setTimeout(done, 1000); // already there: no event comes
+  window.scrollTo(0, a.offsetTop + a.offsetHeight * share);
+}), share);
 
 // A quick look at the end: it doesn't count as reading, and the place to come
 // back to stays.
-await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await scrollToShare(1);
 await page.waitForTimeout(500);
 check('a jump to the end doesn’t fill the progress thread', (await threadWidth()) < 20, `${await threadWidth()}%`);
 check('a jump to the end doesn’t finish the text', (await page.textContent('#book-stat')) !== 'Finished', await page.textContent('#book-stat'));
@@ -225,7 +232,7 @@ check('progress follows the time spent, not the position', beforeLeaving > 0 && 
 
 // A text left open stops counting after a while.
 const idleBefore = await threadWidth();
-await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await scrollToShare(1);
 await page.clock.runFor(125_000);
 const idleSoon = await threadWidth();
 await page.clock.runFor(600_000);
