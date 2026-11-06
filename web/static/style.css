@@ -298,14 +298,16 @@ a.crumb:hover { color: var(--ink); background: var(--hover); }
   background: transparent; color: var(--ink-2); font-size: 14px; font-weight: 500;
   cursor: pointer; text-decoration: none; white-space: nowrap; transition: background-color .15s, color .15s;
 }
-/* Connection badge: offline, syncing, synced. */
-.net-status {
+/* Header badges. Connection: offline, syncing, synced. Annotating: text on screen is
+   waiting for its glosses. */
+.net-status, .annotating {
   display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 8px; margin-right: 4px;
   border: 1px solid var(--line); border-radius: 999px; background: var(--sunken); color: var(--ink-2);
-  font: inherit; font-size: 12.5px; font-weight: 550; white-space: nowrap; cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 550; white-space: nowrap;
   animation: net-in .25s ease-out both;
 }
-.net-status[hidden] { display: none; }
+.net-status { cursor: pointer; }
+.net-status[hidden], .annotating[hidden] { display: none; }
 .net-status svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; display: none; }
 .net-status[data-mode="offline"] .i-offline,
 .net-status[data-mode="waiting"] .i-offline,
@@ -499,9 +501,6 @@ label.pop-row:hover { background: var(--hover); }
 }
 .reader-head .book-stat { display: block; font-size: 14px; margin-top: 10px; }
 
-.annotating { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; margin: -12px 0 20px; }
-.annotating .bar { flex: 1; max-width: 140px; height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; }
-#progress-fill { height: 100%; width: 0; background: var(--ink); transition: width .25s ease; }
 .spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--ink); animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -1086,6 +1085,9 @@ body[data-view="login"] main { padding-bottom: 40px; }
   .bar-end { gap: 0; } /* room for the book title; buttons keep their size */
   .net-status { padding: 0; width: 28px; justify-content: center; margin-right: 2px; }
   .net-label { display: none; }
+  /* The spinner alone on a phone; the words stay for screen readers. */
+  .annotating { padding: 0 7px; }
+  #progress-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .hint { width: calc(100vw - 32px); gap: 12px; padding: 10px 10px 10px 14px; border-radius: var(--r-lg); white-space: normal; }
   .hint-text { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; }
   .hint-ok { height: 32px; }

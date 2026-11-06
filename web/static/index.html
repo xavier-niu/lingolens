@@ -33,6 +33,10 @@
     </div>
 
     <div class="bar-end">
+      <div id="progress" class="annotating" role="status" hidden>
+        <span class="spinner" aria-hidden="true"></span>
+        <span id="progress-text"></span>
+      </div>
       <button id="net-status" class="net-status" type="button" hidden>
         <svg class="i-offline" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M8.5 8.6A5.5 5.5 0 0 0 6.4 13 4 4 0 0 0 7 21h10.5M19.6 18.7A3.5 3.5 0 0 0 17 13h-.3A5.5 5.5 0 0 0 11 6.5"/></svg>
         <svg class="i-sync" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 0 1-14.3 4.9M4 12A8 8 0 0 1 18.3 7.1M18.5 3v4.3h-4.3M5.5 21v-4.3h4.3"/></svg>
@@ -191,11 +195,6 @@
         <h1 id="book-title" class="book-heading"></h1>
         <p id="book-stat" class="book-stat"></p>
       </header>
-      <div id="progress" class="annotating" hidden>
-        <span class="spinner" aria-hidden="true"></span>
-        <span id="progress-text"></span>
-        <div class="bar"><div id="progress-fill"></div></div>
-      </div>
       <article id="article" class="article"></article>
     </section>
     <section id="settings-view" class="settings-page" hidden>

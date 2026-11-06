@@ -78,6 +78,37 @@ for (const [name, opts] of [
   }
 }
 
+// ---- the annotating badge: fits beside the title at any width
+for (const [name, opts] of [
+  ['phone', { ...devices['iPhone 13'] }],
+  ['small-phone', { viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true }],
+  ['tablet', { ...devices['iPad Mini'] }],
+  ['desktop', { viewport: { width: 1440, height: 900 } }],
+]) {
+  const ctx = await browser.newContext({ ...opts, serviceWorkers: 'block' });
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await signIn(page, user);
+  await page.route('**/api/annotate', () => {}); // never answered: the text keeps waiting
+  await page.goto(BASE + '#/read/' + bookId);
+  await page.waitForSelector('#progress:not([hidden])');
+  const r = await page.evaluate(() => {
+    const box = (el) => { const b = el?.getBoundingClientRect(); return b?.width ? { left: b.left, right: b.right } : null; };
+    return {
+      title: box(document.querySelector('#crumbs [aria-current="page"]')),
+      badge: box(document.querySelector('#progress')),
+      words: box(document.querySelector('#progress-text')),
+      vw: document.documentElement.clientWidth, scrollW: document.documentElement.scrollWidth,
+    };
+  });
+  const phone = opts.viewport.width <= 640;
+  check(`${name}: annotating badge inside the screen`, r.badge.left >= 0 && r.badge.right <= r.vw && r.scrollW <= r.vw, JSON.stringify(r));
+  check(`${name}: annotating badge clear of the title`, !overlap(r.title, r.badge), JSON.stringify(r));
+  check(`${name}: ${phone ? 'just the spinner' : 'the badge has words'}`, phone ? r.words.right - r.words.left <= 1 : r.words.right - r.words.left > 40, JSON.stringify(r));
+  await page.screenshot({ path: `${OUT}/h-annotating-${name}.png`, clip: { x: 0, y: 0, width: r.vw, height: 70 } });
+  await ctx.close();
+}
+
 // ---- the wordbook button: an icon like History, with its count beside it
 for (const [name, opts] of [['desktop', { viewport: { width: 1440, height: 900 } }], ['phone', devices['iPhone 13']]]) {
   const ctx = await browser.newContext(opts);

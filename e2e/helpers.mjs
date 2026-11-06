@@ -61,6 +61,16 @@ export const articleText = (page) => page.$eval('#article', (article) => {
   return copy.textContent;
 });
 
+// Waits until no new glosses have arrived for a moment. The header's indicator can't
+// tell: it only covers what's on screen, not what is annotated ahead of the reader.
+export async function glossesSettled(page) {
+  const count = () => page.$$eval('#article ruby.ann', (r) => r.length);
+  for (let last = -1, now = await count(); now !== last; now = await count()) {
+    last = now;
+    await page.waitForTimeout(400);
+  }
+}
+
 // Waits until the reader's text holds `text`; rejects after `timeout` ms.
 export const waitForArticleText = (page, text, timeout = 8000) => page.waitForFunction((text) => {
   const article = document.querySelector('#article');

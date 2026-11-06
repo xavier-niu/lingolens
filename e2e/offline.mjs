@@ -1,7 +1,7 @@
 // Offline mode: the app opens without a connection, the shelf and glosses come
 // from this browser, changes wait in the outbox and sync when back online.
 import { chromium, devices } from 'playwright';
-import { BASE, freshUser, signIn, checker, fixture, waitForArticleText } from './helpers.mjs';
+import { BASE, freshUser, signIn, checker, fixture, waitForArticleText, glossesSettled } from './helpers.mjs';
 
 const OUT = process.argv[2];
 const { check } = checker();
@@ -56,7 +56,7 @@ await page.goto(BASE + '#/');
 await page.waitForSelector('#library-view:not([hidden])');
 await page.goto(BASE + `#/read/${a.id}`);
 await page.waitForSelector('#article ruby.ann', { state: 'attached' });
-await page.waitForFunction(() => document.querySelector('#progress').hidden);
+await glossesSettled(page);
 const glossesOnline = await page.$$eval('#article ruby.ann', (r) => r.length);
 const pt = await wordPoint(page, 'dinner');
 await page.mouse.click(pt.x, pt.y);

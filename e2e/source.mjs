@@ -140,6 +140,86 @@ await page.click('#btn-toc');
 check('60 chapters in Contents', (await page.$$('#toc-list a')).length === 60);
 await page.keyboard.press('Escape');
 
+// ---- jumping to a chapter: its glosses come first, and the header says they're coming
+{
+  const jctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
+  const p = await jctx.newPage();
+  p.on('pageerror', (e) => errors.push(String(e)));
+  await signIn(p, user);
+  // A model that answers only when told to, so nothing here depends on timing.
+  const held = [];
+  const cancelled = new Set();
+  p.on('requestfailed', (req) => cancelled.add(req));
+  await p.route('**/api/annotate', (route) => {
+    const segments = route.request().postDataJSON().segments;
+    held.push({ route, ids: segments.map((s) => s.id), chars: segments.reduce((n, s) => n + s.text.length, 0) });
+  });
+  const answer = (calls) => Promise.all(calls.map((c) => c.route.continue().catch(() => {})));
+  const until = async (ok) => {
+    for (let i = 0; i < 100 && !ok(); i++) await p.waitForTimeout(50);
+    return ok();
+  };
+  const jumpTo = async (n) => {
+    await p.click('#btn-menu');
+    await p.click('#btn-toc');
+    await p.waitForSelector('#toc-dialog[open]');
+    await p.click(`#toc-list a >> nth=${n}`);
+  };
+  const onScreen = () => p.$$eval('#article [data-seg]', (els) => els.filter((el) => {
+    const r = el.getBoundingClientRect();
+    return r.bottom > 56 && r.top < innerHeight;
+  }).map((el) => el.dataset.seg));
+
+  const big = await p.evaluate(() => fetch('/api/books').then((r) => r.json()).then((b) => b.find((x) => x.title === 'A Very Long Novel').id));
+  await p.goto(BASE + `#/read/${big}`);
+  await p.waitForSelector('#article h2');
+  check('opening a book: two requests at most', await until(() => held.length === 2), String(held.length));
+  await p.waitForSelector('#progress:not([hidden])');
+  check('text on screen waiting: the header says so', true);
+
+  const opening = held.splice(0);
+  await p.$eval('#progress', (el) => {
+    window.badgeChanges = 0;
+    new MutationObserver(() => { window.badgeChanges++; }).observe(el, { attributes: true, attributeFilter: ['hidden'] });
+  });
+  await jumpTo(29);
+  check('a jump starts on the new screen at once', await until(() => held.length === 2), String(held.length));
+  check('…cancelling the requests it left behind', opening.every((c) => cancelled.has(c.route.request())));
+  const screen = await onScreen();
+  const first = held.slice(0, 2);
+  const asked = first.flatMap((c) => c.ids);
+  check('…asking for what is on screen and nothing else', screen.every((id) => asked.includes(id)) && asked.every((id) => screen.includes(id)), `${asked} / ${screen}`);
+  check('…in small batches', first.every((c) => c.chars <= 900 || c.ids.length === 1), first.map((c) => c.chars).join());
+  check('the indicator stays up through the jump', (await p.evaluate(() => window.badgeChanges)) === 0);
+  const badge = await p.locator('#progress').boundingBox();
+  check('the indicator is on screen after the jump', badge && badge.y >= 0 && badge.y + badge.height <= 56, JSON.stringify(badge));
+  check('…and counts what is on screen', (await p.textContent('#progress')).includes(`${screen.length} left`), await p.textContent('#progress'));
+
+  await answer(first);
+  await p.waitForSelector('#progress', { state: 'hidden' });
+  await p.waitForSelector(`[data-seg="${screen[0]}"] ruby.ann, [data-seg="${screen[1]}"] ruby.ann`, { state: 'attached' });
+  check('glosses arrive and the indicator goes', true);
+
+  check('then the text around it', await until(() => held.length >= 3), String(held.length));
+  await p.waitForTimeout(500); // longer than the indicator's delay
+  check('annotating ahead of the reader stays quiet', await p.isHidden('#progress'));
+  await p.$eval(`[data-seg="${held[2].ids[0]}"]`, (el) => el.scrollIntoView({ block: 'center' }));
+  await p.waitForSelector('#progress:not([hidden])');
+  check('reading into it brings the indicator back', true);
+
+  const back = held.length;
+  await jumpTo(0);
+  check('back at the start: what was cancelled is asked for again', await until(() => held.slice(back).some((c) => c.ids.includes(opening[0].ids[0]))));
+  check('no paragraph is marked as failed', (await p.$$('#article .seg-failed')).length === 0);
+  await p.unroute('**/api/annotate');
+  await answer(held.slice(back));
+  await p.waitForSelector('#progress', { state: 'hidden' });
+  const firstScreen = await onScreen();
+  check('…and gets its glosses', await p.evaluate((ids) => ids.some((id) => document.querySelector(`[data-seg="${id}"] ruby.ann`)), firstScreen));
+  await p.screenshot({ path: `${OUT}/s-jump.png` });
+  await jctx.close();
+}
+
 // ---- Agent Access
 await page.goto(BASE + '#/settings');
 await page.waitForSelector('#settings-view:not([hidden])');

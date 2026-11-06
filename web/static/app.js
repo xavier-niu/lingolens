@@ -217,27 +217,56 @@ function refreshKnownMarks() {
 // Paragraphs are annotated only when they come near the viewport, in batches of
 // about LAZY.batchChars characters, so a long article never spends tokens on parts
 // that are not read. The server additionally caches results per paragraph.
-const LAZY = { batchChars: 1800, maxInFlight: 2, rootMargin: '1000px 0px' };
-const lazy = { gen: 0, observer: null, queue: [], inFlight: 0, ctls: new Set(), lastError: '' };
+//
+// A model answers a whole batch at once, so what's on screen goes first and in
+// smaller batches, and work on paragraphs the reader has moved away from gives way:
+// after a jump through Contents, the new screen doesn't wait for the old one.
+const LAZY = {
+  batchChars: 1800, screenBatchChars: 900, maxInFlight: 2, rootMargin: '1000px 0px',
+  headerH: 56, spinnerShow: 300, spinnerHide: 100,
+};
+const lazy = { gen: 0, observer: null, queue: [], batches: new Set(), lastError: '', spinnerTimer: 0 };
 
 function resetLazy() {
   lazy.gen++;
   lazy.observer?.disconnect();
   lazy.observer = null;
-  for (const c of lazy.ctls) c.abort();
-  lazy.ctls.clear();
+  for (const b of lazy.batches) b.ctl.abort();
+  lazy.batches.clear();
   lazy.queue = [];
-  lazy.inFlight = 0;
   lazy.lastError = '';
-  updateProgress();
+  clearTimeout(lazy.spinnerTimer);
+  lazy.spinnerTimer = 0;
+  $('#progress').hidden = true;
 }
 
+// How far a paragraph is from being read: 0 on screen, then what's coming up, then
+// what has been passed, nearest first.
+function screenDistance(el) {
+  const { top, bottom } = el.getBoundingClientRect();
+  if (bottom <= LAZY.headerH) return 1e6 + LAZY.headerH - bottom;
+  return Math.max(0, top - innerHeight);
+}
+
+// The header says so while text on screen is waiting for its glosses. Paragraphs
+// annotated ahead of the reader need no announcing. It takes a moment to change, so
+// glosses saved in this browser don't flash it, and it doesn't blink on a jump, where
+// the scroll is noticed just before the paragraphs on the new screen are.
 function updateProgress() {
-  const segs = [...state.segments.values()];
-  const done = segs.filter((s) => s.status === 'done' || s.status === 'failed').length;
-  $('#progress').hidden = lazy.inFlight === 0;
-  $('#progress-fill').style.width = segs.length ? `${(100 * done) / segs.length}%` : '0';
-  $('#progress-text').textContent = t('progress', { done, total: segs.length });
+  const waiting = [...lazy.queue, ...[...lazy.batches].flatMap((b) => [...b.pending])];
+  const n = waiting.filter((id) => screenDistance(state.segments.get(id).el) === 0).length;
+  const text = t('progress', { n });
+  if (n && $('#progress-text').textContent !== text) $('#progress-text').textContent = text;
+  const el = $('#progress');
+  if (!!n === !el.hidden) {
+    clearTimeout(lazy.spinnerTimer);
+    lazy.spinnerTimer = 0;
+  } else if (!lazy.spinnerTimer) {
+    lazy.spinnerTimer = setTimeout(() => {
+      lazy.spinnerTimer = 0;
+      el.hidden = !el.hidden;
+    }, n ? LAZY.spinnerShow : LAZY.spinnerHide);
+  }
 }
 
 function startAnnotating() {
@@ -249,13 +278,12 @@ function startAnnotating() {
   }
   lazy.observer = new IntersectionObserver((entries) => {
     for (const en of entries) {
-      if (!en.isIntersecting) continue;
-      lazy.observer.unobserve(en.target);
       const id = en.target.dataset.seg;
       const seg = state.segments.get(id);
-      if (seg && seg.status !== 'done') {
+      if (!seg) continue;
+      seg.near = en.isIntersecting;
+      if (seg.near && !seg.status) {
         seg.status = 'queued';
-        seg.el.classList.remove('seg-failed');
         lazy.queue.push(id);
       }
     }
@@ -268,18 +296,37 @@ function startAnnotating() {
 
 function pump() {
   const gen = lazy.gen;
-  lazy.queue.sort((a, b) => +a.slice(1) - +b.slice(1)); // reading order
-  while (lazy.inFlight < LAZY.maxInFlight && lazy.queue.length) {
+  // Forget paragraphs the reader has moved away from; they return if the reader does.
+  lazy.queue = lazy.queue.filter((id) => {
+    const seg = state.segments.get(id);
+    if (!seg.near) seg.status = undefined;
+    return seg.near;
+  });
+  // A request for them shouldn't hold up what the reader moved to, either.
+  if (lazy.queue.length) {
+    for (const batch of lazy.batches) {
+      if ([...batch.pending].some((id) => state.segments.get(id).near)) continue;
+      batch.left = true;
+      batch.ctl.abort();
+    }
+  }
+  const away = new Map(lazy.queue.map((id) => [id, screenDistance(state.segments.get(id).el)]));
+  lazy.queue.sort((a, b) => away.get(a) - away.get(b) || +a.slice(1) - +b.slice(1));
+  while (lazy.batches.size < LAZY.maxInFlight && lazy.queue.length) {
+    const onScreen = away.get(lazy.queue[0]) === 0;
+    const limit = onScreen ? LAZY.screenBatchChars : LAZY.batchChars;
     const batch = [];
     let size = 0;
     while (lazy.queue.length) {
-      const len = state.segments.get(lazy.queue[0]).text.length;
-      if (batch.length && size + len > LAZY.batchChars) break;
+      const id = lazy.queue[0];
+      const len = state.segments.get(id).text.length;
+      if (batch.length && (size + len > limit || (away.get(id) === 0) !== onScreen)) break;
       batch.push(lazy.queue.shift());
       size += len;
     }
     runBatch(batch, gen);
   }
+  updateProgress();
 }
 
 function finishSegment(id, ok) {
@@ -287,15 +334,14 @@ function finishSegment(id, ok) {
   if (!seg) return;
   seg.status = ok ? 'done' : 'failed';
   seg.el.classList.toggle('seg-failed', !ok);
+  lazy.observer?.unobserve(seg.el);
 }
 
 async function runBatch(ids, gen) {
-  const ctl = new AbortController();
-  lazy.ctls.add(ctl);
-  lazy.inFlight++;
-  updateProgress();
+  const batch = { ctl: new AbortController(), pending: new Set(ids), left: false };
+  const { ctl, pending } = batch;
+  lazy.batches.add(batch);
   const level = getLevel();
-  const pending = new Set(ids);
   // Paragraphs glossed before come from this browser, without the network.
   const saved = await cachedAnns(level, ids.map((id) => state.segments.get(id).text));
   if (gen !== lazy.gen) return;
@@ -306,6 +352,7 @@ async function runBatch(ids, gen) {
     finishSegment(id, true);
     pending.delete(id);
   }
+  updateProgress();
   let offline = false;
   try {
     if (!pending.size) return;
@@ -340,16 +387,17 @@ async function runBatch(ids, gen) {
     if (err.offline || err instanceof TypeError) offline = true;
     else lazy.lastError = err.message;
   } finally {
-    lazy.ctls.delete(ctl);
-    if (gen === lazy.gen) finishBatch(pending, offline);
+    lazy.batches.delete(batch);
+    if (gen === lazy.gen) finishBatch(batch, offline);
   }
 }
 
-function finishBatch(pending, offline) {
-  lazy.inFlight--;
+function finishBatch({ pending, left }, offline) {
   for (const id of pending) {
     const seg = state.segments.get(id);
-    if (offline && seg) {
+    if (left && seg) {
+      lazy.queue.push(id); // pump() forgets it unless the reader is already back
+    } else if (offline && seg) {
       seg.status = 'waiting'; // glossed when the connection is back (see 'netchange')
     } else {
       finishSegment(id, false);
@@ -3203,6 +3251,7 @@ async function init() {
     markScrolled();
     lastScrollAt = Date.now();
     noteInput();
+    if (lazy.queue.length || lazy.batches.size) updateProgress();
   }, { passive: true });
   for (const type of ['pointermove', 'pointerdown', 'keydown']) {
     window.addEventListener(type, noteInput, { passive: true });
