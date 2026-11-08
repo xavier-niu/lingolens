@@ -321,6 +321,25 @@ a.crumb:hover { color: var(--ink); background: var(--hover); }
 @media (prefers-reduced-motion: reduce) { .net-status, .net-status[data-mode="syncing"] .i-sync { animation: none; } }
 
 .bar-btn:hover, .bar-btn[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
+
+/* Chat is a part of the app of its own, not a reading tool: a labelled pill,
+   not another icon. */
+.chat-mode-btn {
+  position: relative; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px 0 11px; margin-right: 8px;
+  border-radius: 999px; background: var(--primary); color: var(--on-primary);
+  font-size: 13.5px; font-weight: 600; text-decoration: none; white-space: nowrap;
+  transition: opacity .15s, box-shadow .15s;
+}
+.chat-mode-btn:hover { opacity: .86; }
+.chat-mode-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.chat-mode-btn[aria-current="page"] { opacity: 1; cursor: default; box-shadow: 0 0 0 2px var(--canvas), 0 0 0 3.5px var(--primary); }
+.chat-mode-btn svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linejoin: round; }
+/* A Chat answer arriving while the page is out of sight. */
+.chat-mode-btn.live::after {
+  content: ""; position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--gloss); box-shadow: 0 0 0 2px var(--canvas);
+  animation: live-dot 1.4s ease-in-out infinite;
+}
 .bar-btn svg, .book-del svg {
   width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8;
   stroke-linecap: round; stroke-linejoin: round;
@@ -697,6 +716,26 @@ body.chat-open .hint { display: none; }
 .chat-book { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); text-decoration: none; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12px; }
 .chat-book::before { content: "·"; margin-right: 6px; }
 .chat-book:hover { color: var(--ink); text-decoration: underline; }
+/* Chat: the text to talk about, until the first question. */
+.paste-box {
+  display: block; min-height: 150px; max-height: 45vh; resize: vertical; padding: 12px 14px;
+  border-color: transparent; border-radius: var(--r); background: var(--sunken); box-shadow: none;
+  font-family: var(--read-font); font-size: 15.5px; line-height: 1.6;
+}
+.paste-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.paste-row:has(> button[hidden]):has(> .paste-note:empty) { display: none; }
+.paste-row .btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.paste-note { font-size: 12.5px; line-height: 1.4; color: var(--danger); }
+
+/* The Chat page: the conversation fills the page under the top bar, where Ask
+   AI is a sidebar beside a text. */
+body[data-view="chat"] .drawer {
+  z-index: 10; top: 56px; left: 0; right: 0; width: auto; max-width: 780px; height: auto; margin: 0 auto;
+  border-left: 0; background: var(--canvas); box-shadow: none; animation: none;
+}
+body[data-view="chat"] .chat-dock { background: var(--canvas); }
+body[data-view="chat"] .chat-dock::before { background: linear-gradient(transparent, var(--canvas)); }
+body[data-view="chat"] :is(#chat-close, #btn-history) { display: none; }
 /* Asked about this before: pick that conversation up again. */
 .chat-resume {
   display: flex; align-items: center; gap: 10px; width: 100%; margin: -6px 0 14px; padding: 10px 14px;
@@ -750,6 +789,7 @@ body.chat-open .hint { display: none; }
 .chips.start .chip:nth-child(2) { animation-delay: .04s; }
 .chips.start .chip:nth-child(3) { animation-delay: .08s; }
 .chips.start .chip:nth-child(4) { animation-delay: .12s; }
+.chips.start .chip:nth-child(5) { animation-delay: .16s; }
 .chips.start .chip svg { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--muted); transition: transform .15s, color .15s; }
 .chips.start .chip:hover { background: var(--hover); border-color: var(--line-strong); color: var(--ink); }
 .chips.start .chip:hover svg { transform: translateX(2px); color: var(--ink); }
@@ -1085,6 +1125,10 @@ body[data-view="login"] main { padding-bottom: 40px; }
   .bar-end { gap: 0; } /* room for the book title; buttons keep their size */
   .net-status { padding: 0; width: 28px; justify-content: center; margin-right: 2px; }
   .net-label { display: none; }
+  .chat-mode-btn { width: 34px; height: 34px; padding: 0; margin-right: 6px; justify-content: center; }
+  .chat-mode-btn svg { width: 17px; height: 17px; }
+  .chat-mode-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  body[data-view="chat"] .drawer { top: 52px; }
   /* The spinner alone on a phone; the words stay for screen readers. */
   .annotating { padding: 0 7px; }
   #progress-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

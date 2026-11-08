@@ -43,6 +43,10 @@
         <svg class="i-synced" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
         <span id="net-label" class="net-label"></span>
       </button>
+      <a id="btn-chat" class="chat-mode-btn" href="#/chat" data-i18n-title="chatPage.about">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.5a8 8 0 0 1-11.7 7.1L4 20l1.4-4.4a8 8 0 1 1 15.1-4.1z"/></svg>
+        <span class="chat-mode-label" data-i18n="chatPage.title">Chat</span>
+      </a>
       <button id="btn-display" class="bar-btn reader-only" popovertarget="display-pop" data-i18n-title="display.title" data-i18n-aria="display.title">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18L8 6l5 12M4.6 14h6.8M15 12.2c.6-1 1.6-1.5 2.8-1.5 1.8 0 2.9 1 2.9 2.8V18m0-3.6c-.9-.4-1.8-.6-2.8-.6-1.6 0-2.9.7-2.9 2.1s1.1 2.1 2.4 2.1c1.5 0 2.7-.8 3.3-2"/></svg>
       </button>
@@ -449,6 +453,7 @@
       <button id="chat-back" class="icon-btn head-back" type="button" data-i18n-aria="chat.back" data-i18n-title="chat.back" aria-label="Back" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
       <h2 class="chat-title"><svg class="spark" aria-hidden="true"><use href="#i-spark"/></svg><span id="chat-title-text" data-i18n="chat.title">Ask AI</span></h2>
       <div class="head-actions">
+        <button id="chat-new" class="icon-btn" type="button" data-i18n-aria="chatPage.new" data-i18n-title="chatPage.new" aria-label="New chat" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V13M17 3.8l3.2 3.2-8 8H9v-3.2z"/></svg></button>
         <button id="chat-hist-btn" class="icon-btn" type="button" data-i18n-aria="chat.history" data-i18n-title="chat.history" aria-label="Ask AI history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6M3.5 4v4h4M12 7.5V12l3 2"/></svg></button>
         <button id="chat-close" class="icon-btn" data-i18n-aria="btn.close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
@@ -463,8 +468,16 @@
     </div>
     <div id="chat-log" class="chat-log">
       <figure class="chat-context">
-        <figcaption><span data-i18n="chat.context">Selected text</span><a id="chat-book" class="chat-book" hidden></a></figcaption>
+        <figcaption><span id="chat-context-label" data-i18n="chat.context">Selected text</span><a id="chat-book" class="chat-book" hidden></a></figcaption>
         <blockquote id="chat-quote" class="quote"></blockquote>
+        <!-- Chat: the text to talk about, until the first question. -->
+        <div id="chat-paste" class="paste" hidden>
+          <textarea id="chat-text" class="paste-box" rows="7" data-i18n-placeholder="chatPage.placeholder" data-i18n-aria="chatPage.text"></textarea>
+          <div class="paste-row">
+            <button id="chat-paste-btn" class="btn small ghost" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="12" height="16" rx="2"/><path d="M9.5 4.5V3.5h5v1M9.5 10h5M9.5 14h5"/></svg><span data-i18n="chatPage.paste">Paste</span></button>
+            <span id="chat-text-note" class="paste-note" role="status"></span>
+          </div>
+        </div>
       </figure>
       <button id="chat-resume" class="chat-resume" type="button" hidden></button>
       <div id="chat-chips" class="chips"></div>

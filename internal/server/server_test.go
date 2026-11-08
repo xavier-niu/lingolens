@@ -17,6 +17,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/xavier-niu/lingolens/internal/levels"
 	"github.com/xavier-niu/lingolens/internal/store"
 )
 
@@ -417,7 +418,16 @@ func TestChatStreams(t *testing.T) {
 func TestChatValidation(t *testing.T) {
 	e := newEnv(t)
 	c := e.signIn(t, "a@example.com", false)
+	q := []map[string]string{{"role": "user", "content": "q"}}
+	// Pasted text (Chat) has no passage and may be as long as one; a selection
+	// in a text being read (Ask AI) may not.
+	long := strings.Repeat("a", maxSelectionChar+1)
+	if got := status(t, e.do(t, c, "POST", "/api/chat", map[string]any{"selection": long, "messages": q})); got != 200 {
+		t.Errorf("long pasted text -> %d, want 200", got)
+	}
 	bad := []map[string]any{
+		{"selection": long, "passage": long + " around it", "messages": q},
+		{"selection": strings.Repeat("a", maxPassageChars+1), "messages": q},
 		{"selection": "", "messages": []map[string]string{{"role": "user", "content": "q"}}},
 		{"selection": "x", "messages": []any{}},
 		{"selection": "x", "messages": []map[string]string{{"role": "assistant", "content": "q"}}},
@@ -985,8 +995,9 @@ func TestChatHistory(t *testing.T) {
 		body map[string]any
 	}{
 		{"short", save},
-		{"abcd1234", map[string]any{"selection": "x", "messages": turn[:1]}},                              // no answer yet
-		{"abcd1234", map[string]any{"selection": "", "messages": turn}},                                   // no selection
+		{"abcd1234", map[string]any{"selection": "x", "messages": turn[:1]}}, // no answer yet
+		{"abcd1234", map[string]any{"selection": "", "messages": turn}},      // no selection
+		{"abcd1234", map[string]any{"selection": strings.Repeat("a", maxSelectionChar+1), "passage": "p", "messages": turn}},
 		{"abcd1234", map[string]any{"selection": "x", "messages": []map[string]string{turn[1], turn[0]}}}, // wrong order
 	}
 	for _, tc := range bad {
@@ -999,5 +1010,28 @@ func TestChatHistory(t *testing.T) {
 	}
 	if list := decodeJSON[[]map[string]any](t, e.do(t, a, "GET", "/api/chats", nil)); len(list) != 0 {
 		t.Fatalf("after delete: %v", list)
+	}
+
+	// Chat: pasted text, with no book or passage, longer than a selection may be.
+	text := strings.Repeat("I has a pen. ", 300)
+	pastedChat := map[string]any{"selection": text, "messages": turn}
+	c = decodeJSON[map[string]any](t, e.do(t, a, "PUT", "/api/chats/text1234", pastedChat))
+	if c["bookId"] != "" || c["selection"] != strings.TrimSpace(text) {
+		t.Fatalf("saved pasted text: %v", c)
+	}
+	if list := decodeJSON[[]map[string]any](t, e.do(t, a, "GET", "/api/chats", nil)); len(list) != 1 || list[0]["bookId"] != "" {
+		t.Fatalf("list with pasted text: %v", list)
+	}
+}
+
+func TestChatPromptForPastedText(t *testing.T) {
+	lv := levels.Get("B1")
+	read := ChatSystemPrompt(lv, "The policy was, by and large, a success.", "by and large")
+	if !strings.Contains(read, "<passage>") || !strings.Contains(read, "<selection>\nby and large\n</selection>") {
+		t.Fatalf("Ask AI prompt: %s", read)
+	}
+	paste := ChatSystemPrompt(lv, "", "I has a pen.")
+	if strings.Contains(paste, "<passage>") || !strings.Contains(paste, "<text>\nI has a pen.\n</text>") || !strings.Contains(paste, "check the grammar") {
+		t.Fatalf("Chat prompt: %s", paste)
 	}
 }

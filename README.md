@@ -21,6 +21,7 @@ It runs on your own server and uses your own AI key. One server can host a whole
 - Tap any word, glossed or not, to hear it or choose **Look Up** or **Details** for its meaning in this sentence, other meanings and examples. The model is only asked when you choose.
 - Select a sentence and choose **Ask AI** to ask about its grammar, a translation or more examples.
 - Your Ask AI conversations are kept in **Ask AI history**, so you can reread them and keep asking where you left off.
+- **Chat** about any English you paste, without adding it to your shelf: translate it, break down its grammar, or check the grammar of something you wrote. Chats are kept too.
 
 **Bring anything to read**
 - Paste text, or Markdown with headings and lists.
