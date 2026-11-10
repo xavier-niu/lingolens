@@ -120,6 +120,7 @@
   <div id="menu-pop" class="pop menu-pop" popover>
     <button type="button" id="btn-toc" class="menu-item" data-i18n="toc.title" hidden>Contents</button>
     <button type="button" id="btn-edit" class="menu-item" data-i18n="btn.edit">Edit text</button>
+    <button type="button" id="btn-append" class="menu-item" data-i18n="btn.append">Append text</button>
     <a id="btn-settings" class="menu-item" href="#/settings" data-i18n="settings.page">Settings</a>
   </div>
 
@@ -497,6 +498,12 @@
         <label class="kind"><input type="radio" name="kind" value="file">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5v-15zM5 19.5A1.5 1.5 0 0 0 6.5 21H19M9 7h6"/></svg><span data-i18n="source.file">Book or PDF</span></label>
       </div>
+      <div class="source-kinds" id="src-modes" role="radiogroup" data-i18n-aria="source.mode" hidden>
+        <label class="kind"><input type="radio" name="mode" value="edit" checked>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5h4l10-10a2.1 2.1 0 0 0-4-4l-10 10v4zM13 7l4 4"/></svg><span data-i18n="source.modeEdit">Edit</span></label>
+        <label class="kind"><input type="radio" name="mode" value="append">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 10h14M5 14h7M17.5 13v7M14 16.5h7"/></svg><span data-i18n="source.modeAppend">Append</span></label>
+      </div>
 
       <p id="src-offline" class="src-note src-offline" hidden data-i18n="net.sourceOffline">You’re offline. Pasted text and PDFs are saved on this device and added to your shelf when you’re back online; web pages and EPUB books need a connection.</p>
 
@@ -531,6 +538,11 @@
           <span data-i18n="source.linkPasted">That looks like a link.</span>
           <button type="button" id="src-use-link" class="link-btn" data-i18n="source.importPage">Import the web page instead</button>
         </p>
+      </div>
+
+      <div class="src-panel" data-kind="append" hidden>
+        <label class="field"><span data-i18n="source.more">Text to add</span><textarea id="src-more" name="more" rows="12" spellcheck="false" autocomplete="off" data-i18n-placeholder="source.morePh"></textarea></label>
+        <p class="src-note" data-i18n="source.moreNote">It goes at the end, after a dividing line (---). Your place in the text stays where it is.</p>
       </div>
 
       <p id="src-error" class="field-error" role="alert"></p>

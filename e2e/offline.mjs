@@ -130,6 +130,20 @@ await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight * 0.6));
 await page.clock.runFor(60_000);
 const progressOffline = await page.evaluate(() => document.querySelector('#read-thread > div').style.width);
 
+// add to its end offline: the text grows, and the progress stays (a little
+// less of a longer text)
+const ADDED = 'Added on the train. The river was still there in the evening.';
+await page.click('#btn-menu');
+await page.click('#btn-append');
+await page.waitForSelector('#source-dialog[open]');
+await page.fill('#src-more', ADDED);
+await page.click('#src-save');
+await page.waitForSelector('#toast:not([hidden])');
+check('appended offline: at the end, after a line', await waitForArticleText(page, ADDED, 3000).then(() => true, () => false) && (await page.$$('#article hr')).length === 1);
+const barAppended = await page.evaluate(() => document.querySelector('#read-thread > div').style.width);
+check('…and the progress stays', parseInt(barAppended, 10) > 0 && parseInt(barAppended, 10) >= parseInt(progressOffline, 10) - 3, `${progressOffline} → ${barAppended}`);
+await page.clock.runFor(20_000); // read on: saved after the addition, not before it
+
 // other book opens from the device too (the reader is already showing book A,
 // so wait for B's title rather than for the reader view)
 await page.goto(BASE + `#/read/${b.id}`);
@@ -189,6 +203,8 @@ check('…exactly once', books.filter((x) => x.title === 'Written Offline').leng
 check('offline delete reached the server', !books.some((x) => x.id === b.id));
 const serverA = books.find((x) => x.id === a.id);
 check('offline reading progress synced', serverA.progress > 0.3, `${serverA.progress} (bar ${progressOffline})`);
+const textA = (await get(page, `/api/books/${a.id}`)).content;
+check('offline addition on the server, once, after a line', textA === `${BOOK_A}\n\n---\n\n${ADDED}`, JSON.stringify(textA.slice(-90)));
 const wb = await get(page, '/api/wordbook');
 check('word saved offline is in the wordbook', wb.some((w) => w.key === 'dinner'), wb.map((w) => w.key).join());
 const me = await get(page, '/api/me');

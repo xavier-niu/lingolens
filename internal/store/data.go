@@ -217,8 +217,9 @@ func (s *Store) createBook(ctx context.Context, userID int64, title, format, con
 	return s.GetBook(ctx, userID, id)
 }
 
-// UpdateBook replaces title and content; a rewritten text starts over at 0%.
-// An empty format keeps the current one.
+// UpdateBook replaces title and content. A rewritten text starts over at 0%;
+// one only added to at the end keeps the reader's place and progress, now a
+// smaller share of the longer text. An empty format keeps the current one.
 func (s *Store) UpdateBook(ctx context.Context, userID int64, id, title, format, content string) (*Book, error) {
 	old, err := s.GetBook(ctx, userID, id)
 	if err != nil {
@@ -233,7 +234,8 @@ func (s *Store) UpdateBook(ctx context.Context, userID int64, id, title, format,
 	}
 	progress, pos := old.Progress, old.Pos
 	if content != old.Content {
-		progress, pos = 0, 0
+		share, _ := keptShare(old.Content, content) // 0 when rewritten
+		progress, pos = progress*share, pos*share
 	}
 	_, err = s.db.ExecContext(ctx, `UPDATE books SET title = ?, format = ?, content = ?, words = ?, progress = ?, pos = ?, updated_at = ?
 		WHERE user_id = ? AND id = ?`, title, format, content, CountWords(content), progress, pos, now(), userID, id)
@@ -289,10 +291,21 @@ func (s *Store) AppendAgentBook(ctx context.Context, userID int64, id, more stri
 		if utf8.RuneCountInString(next) > MaxBookChars {
 			return ErrTooLong
 		}
-		share := float64(utf8.RuneCountInString(content)) / float64(utf8.RuneCountInString(next))
+		share, _ := keptShare(content, next)
 		b.Content, b.Progress, b.Pos = next, b.Progress*share, b.Pos*share
 		return nil
 	})
+}
+
+// keptShare reports whether next only adds to the end of old and, if so, the
+// share of next that old takes up. Scaling the reading place and progress by
+// it keeps them pointing at the same spot.
+func keptShare(old, next string) (float64, bool) {
+	old = strings.TrimRightFunc(old, unicode.IsSpace)
+	if old == "" || !strings.HasPrefix(next, old) {
+		return 0, false
+	}
+	return float64(utf8.RuneCountInString(old)) / float64(utf8.RuneCountInString(next)), true
 }
 
 // ReplaceAgentBook rewrites a text an agent added with new content, and a new

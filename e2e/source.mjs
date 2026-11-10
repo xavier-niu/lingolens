@@ -1,7 +1,7 @@
 // Add Source (text with Markdown detection, web page, EPUB), Contents, and Agent Access.
 // PDFs have their own suite (pdf.mjs).
 import { chromium, devices } from 'playwright';
-import { BASE, SITE, fixture, freshUser, signIn, checker, articleText, waitForArticleText } from './helpers.mjs';
+import { BASE, SITE, fixture, freshUser, signIn, checker, articleText, waitForArticleText, glossesSettled } from './helpers.mjs';
 
 const OUT = process.argv[2];
 const { check } = checker();
@@ -122,6 +122,95 @@ await page.waitForSelector('#source-dialog[open]');
 check('editing hides the kind switch', !(await visible('#src-kinds')));
 check('editing an import keeps Markdown', await visible('#src-md'));
 await page.keyboard.press('Escape');
+
+// ---- appending: more at the end, after a dividing line; the reader keeps their place
+{
+  const OLD = Array.from({ length: 60 }, (_, i) => `Morning ${i + 1}. The harbour was quiet, and the boats rocked gently on the grey water.`).join('\n\n');
+  const MORE = Array.from({ length: 30 }, (_, i) => `Noon ${i + 1}. The fishermen came back with their nets full of silver fish.`).join('\n\n');
+  // Back at the middle of a text read to 90%: the screen is all read, so
+  // progress holds still while the dialog is open.
+  const book = await page.evaluate(async (content) => {
+    const json = { 'Content-Type': 'application/json' };
+    const b = await fetch('/api/books', { method: 'POST', headers: json, body: JSON.stringify({ title: 'Harbour Mornings', content }) }).then((r) => r.json());
+    await fetch(`/api/books/${b.id}/progress`, { method: 'PUT', headers: json, body: JSON.stringify({ pos: 0.5, progress: 0.9 }) });
+    return b;
+  }, OLD);
+  const saved = () => page.evaluate((id) => fetch('/api/books/' + id, { cache: 'no-store' }).then((r) => r.json()), book.id);
+  // The paragraph at the top of the screen, and where it sits.
+  const atTop = () => page.evaluate(() => {
+    const p = [...document.querySelectorAll('#article [data-seg]')].find((el) => el.getBoundingClientRect().bottom > 80);
+    return { seg: p.dataset.seg, top: Math.round(p.getBoundingClientRect().top) };
+  });
+  await page.goto(BASE + '#/read/' + book.id);
+  await waitForArticleText(page, 'Morning 60.');
+  await page.waitForFunction(() => window.scrollY > 300);
+  await glossesSettled(page);
+  const place = await atTop();
+
+  await page.click('#btn-menu');
+  check('the menu offers Append Text after Edit Text', (await page.$$eval('#menu-pop .menu-item:not([hidden])', (els) => els.map((e) => e.id))).join() === 'btn-edit,btn-append,btn-settings');
+  await page.click('#btn-append');
+  await page.waitForSelector('#source-dialog[open]');
+  const dialog = () => page.evaluate(() => ({
+    heading: document.querySelector('#source-heading').textContent,
+    mode: document.querySelector('#src-modes input:checked')?.value,
+    save: document.querySelector('#src-save').textContent,
+    focus: document.activeElement?.id,
+  }));
+  let d = await dialog();
+  check('it opens the text on Append', d.heading === 'Append Text' && d.mode === 'append' && d.save === 'Append', JSON.stringify(d));
+  check('…with an empty box for the new text, in focus', await visible('#src-more') && !(await visible('#src-text')) && d.focus === 'src-more' && (await page.inputValue('#src-more')) === '');
+  check('…and the title and kind switch as when editing', (await page.inputValue('#src-title')) === 'Harbour Mornings' && !(await visible('#src-kinds')));
+  await page.click('#src-save');
+  check('nothing to add: says so', (await page.textContent('#src-error')) === 'Paste the text to add first.', await page.textContent('#src-error'));
+  await page.click('#src-modes label:has(input[value="edit"])');
+  d = await dialog();
+  check('Edit shows the whole text again', d.heading === 'Edit Text' && d.save === 'Save Changes' && await visible('#src-text') && !(await visible('#src-more')) && (await page.inputValue('#src-text')) === OLD, JSON.stringify(d));
+  await page.click('#src-modes label:has(input[value="append"])');
+  await page.fill('#src-more', `\n${MORE}\n\n`);
+  check('the count is of what’s added', (await page.textContent('#src-count')) === `${(MORE.length + 3).toLocaleString('en-US')} characters`, await page.textContent('#src-count'));
+  await page.screenshot({ path: `${OUT}/s-append.png` });
+  await page.click('#src-save');
+  await page.waitForSelector('#toast:not([hidden])');
+
+  const after = await saved();
+  check('added at the end, after a --- line', after.content === `${OLD}\n\n---\n\n${MORE}`, JSON.stringify(after.content.slice(OLD.length - 20, OLD.length + 30)));
+  check('…the same text, not a new one', (await page.evaluate(() => fetch('/api/books').then((r) => r.json()))).filter((b) => b.title === 'Harbour Mornings').length === 1);
+  const share = OLD.length / after.content.length;
+  check('the place and progress stay, as a share of the longer text',
+    Math.abs(after.pos - 0.5 * share) < 0.001 && Math.abs(after.progress - 0.9 * share) < 0.001,
+    `pos ${after.pos}, progress ${after.progress}, want ${0.5 * share} and ${0.9 * share}`);
+  await glossesSettled(page);
+  const placeAfter = await atTop();
+  check('the reader stays where they were', placeAfter.seg === place.seg && Math.abs(placeAfter.top - place.top) < 30, `${JSON.stringify(placeAfter)} vs ${JSON.stringify(place)}`);
+  const shown = await page.evaluate(() => ({ hrs: document.querySelectorAll('#article hr').length, last: [...document.querySelectorAll('#article p')].pop().textContent }));
+  check('a plain text shows the line as a divider', shown.hrs === 1 && shown.last.startsWith('Noon 30.'), JSON.stringify(shown));
+  check('a note says it was added', (await page.textContent('#toast-text')) === 'Added to the end of the text.');
+  await page.click('#toast-action');
+  // A smooth scroll that puts the dividing line just under the header.
+  await page.waitForFunction(() => Math.abs(document.querySelector('#article hr').getBoundingClientRect().top - 80) < 4, null, { timeout: 3000 }).catch(() => {});
+  const next = await page.$eval('#article hr', (hr) => ({ top: hr.getBoundingClientRect().top, text: hr.nextElementSibling.textContent }));
+  check('Show goes to the new part', Math.abs(next.top - 80) < 20 && next.text.startsWith('Noon 1.'), JSON.stringify(next));
+  await page.screenshot({ path: `${OUT}/s-appended.png` });
+
+  // In Chinese, after a reload: the progress shown is what was kept
+  await page.evaluate(() => fetch('/api/me/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: 'zh' }) }));
+  await page.reload();
+  await waitForArticleText(page, 'Noon 30.');
+  const bar = await page.$eval('#read-thread > div', (d) => parseInt(d.style.width, 10));
+  check('after a reload, the progress bar shows what was kept', bar >= Math.round(0.9 * share * 100) && bar < 100, `${bar}%`);
+  await page.click('#btn-menu');
+  check('zh: 追加内容 in the menu', (await page.textContent('#btn-append')) === '追加内容');
+  await page.click('#btn-append');
+  await page.waitForSelector('#source-dialog[open]');
+  d = await dialog();
+  check('zh: the dialog speaks Chinese', d.heading === '追加内容' && d.save === '追加' && (await page.textContent('#src-modes')).includes('编辑'), JSON.stringify(d));
+  await page.screenshot({ path: `${OUT}/s-append-zh.png` });
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => fetch('/api/me/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: 'en' }) }));
+  await page.reload();
+  await page.waitForSelector('#reader-view:not([hidden])');
+}
 
 // ---- a novel-sized book
 await openDialog();

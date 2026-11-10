@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -170,8 +172,15 @@ func TestBooksAreScopedToTheirOwner(t *testing.T) {
 	if got.Title != "Renamed" || got.Progress != .9 {
 		t.Fatal("renaming should keep progress")
 	}
+	// Adding to the end keeps the place: the same spot, a smaller share.
+	before, more := got.Content, got.Content+"\n\n---\n\nA few more words at the end."
+	share := float64(utf8.RuneCountInString(before)) / float64(utf8.RuneCountInString(more))
+	got, _ = s.UpdateBook(ctx, a.ID, book.ID, "Renamed", "", more)
+	if math.Abs(got.Progress-.9*share) > 1e-9 || math.Abs(got.Pos-.7*share) > 1e-9 {
+		t.Fatalf("appended: progress = %v pos = %v, want %v and %v", got.Progress, got.Pos, .9*share, .7*share)
+	}
 	got, _ = s.UpdateBook(ctx, a.ID, book.ID, "Renamed", "", "Different text")
-	if got.Progress != 0 {
+	if got.Progress != 0 || got.Pos != 0 {
 		t.Fatal("rewriting the text should reset progress")
 	}
 	if list, _ := s.ListBooks(ctx, a.ID); len(list) != 1 || list[0].Content != "" {

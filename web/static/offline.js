@@ -257,7 +257,9 @@ async function enqueue(op) {
         s.put(last);
       } else if (last && op.kind === 'update' && last.kind === 'update') {
         const contentChanged = last.meta.contentChanged || op.meta.contentChanged;
-        s.put({ ...op, seq: last.seq, meta: { ...op.meta, contentChanged } });
+        s.put({ ...op, seq: last.seq, meta: { ...op.meta, contentChanged, kept: keptThrough(last.meta, op.meta) } });
+      } else if (last && op.kind === 'progress' && all.some((o) => o.kind === 'update' && o.id === op.id && o.seq > last.seq)) {
+        s.add(op); // reading the edited text: it goes after the edit, not before it
       } else if (last && last.kind !== 'create') {
         s.put({ ...op, seq: last.seq });
       } else {
@@ -305,7 +307,10 @@ function replay(name, data, ops = pendingOps) {
         const changed = o.body.content !== undefined && o.meta?.contentChanged;
         data[i] = { ...data[i], ...metaFor(o.body), updatedAt: o.meta?.updatedAt || data[i].updatedAt };
         if (o.meta?.expiresAt !== undefined) data[i].expiresAt = o.meta.expiresAt;
-        if (changed) Object.assign(data[i], { progress: 0, pos: 0 });
+        if (changed) {
+          const kept = o.meta.kept || 0; // as the server does: kept when added to, 0% when rewritten
+          Object.assign(data[i], { progress: (data[i].progress || 0) * kept, pos: (data[i].pos || 0) * kept });
+        }
       } else if (o.kind === 'delete' && i >= 0) {
         data.splice(i, 1);
       }
@@ -377,6 +382,22 @@ function deriveTitle(content) {
 // When a text with ttlDays deletes itself, as the server will set it.
 export const expiresFor = (ttlDays, from = Date.now()) =>
   (ttlDays > 0 ? new Date(from + ttlDays * 864e5).toISOString().replace(/\.\d+Z$/, 'Z') : '');
+
+// Mirrors store.keptShare: when `next` only adds to the end of `old`, the share
+// of it that `old` takes up, by which the reading place and progress scale to
+// stay at the same spot. Undefined when the text was rewritten.
+function keptShare(old, next) {
+  const base = old.trimEnd();
+  return base && next.startsWith(base) ? base.length / next.length : undefined;
+}
+
+// Two edits waiting as one: the share kept through both (an edit that left
+// the content alone keeps it all), or undefined if either rewrote the text.
+function keptThrough(a, b) {
+  const kept = (m) => (m.contentChanged ? m.kept : 1);
+  const [x, y] = [kept(a), kept(b)];
+  return x === undefined || y === undefined ? undefined : x * y;
+}
 
 function metaFor(body) {
   const m = {};
@@ -463,9 +484,10 @@ export async function updateText(id, body) {
   const old = await quiet(tx('texts', 'readonly', (s) => done(s.get(id))));
   const now = new Date().toISOString();
   const contentChanged = !old || old.content !== body.content;
+  const kept = contentChanged && old ? keptShare(old.content, body.content) : undefined;
   await storeText({ id, content: body.content, format: body.format, updatedAt: now });
   const expiresAt = body.ttlDays === undefined ? undefined : expiresFor(body.ttlDays);
-  await enqueue({ key: `book:${id}`, kind: 'update', id, method: 'PUT', path: bookPath(id), body, meta: { updatedAt: now, contentChanged, expiresAt } });
+  await enqueue({ key: `book:${id}`, kind: 'update', id, method: 'PUT', path: bookPath(id), body, meta: { updatedAt: now, contentChanged, kept, expiresAt } });
   const book = (await view('books', [])).find((b) => b.id === id);
   return { ...book, content: body.content };
 }

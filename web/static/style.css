@@ -521,6 +521,7 @@ label.pop-row:hover { background: var(--hover); }
 .article table { border-collapse: collapse; display: block; overflow-x: auto; }
 .article td, .article th { border: 1px solid var(--line); padding: 4px 10px; }
 .article img { max-width: 100%; height: auto; }
+.article hr { margin: 2em 0; border: 0; border-top: 1px solid var(--line); }
 .seg-failed { text-decoration: underline wavy color-mix(in srgb, var(--danger) 45%, transparent); text-decoration-skip-ink: none; text-underline-offset: 7px; }
 
 /* Glosses above the line: red for words, blue with a dotted underline for phrases. */

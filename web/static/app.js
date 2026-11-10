@@ -422,11 +422,13 @@ function finishBatch({ pending, left }, offline) {
 
 // Plain text: blank lines separate paragraphs; single line breaks are kept.
 // The "\n" before each <br> keeps words on either side apart in the segment text.
+// A line of dashes on its own (what goes between a text and what was added to
+// it) is a dividing line.
 function renderPlainText(src) {
   return src.replace(/\r\n?/g, '\n').split(/\n[ \t]*\n/)
     .map((p) => p.replace(/^\n+|\n+$/g, ''))
     .filter((p) => p.trim())
-    .map((p) => `<p>${p.split('\n').map(escapeHTML).join('<br>\n')}</p>`)
+    .map((p) => (/^-{3,}$/.test(p.trim()) ? '<hr>' : `<p>${p.split('\n').map(escapeHTML).join('<br>\n')}</p>`))
     .join('\n');
 }
 
@@ -720,7 +722,7 @@ function flushProgress({ closing = false } = {}) {
   if (b.pos === b.savedPos && b.progress === b.savedProgress) return;
   b.savedPos = b.pos;
   b.savedProgress = b.progress;
-  saveProgress(b.id, b.pos || 0, b.progress || 0, { closing });
+  return saveProgress(b.id, b.pos || 0, b.progress || 0, { closing });
 }
 
 // ------------------------------------------------------------------ click any word to look it up
@@ -2127,12 +2129,19 @@ let editingId = null;
 let srcKind = 'text';
 let srcFile = null;
 let editingFormat = null;
+// A text on the shelf is changed in one of two ways: 'edit' the whole of it, or
+// 'append' more to its end, after a dividing line.
+let srcMode = 'edit';
+const appending = () => !!editingId && srcMode === 'append';
+const APPEND_SEPARATOR = '\n\n---\n\n'; // as the server puts between a text and what an agent adds
 
-function openSourceDialog(book = null) {
+function openSourceDialog(book = null, { append = false } = {}) {
   editingId = book?.id || null;
   editingFormat = book?.format || null;
+  srcMode = append ? 'append' : 'edit';
   $('#src-title').value = book?.title || '';
   $('#src-text').value = book?.content || '';
+  $('#src-more').value = '';
   fillTTL(book);
   $('#src-url').value = '';
   setSourceFile(null);
@@ -2140,22 +2149,37 @@ function openSourceDialog(book = null) {
   updateSrcCount();
   updateSourceOffline();
   $('#source-dialog').showModal();
-  $('#src-text').focus();
+  (appending() ? $('#src-more') : $('#src-text')).focus();
 }
 
 function setSourceKind(kind) {
   srcKind = kind;
   for (const r of document.querySelectorAll('#src-kinds input')) r.checked = r.value === kind;
-  for (const p of document.querySelectorAll('.src-panel')) p.hidden = p.dataset.kind !== kind;
   $('#src-error').textContent = '';
+  showSourcePanel();
   labelSourceDialog();
+}
+
+function setSourceMode(mode) {
+  srcMode = mode;
+  $('#src-error').textContent = '';
+  showSourcePanel();
+  labelSourceDialog();
+  updateSrcCount();
+}
+
+function showSourcePanel() {
+  const panel = appending() ? 'append' : srcKind;
+  for (const p of document.querySelectorAll('.src-panel')) p.hidden = p.dataset.kind !== panel;
 }
 
 function labelSourceDialog() {
   const editing = !!editingId;
-  $('#source-heading').textContent = t(editing ? 'source.edit' : 'source.add');
+  $('#source-heading').textContent = t(appending() ? 'source.append' : editing ? 'source.edit' : 'source.add');
   $('#src-kinds').hidden = editing;
-  $('#src-save').textContent = t(editing ? 'source.saveEdit'
+  $('#src-modes').hidden = !editing;
+  for (const r of document.querySelectorAll('#src-modes input')) r.checked = r.value === srcMode;
+  $('#src-save').textContent = t(appending() ? 'source.saveAppend' : editing ? 'source.saveEdit'
     : { text: 'source.save', url: 'source.saveUrl', file: srcFile && isPDF(srcFile) ? 'source.savePdf' : 'source.saveEpub' }[srcKind]);
   $('#src-title').placeholder = t({ text: 'source.titlePh', url: 'source.titleUrl', file: 'source.titleFile' }[srcKind]);
   // The sample is for getting started: offered only while the shelf is empty.
@@ -2179,7 +2203,7 @@ function updateSourceOffline() {
 const looksLikeURL = (s) => /^(https?:\/\/)?[\w-]+(\.[\w-]+)+(:\d+)?(\/\S*)?$/i.test(s.trim()) && !/\s/.test(s.trim());
 
 function updateSrcCount() {
-  const text = $('#src-text').value;
+  const text = (appending() ? $('#src-more') : $('#src-text')).value;
   const n = text.length;
   $('#src-count').textContent = n ? t('chars', { n: n.toLocaleString() }) : '';
   const isLink = !editingId && n > 0 && n < 2000 && looksLikeURL(text);
@@ -2248,7 +2272,17 @@ async function submitSource() {
     field?.focus();
   };
   let content = '';
-  if (srcKind === 'text') {
+  const adding = appending();
+  if (adding) {
+    // The text as it stands in Edit (usually as saved), then the addition.
+    const more = $('#src-more').value.trim();
+    if (!more) return fail(t('source.emptyMore'), $('#src-more'));
+    const text = $('#src-text').value.replace(/\s+$/, '');
+    content = text ? text + APPEND_SEPARATOR + more : more;
+    if (content.length > MAX_CHARS) {
+      return fail(t('source.tooLong', { n: content.length.toLocaleString(), max: MAX_CHARS.toLocaleString() }), $('#src-more'));
+    }
+  } else if (srcKind === 'text') {
     content = $('#src-text').value.replace(/\s+$/, '');
     if (!content.trim()) return fail(t('source.empty'), $('#src-text'));
     if (content.length > MAX_CHARS) {
@@ -2269,7 +2303,9 @@ async function submitSource() {
   try {
     if (editingId) {
       const format = editingFormat === 'markdown' ? 'markdown' : detectFormat(content);
+      await sendProgress(editingId);
       book = await updateBook(editingId, { title, content, format, ttlDays });
+      holdProgress(editingId);
     } else if (srcKind === 'text') {
       book = await createBook({ title, content, format: detectFormat(content), ttlDays });
     } else if (srcKind === 'url') {
@@ -2283,15 +2319,45 @@ async function submitSource() {
     form.inert = false;
     busy($('#src-save'), false);
     if (srcKind === 'file' && srcFile) setSourceFile(srcFile); // the page count goes
-    const field = { text: '#src-text', url: '#src-url', file: '#src-file' }[editingId ? 'text' : srcKind];
+    const field = adding ? '#src-more' : { text: '#src-text', url: '#src-url', file: '#src-file' }[editingId ? 'text' : srcKind];
     return fail(e instanceof PDFError ? t(e.key) : e.message, $(field));
   }
   form.inert = false;
   busy($('#src-save'), false);
   $('#source-dialog').close();
   const target = `#/read/${encodeURIComponent(book.id)}`;
-  if (location.hash === target) openBook(book.id); // edited the open book: re-render it
-  else location.hash = target;
+  if (location.hash !== target) {
+    location.hash = target;
+  } else if (!adding) {
+    openBook(book.id); // edited the open book: re-render it
+  } else {
+    // Added to the open book: the reader stays where they are, and can go to
+    // the new part.
+    const oldBlocks = $('#article').childElementCount;
+    await openBook(book.id, { keepPlace: true });
+    if (state.book?.id === book.id) {
+      showToast(t('source.appended'), { action: { label: t('reader.showNew'), run: () => showNewPart(oldBlocks) } });
+    }
+  }
+}
+
+// Before the open text is saved in a new version: what's been read of it goes
+// first (or waits first in the outbox), so the server keeps it and scales it
+// with the text when only added to.
+async function sendProgress(id) {
+  if (state.book?.id !== id) return;
+  await flushProgress();
+  if (net.online) await flush();
+}
+
+// The open text was saved in a new version, which comes with its own reading
+// place and progress (kept for an addition, 0% for a rewrite): what was read of
+// the old one meanwhile isn't sent over them.
+function holdProgress(id) {
+  clearTimeout(saveTimer);
+  saveTimer = 0;
+  const b = state.book;
+  if (b?.id === id) Object.assign(b, { savedPos: b.pos, savedProgress: b.progress });
 }
 
 // A PDF is read here (pdftext.js) and added like pasted Markdown, so it also
@@ -2613,25 +2679,24 @@ async function refreshOpenBook(books) {
     showToast(t('reader.updated'));
     return;
   }
-  showToast(t('reader.added'), {
-    action: {
-      label: t('reader.showNew'),
-      run: () => {
-        const fresh = [...$('#article').children].slice(oldBlocks);
-        if (!fresh.length) return;
-        const top = fresh[0].getBoundingClientRect().top + window.scrollY - 80;
-        window.scrollTo({ top, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-        // Light up the new part for a moment, so it's clear where it starts.
-        for (const el of fresh) {
-          if (el.tagName === 'HR') continue;
-          el.classList.remove('fresh');
-          void el.offsetWidth; // restart the animation
-          el.classList.add('fresh');
-          el.addEventListener('animationend', () => el.classList.remove('fresh'), { once: true });
-        }
-      },
-    },
-  });
+  showToast(t('reader.added'), { action: { label: t('reader.showNew'), run: () => showNewPart(oldBlocks) } });
+}
+
+// Go to what was added at the end of the open text: the blocks after the
+// first `oldBlocks`.
+function showNewPart(oldBlocks) {
+  const fresh = [...$('#article').children].slice(oldBlocks);
+  if (!fresh.length) return;
+  const top = fresh[0].getBoundingClientRect().top + window.scrollY - 80;
+  window.scrollTo({ top, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  // Light up the new part for a moment, so it's clear where it starts.
+  for (const el of fresh) {
+    if (el.tagName === 'HR') continue;
+    el.classList.remove('fresh');
+    void el.offsetWidth; // restart the animation
+    el.classList.add('fresh');
+    el.addEventListener('animationend', () => el.classList.remove('fresh'), { once: true });
+  }
 }
 
 // While the shelf or a text is on screen, look for changes made elsewhere (an
@@ -3161,6 +3226,10 @@ async function init() {
     $('#menu-pop').hidePopover?.();
     if (state.book) openSourceDialog(state.book);
   };
+  $('#btn-append').onclick = () => {
+    $('#menu-pop').hidePopover?.();
+    if (state.book) openSourceDialog(state.book, { append: true });
+  };
   $('#shelf').addEventListener('click', (e) => {
     const id = e.target.closest('[data-del-book]')?.dataset.delBook;
     if (!id) return;
@@ -3198,9 +3267,14 @@ async function init() {
     if (btn) revokeToken(btn);
   });
   $('#src-text').addEventListener('input', () => { updateSrcCount(); $('#src-error').textContent = ''; });
+  $('#src-more').addEventListener('input', () => { updateSrcCount(); $('#src-error').textContent = ''; });
   $('#src-kinds').addEventListener('change', (e) => {
     if (e.target.name === 'kind') setSourceKind(e.target.value);
     (srcKind === 'url' ? $('#src-url') : srcKind === 'file' ? $('#src-file') : $('#src-text')).focus();
+  });
+  $('#src-modes').addEventListener('change', (e) => {
+    if (e.target.name === 'mode') setSourceMode(e.target.value);
+    (appending() ? $('#src-more') : $('#src-text')).focus();
   });
   $('#src-use-link').onclick = () => {
     $('#src-url').value = $('#src-text').value.trim();
