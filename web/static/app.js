@@ -442,7 +442,6 @@ function markScrolled() {
 }
 
 function setView(view) {
-  if (onChatPage() && view !== 'chat') closeChat({ now: true }); // the page, not a sidebar to slide away
   document.body.dataset.view = view;
   requestAnimationFrame(markScrolled);
   if (view !== 'reader') { hideHint(); hideToast(); }
@@ -455,8 +454,6 @@ function setView(view) {
   $('#settings-view').hidden = view !== 'settings';
   $('#clip-view').hidden = view !== 'clip';
   $('#login-view').hidden = view !== 'login';
-  if (view === 'chat') $('#btn-chat').setAttribute('aria-current', 'page');
-  else $('#btn-chat').removeAttribute('aria-current');
   if (view === 'settings') $('#banner-action').hidden = true; // already here
   renderCrumbs(view);
   renderAvatar();
@@ -495,7 +492,6 @@ function renderCrumbs(view) {
     items.push({ key: 'settings.page' });
   }
   if (view === 'clip') items.push({ key: 'clip.crumb' });
-  if (view === 'chat') items.push({ key: 'chatPage.title' });
   $('#crumbs ol').replaceChildren(...items.map((c, i) => {
     const li = document.createElement('li');
     li.className = c.home ? 'crumb-home' : c.key ? '' : 'crumb-title';
@@ -1141,57 +1137,6 @@ function newChatId() {
 const liveChats = new Map();
 let drawnChat = null; // the conversation whose turns are in the sidebar
 
-// Chat (#/chat): talk about any text, pasted in, without adding it to the shelf.
-// It is a conversation with no book, and the panel Ask AI shows beside a text
-// fills the page instead.
-const MAX_TEXT_CHARS = 6000; // as the server allows for pasted text
-const onChatPage = () => document.body.dataset.view === 'chat';
-let textChat = null; // the latest Chat, there again on coming back to the page
-// Until its first question, a Chat's text can still be changed.
-const drafting = (chat) => !!chat && !chat.bookId && !chat.messages.length;
-
-function canAsk() {
-  const chat = state.chat;
-  if (!drafting(chat)) return true;
-  const n = [...chat.selection.trim()].length;
-  return n > 0 && n <= MAX_TEXT_CHARS;
-}
-
-// The conversation this panel is for: the page's Chat, or the sidebar's Ask AI.
-function panelChat() {
-  if (onChatPage()) return textChat;
-  return state.chat?.bookId ? state.chat : null;
-}
-
-function showChatPage() {
-  flushProgress();
-  state.book = null;
-  resetLazy();
-  closeCard();
-  hideFab();
-  hideBanner();
-  setView('chat');
-  document.title = `${t('chatPage.title')} – LingoLens`;
-  if (textChat) openConversation(textChat);
-  else openChat('', '');
-}
-
-function showTextChat(chat) {
-  textChat = chat;
-  if (onChatPage()) openConversation(chat);
-  else location.hash = '#/chat';
-}
-
-// Shows the sidebar, or on the Chat page the panel that fills it.
-function showDrawer(mode) {
-  clearTimeout(chatHideTimer);
-  const drawer = $('#chat');
-  drawer.classList.remove('closing');
-  setChatMode(mode);
-  drawer.hidden = false;
-  document.body.classList.toggle('chat-open', !onChatPage());
-}
-
 function openChat(selection, passage, autoQuestion) {
   dismissHint();
   const book = state.book;
@@ -1202,7 +1147,7 @@ function openChat(selection, passage, autoQuestion) {
   showConversation();
   if (autoQuestion) sendChat(autoQuestion);
   else {
-    $(drafting(state.chat) ? '#chat-text' : '#chat-input').focus({ preventScroll: true });
+    $('#chat-input').focus({ preventScroll: true });
     offerResume(state.chat);
   }
 }
@@ -1211,9 +1156,13 @@ function openChat(selection, passage, autoQuestion) {
 function showConversation() {
   const chat = state.chat;
   drawnChat = chat;
-  if (!chat.bookId) textChat = chat;
-  showDrawer('chat');
-  drawContext(chat);
+  clearTimeout(chatHideTimer);
+  const drawer = $('#chat');
+  drawer.classList.remove('closing');
+  setChatMode('chat');
+  const quote = $('#chat-quote');
+  quote.textContent = chat.selection;
+  quote.classList.remove('open', 'clamped');
   const link = $('#chat-book');
   const here = document.body.dataset.view === 'reader' && String(state.book?.id) === chat.bookId;
   link.hidden = !chat.bookId || !chat.bookTitle || here;
@@ -1244,35 +1193,15 @@ function showConversation() {
   $('#chat-input').value = '';
   fitChatInput();
   renderChips();
+  drawer.hidden = false;
+  document.body.classList.add('chat-open');
   updateHistoryDot();
   const log = $('#chat-log');
   log.scrollTop = started ? log.scrollHeight : 0;
-  requestAnimationFrame(updateChatJump);
-}
-
-// What a conversation is about: the selected text (Ask AI), or the pasted text
-// (Chat), which can be changed until the first question.
-function drawContext(chat) {
-  const draft = drafting(chat);
-  const label = $('#chat-context-label');
-  label.dataset.i18n = chat.bookId ? 'chat.context' : 'chatPage.text';
-  label.textContent = t(label.dataset.i18n);
-  const quote = $('#chat-quote');
-  quote.hidden = draft;
-  quote.textContent = chat.selection;
-  quote.classList.remove('open', 'clamped');
-  $('#chat-paste').hidden = !draft;
-  if (draft) {
-    $('#chat-text').value = chat.selection;
-    noteTextLength();
-  }
-  requestAnimationFrame(() => quote.classList.toggle('clamped', quote.scrollHeight > quote.clientHeight + 2));
-}
-
-function noteTextLength() {
-  const n = [...$('#chat-text').value.trim()].length;
-  $('#chat-text-note').textContent = n > MAX_TEXT_CHARS
-    ? t('chatPage.tooLong', { n: n.toLocaleString(), max: MAX_TEXT_CHARS.toLocaleString() }) : '';
+  requestAnimationFrame(() => {
+    quote.classList.toggle('clamped', quote.scrollHeight > quote.clientHeight + 2);
+    updateChatJump();
+  });
 }
 
 // Back to a conversation: as it was left (scrolled where it was, an answer
@@ -1285,7 +1214,13 @@ function openConversation(chat) {
     showConversation();
     return;
   }
-  showDrawer('chat');
+  clearTimeout(chatHideTimer);
+  const drawer = $('#chat');
+  drawer.classList.remove('closing');
+  setChatMode('chat');
+  drawer.hidden = false;
+  document.body.classList.add('chat-open');
+  updateHistoryDot();
   requestAnimationFrame(updateChatJump);
 }
 
@@ -1293,9 +1228,8 @@ function openConversation(chat) {
 function updateHistoryDot() {
   const drawer = $('#chat');
   const inView = !drawer.hidden && !drawer.classList.contains('closing') && drawer.dataset.mode === 'chat';
-  const away = [...liveChats.values()].filter((c) => !(inView && c === drawnChat));
-  $('#btn-history').classList.toggle('live', away.some((c) => c.bookId));
-  $('#btn-chat').classList.toggle('live', away.some((c) => !c.bookId));
+  const away = [...liveChats.values()].some((c) => !(inView && c === drawnChat));
+  $('#btn-history').classList.toggle('live', away);
 }
 
 // Asking about something asked about before (same text, same selection):
@@ -1361,11 +1295,8 @@ function setChatMode(mode) {
   $('#chat-history').hidden = !history;
   $('#chat-log').hidden = history;
   $('#chat-dock').hidden = history;
-  $('#chat-back').hidden = !(history && panelChat());
-  const title = $('#chat-title-text');
-  title.dataset.i18n = history ? 'chat.historyTitle' : onChatPage() ? 'chatPage.title' : 'chat.title';
-  title.textContent = t(title.dataset.i18n);
-  $('#chat-new').hidden = !onChatPage();
+  $('#chat-back').hidden = !(history && state.chat);
+  $('#chat-title-text').textContent = t(history ? 'chat.historyTitle' : 'chat.title');
   $('#chat-hist-btn').setAttribute('aria-pressed', String(history));
   $('#btn-history').setAttribute('aria-pressed', String(history));
   updateHistoryDot();
@@ -1374,7 +1305,12 @@ function setChatMode(mode) {
 async function openHistory() {
   dismissHint();
   hideFab();
-  showDrawer('history');
+  clearTimeout(chatHideTimer);
+  const drawer = $('#chat');
+  drawer.classList.remove('closing');
+  setChatMode('history');
+  drawer.hidden = false;
+  document.body.classList.add('chat-open');
   const inBook = document.body.dataset.view === 'reader' && state.book;
   hist.scope = inBook ? 'book' : 'all';
   if (!hist.items) {
@@ -1404,7 +1340,6 @@ function fmtWhen(iso) {
 
 // The saved conversations, with this session's first: the server may not have
 // their latest turn yet, or any turn while the first answer is still arriving.
-// The Chat page lists Chats; Ask AI lists conversations about texts.
 function historyItems() {
   const mine = [...new Set([...liveChats.values(), state.chat])].filter((c) => c?.messages.length && (c.ctl || c.saved));
   return [
@@ -1416,7 +1351,7 @@ function historyItems() {
       };
     }),
     ...(hist.items || []).filter((x) => !mine.some((c) => c.id === x.id)),
-  ].filter((c) => !c.bookId === onChatPage());
+  ];
 }
 
 function renderHistory() {
@@ -1429,7 +1364,7 @@ function renderHistory() {
   let items = historyItems();
   if (inBook && hist.scope === 'book') items = items.filter((c) => c.bookId === String(state.book.id));
   $('#hist-status').textContent = (!items.length && hist.status)
-    || (hist.items && !items.length ? t(onChatPage() ? 'chatPage.histEmpty' : hist.scope === 'book' && inBook ? 'chat.histEmptyBook' : 'chat.histEmpty') : '');
+    || (hist.items && !items.length ? t(hist.scope === 'book' && inBook ? 'chat.histEmptyBook' : 'chat.histEmpty') : '');
   for (const c of items) {
     const li = document.createElement('li');
     li.className = 'hist-item';
@@ -1485,8 +1420,7 @@ function renderChips() {
   const started = !!chat?.messages.length || !!$('#chat-turns').childElementCount;
   chips.className = started ? 'chips follow' : 'chips start';
   chips.innerHTML = '';
-  const suggestions = chat && !chat.bookId ? [t('chat.checkGrammar'), ...t('chat.chips')] : t('chat.chips');
-  for (const c of suggestions) {
+  for (const c of t('chat.chips')) {
     if (started && chat?.asked.has(c)) continue;
     const b = document.createElement('button');
     b.className = 'chip';
@@ -1495,24 +1429,18 @@ function renderChips() {
     b.onclick = () => sendChat(c);
     chips.append(b);
   }
-  syncChips();
+  chips.hidden = !chips.childElementCount;
   $('#chat-input').placeholder = t(started ? 'chat.followup' : 'chat.placeholder');
 }
 
-// Suggestions wait for a Chat's text.
-function syncChips() {
-  const chips = $('#chat-chips');
-  chips.hidden = !chips.childElementCount || !canAsk();
-}
-
 // Hides the sidebar. An answer being written goes on (see liveChats).
-function closeChat({ now = false } = {}) {
+function closeChat() {
   $('#btn-history').setAttribute('aria-pressed', 'false');
   $('#hist-list').innerHTML = '';
   const drawer = $('#chat');
   document.body.classList.remove('chat-open');
   if (drawer.hidden) return;
-  if (now || reduceMotion()) {
+  if (reduceMotion()) {
     drawer.hidden = true;
     updateHistoryDot();
     return;
@@ -1536,7 +1464,7 @@ function fitChatInput() {
   const el = $('#chat-input');
   el.style.height = 'auto';
   el.style.height = `${Math.min(el.scrollHeight, 150)}px`;
-  if (!state.chat?.ctl) $('#chat-send').disabled = !el.value.trim() || !canAsk();
+  if (!state.chat?.ctl) $('#chat-send').disabled = !el.value.trim();
 }
 
 // A new question goes to the top of the conversation, with room below for the
@@ -1757,10 +1685,6 @@ async function sendChat(question) {
   const chat = state.chat;
   question = question.trim();
   if (!chat || !question || chat.ctl) return;
-  if (!canAsk()) {
-    $('#chat-text').focus();
-    return;
-  }
   const problem = providerProblem();
   if (problem) {
     addBubble('error', problem, startTurn(''));
@@ -1771,10 +1695,7 @@ async function sendChat(question) {
     addBubble('error', t('net.chatOffline'), startTurn(''));
     return;
   }
-  const settling = drafting(chat); // Chat: the first question settles the text
-  if (settling) chat.selection = chat.selection.trim();
   chat.messages.push({ role: 'user', content: question });
-  if (settling) drawContext(chat);
   chat.asked.add(question);
   chat.updatedAt = new Date().toISOString();
   $('#chat-resume').hidden = true;
@@ -1842,20 +1763,14 @@ async function sendChat(question) {
   if (shown) {
     $('#chat-turns').removeAttribute('aria-busy');
     setChatBusy(false);
-    if (!answer) {
-      if (drafting(chat)) drawContext(chat); // nothing asked yet: the text can still change
-      renderChips();
-    }
+    if (!answer) renderChips();
     updateChatJump();
   }
   if (drawer.dataset.mode === 'history' && !drawer.hidden) renderHistory();
   // Answered out of sight: say so, with a way back to it.
   const inView = shown && !drawer.hidden && !drawer.classList.contains('closing') && drawer.dataset.mode === 'chat';
   if (answer && !inView && !ctl.signal.aborted && state.me) {
-    const text = !chat.bookId;
-    showToast(t(text ? 'chatPage.answered' : 'chat.answered'), {
-      icon: 'spark', action: { label: t('chat.show'), run: () => (text ? showTextChat(chat) : openConversation(chat)) },
-    });
+    showToast(t('chat.answered'), { icon: 'spark', action: { label: t('chat.show'), run: () => openConversation(chat) } });
   }
 }
 
@@ -1886,7 +1801,7 @@ function setChatBusy(busy) {
   const btn = $('#chat-send');
   btn.classList.toggle('busy', busy);
   btn.setAttribute('aria-label', t(busy ? 'chat.stop' : 'chat.send'));
-  btn.disabled = busy ? false : !$('#chat-input').value.trim() || !canAsk();
+  btn.disabled = busy ? false : !$('#chat-input').value.trim();
 }
 
 // ------------------------------------------------------------------ settings page
@@ -2413,8 +2328,6 @@ function route() {
     showSettings();
   } else if (hash === '#/clip') {
     showClip();
-  } else if (hash === '#/chat') {
-    showChatPage();
   } else {
     const m = hash.match(/^#\/read\/([^/]+)$/);
     if (m) openBook(decodeURIComponent(m[1]));
@@ -2820,7 +2733,7 @@ function showLogin() {
   for (const c of liveChats.values()) c.ctl?.abort();
   state.chat?.ctl?.abort();
   liveChats.clear();
-  state.chat = drawnChat = textChat = null;
+  state.chat = drawnChat = null;
   hist.items = null;
   resetLazy();
   closeCard();
@@ -3413,29 +3326,7 @@ async function init() {
   });
 
   // Chat drawer
-  $('#chat-close').onclick = () => closeChat();
-  $('#chat-new').onclick = () => openChat('', '');
-  $('#chat-text').addEventListener('input', () => {
-    if (!drafting(state.chat)) return;
-    state.chat.selection = $('#chat-text').value;
-    noteTextLength();
-    syncChips();
-    fitChatInput();
-  });
-  // Reading the clipboard needs a secure page (HTTPS or localhost); pasting
-  // into the box works everywhere.
-  $('#chat-paste-btn').hidden = !navigator.clipboard?.readText;
-  $('#chat-paste-btn').onclick = async () => {
-    const box = $('#chat-text');
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text) {
-        box.setRangeText(text, box.selectionStart, box.selectionEnd, 'end');
-        box.dispatchEvent(new Event('input'));
-      }
-    } catch { /* not allowed: the box still takes a paste */ }
-    box.focus();
-  };
+  $('#chat-close').onclick = closeChat;
   $('#chat-form').addEventListener('submit', (e) => {
     e.preventDefault();
     if (state.chat?.ctl) state.chat.ctl.abort();
@@ -3449,10 +3340,10 @@ async function init() {
   });
   $('#chat-input').addEventListener('input', fitChatInput);
   $('#chat-hist-btn').onclick = () => {
-    if ($('#chat').dataset.mode === 'history' && panelChat()) openConversation(panelChat());
+    if ($('#chat').dataset.mode === 'history' && state.chat) openConversation(state.chat);
     else if ($('#chat').dataset.mode !== 'history') openHistory();
   };
-  $('#chat-back').onclick = () => { if (panelChat()) openConversation(panelChat()); };
+  $('#chat-back').onclick = () => { if (state.chat) openConversation(state.chat); };
   $('#hist-scope').addEventListener('click', (e) => {
     const b = e.target.closest('[data-scope]');
     if (!b) return;
@@ -3473,8 +3364,8 @@ async function init() {
   // Ask AI, and popovers and dialogs above it, don't count).
   document.addEventListener('pointerdown', (e) => {
     const drawer = $('#chat');
-    if (drawer.hidden || drawer.classList.contains('closing') || e.button > 0 || onChatPage()) return;
-    if (e.target.closest('#chat, #ask-fab, #btn-history, #btn-chat, #toast, [popover], dialog, .banner')) return;
+    if (drawer.hidden || drawer.classList.contains('closing') || e.button > 0) return;
+    if (e.target.closest('#chat, #ask-fab, #btn-history, #toast, [popover], dialog, .banner')) return;
     closeChat();
   });
   $('#chat-log').addEventListener('scroll', updateChatJump, { passive: true });
@@ -3548,7 +3439,7 @@ async function init() {
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (!$('#card').hidden) closeCard();
-    else if (!$('#chat').hidden && !onChatPage()) closeChat();
+    else if (!$('#chat').hidden) closeChat();
   });
 
   window.addEventListener('hashchange', route);

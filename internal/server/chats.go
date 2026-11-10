@@ -30,8 +30,8 @@ type chatSave struct {
 
 func validateSavedChat(c *chatSave) string {
 	c.Selection = strings.TrimSpace(c.Selection)
-	if limit := maxSelection(c.Passage); c.Selection == "" || utf8.RuneCountInString(c.Selection) > limit {
-		return fmt.Sprintf("The selection must be 1–%d characters.", limit)
+	if c.Selection == "" || utf8.RuneCountInString(c.Selection) > maxSelectionChar {
+		return fmt.Sprintf("The selection must be 1–%d characters.", maxSelectionChar)
 	}
 	c.Passage = clipAround(c.Passage, c.Selection, maxPassageChars)
 	n := len(c.Messages)

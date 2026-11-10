@@ -27,7 +27,7 @@ LINGOLENS_DEV_FAKE=1 LINGOLENS_ADMIN_EMAIL=dev@example.com LINGOLENS_ADMIN_PASSW
 | `make e2e` | Browser tests with local Node 20+ and Playwright's Chromium (first time on Linux: `cd e2e && npx playwright install-deps chromium`) |
 | `make e2e-docker` | The same browser tests inside Playwright's Docker image; no Node needed |
 
-The browser tests build the server, start it on a free port with a throwaway data directory and the Fake model, and run eleven suites: first-run setup (on its own empty server), sign-in and accounts, shelf and reader, Chat, phones and tablets, header, theme, Add Source (text, web page, EPUB, agent API), PDFs (printed by Chromium with running headers and page numbers, and offline), the bookmarklet (against a fixture site that refuses the server) and offline sync. `make e2e SUITES="shelf offline"` runs only those. Screenshots and the server log land in `e2e/out/` (CI uploads them when a run fails).
+The browser tests build the server, start it on a free port with a throwaway data directory and the Fake model, and run ten suites: first-run setup (on its own empty server), sign-in and accounts, shelf and reader, phones and tablets, header, theme, Add Source (text, web page, EPUB, agent API), PDFs (printed by Chromium with running headers and page numbers, and offline), the bookmarklet (against a fixture site that refuses the server) and offline sync. `make e2e SUITES="shelf offline"` runs only those. Screenshots and the server log land in `e2e/out/` (CI uploads them when a run fails).
 
 ## Layout
 

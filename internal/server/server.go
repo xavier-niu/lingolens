@@ -275,8 +275,8 @@ func validateChat(req *chatRequest) string {
 	if req.Selection == "" {
 		return "Select some text to ask about."
 	}
-	if limit := maxSelection(req.Passage); utf8.RuneCountInString(req.Selection) > limit {
-		return fmt.Sprintf("The text is too long (max %d characters).", limit)
+	if utf8.RuneCountInString(req.Selection) > maxSelectionChar {
+		return fmt.Sprintf("Selection is too long (max %d characters).", maxSelectionChar)
 	}
 	req.Passage = clipAround(req.Passage, req.Selection, maxPassageChars)
 	if len(req.Messages) == 0 || len(req.Messages) > maxChatMessages {

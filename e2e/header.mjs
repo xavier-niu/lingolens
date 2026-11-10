@@ -67,7 +67,7 @@ for (const [name, opts] of [
     check(`${name}/${lang}: title clear of header buttons`, hits.length === 0, hits.join(','));
     check(`${name}/${lang}: buttons inside the screen`, r.parts.every((p) => p.left >= 0 && p.right <= r.vw + 0.5) && r.scrollW <= r.vw, JSON.stringify(r.parts));
     const buttons = r.parts.map((p) => p.id).filter((id) => id.startsWith('btn-')).join();
-    check(`${name}/${lang}: Chat first, reading options next to History, no level button`, /^btn-chat,btn-display,btn-history,btn-wordbook,btn-menu(,btn-account)?$/.test(buttons), buttons);
+    check(`${name}/${lang}: reading options sit next to History, with no level button`, /^btn-display,btn-history,btn-wordbook,btn-menu(,btn-account)?$/.test(buttons), buttons);
     check(`${name}/${lang}: reading options look like History`, new Set(r.looks).size === 1, r.looks.join(' | '));
     if (narrow) check(`${name}/${lang}: title hidden when there is no room`, r.title === null, JSON.stringify(r.title));
     else check(`${name}/${lang}: long title still readable`, r.title && r.title.right - r.title.left >= 100, JSON.stringify(r.title));
