@@ -2193,7 +2193,6 @@ function labelSourceDialog() {
   for (const r of document.querySelectorAll('#src-modes input')) r.checked = r.value === srcMode;
   $('#src-save').textContent = t(appending() ? 'source.saveAppend' : editing ? 'source.saveEdit'
     : { text: 'source.save', url: 'source.saveUrl', file: srcFile && isPDF(srcFile) ? 'source.savePdf' : 'source.saveEpub' }[srcKind]);
-  $('#src-title').placeholder = t({ text: 'source.titlePh', url: 'source.titleUrl', file: 'source.titleFile' }[srcKind]);
   // The sample is for getting started: offered only while the shelf is empty.
   $('#src-sample').hidden = editing || srcKind !== 'text' || state.books.length > 0;
   $('#src-delete').hidden = !editing;

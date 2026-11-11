@@ -38,6 +38,8 @@ check('no Markdown option any more', !(await page.$('#src-kinds input[value="mar
 check('nothing disabled or "coming soon"', (await page.$$('#src-kinds input:disabled')).length === 0);
 await page.fill('#src-text', 'Dear Sam,\n\nThanks for the letter. I hope you are well.');
 check('plain text: no Markdown note', !(await visible('#src-md')));
+const titleHint = () => page.getAttribute('#src-title', 'placeholder');
+check('the title just says it’s optional', (await titleHint()) === 'Optional', await titleHint());
 await page.fill('#src-text', 'Two reasons:\n1. It is cheap.\n2. It is fast.');
 check('a few Markdown marks: plain text, with Markdown offered', await visible('#src-md')
   && (await page.textContent('#src-md-text')) === 'Saved as plain text, without formatting.' && (await page.textContent('#src-md-switch')) === 'Use Markdown');
@@ -110,6 +112,7 @@ check('…its wrapped lines flow on; short lines keep their breaks', brs.join() 
 await openDialog();
 await page.click('#src-kinds label:has(input[value="url"])');
 check('URL field focused', await page.evaluate(() => document.activeElement.id === 'src-url'));
+check('…the title still just Optional', (await titleHint()) === 'Optional', await titleHint());
 await page.fill('#src-url', SITE + 'missing.html');
 await page.click('#src-save');
 await page.waitForFunction(() => document.querySelector('#src-error').textContent.length > 0);
@@ -130,6 +133,7 @@ check('section heading kept', !!(await page.$('#article h2')));
 await openDialog();
 await page.click('#src-kinds label:has(input[value="file"])');
 check('Import Book label', (await page.textContent('#src-save')) === 'Import Book');
+check('…and the title Optional', (await titleHint()) === 'Optional', await titleHint());
 await page.click('#src-save');
 check('asks for a file first', (await page.textContent('#src-error')).includes('Choose an EPUB or PDF'));
 await page.setInputFiles('#src-file', fixture('notes.txt'));
@@ -256,6 +260,7 @@ await page.keyboard.press('Escape');
   check('zh: the dialog speaks Chinese', d.heading === '追加内容' && d.save === '追加' && (await page.textContent('#src-modes')).includes('编辑'), JSON.stringify(d));
   await page.fill('#src-more', '## Noon\n\nThe boats came back.');
   check('zh: Markdown to add: the note, with plain text offered', await visible('#src-md') && (await page.textContent('#src-md-switch')) === '改用纯文本', await page.textContent('#src-md'));
+  check('zh: the title is 可选', (await titleHint()) === '可选', await titleHint());
   await page.screenshot({ path: `${OUT}/s-append-zh.png` });
   await page.keyboard.press('Escape');
   await page.evaluate(() => fetch('/api/me/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: 'en' }) }));
