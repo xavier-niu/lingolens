@@ -922,6 +922,8 @@ body.chat-open .hint { display: none; }
 .kind:has(input:disabled) { opacity: .45; cursor: not-allowed; }
 .src-detected { display: flex; align-items: center; gap: 6px; color: var(--success); }
 .src-detected[hidden] { display: none; }
+.src-detected.is-plain { color: var(--muted); }
+.src-detected.is-plain svg { display: none; }
 .link-btn { border: 0; padding: 0; background: none; color: var(--phrase); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .dropzone {
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;

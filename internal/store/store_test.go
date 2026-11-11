@@ -276,6 +276,87 @@ func TestDetectFormat(t *testing.T) {
 		"Chapter 1\n\nIt was 5 p.m. and #hashtags are not titles.": "text",
 		"Two reasons:\n1. It's cheap.\n2. It's fast.":              "text",
 		"He said *maybe* and left.":                                "text",
+		// What chat apps and notes give: bold titles, links, images, …
+		"**Small Habits**\r\n\r\nMost people think *big* goals need big changes.":                          "markdown",
+		"Note: do **not** skip this step.":                                                                 "markdown",
+		"See [the guide](guide.md) first.":                                                                 "markdown",
+		"A walk\n\n![The gate](gate.jpg)\n\nWe left early.":                                                "markdown",
+		"Morning Routines\n================\n\nMost people check their phones.":                            "markdown",
+		"  # Coffee\n\n  Coffee grows in many countries.":                                                  "markdown",
+		"#\u00a0Coffee\n\nCoffee grows in many countries.":                                                 "markdown",
+		"| a | b |\n|--|--|\n| 1 | 2 |":                                                                    "markdown",
+		"It was *never* calm. It was _always_ loud. It was ~~quiet~~ mad.":                                 "markdown",
+		"Read the [guide][1] and the [notes][2].\n\n[1]: /guide\n[2]: /notes":                              "markdown",
+		"The test:\n1. It sends requests.\n2. It checks:\n   - they all succeed\n   - the kill came first": "markdown",
+		// … and plain text that only looks a little like it.
+		"The woods are *lovely*, dark and deep,\nBut I have promises to keep.": "text",
+		"The letter [sic](1990) was lost.":                                     "text",
+		"In Python, 5**2 is 25 and 3**4 is 81.":                                "text",
+		"Use snake_case names like user_id and book_id.":                       "text",
+		"Part one.\n\n---\n\nPart two.\n\n---\n\nPart three.":                  "text",
+		"* * * * *\n\nThe study found a 20% rise* in sales.":                   "text",
+		"- Where are you going?\n- Home.\n\nShe turned away.":                  "text",
+		"Bring:\n  - a map\n  - a coat":                                        "text",
+	} {
+		if got := DetectFormat(text); got != want {
+			t.Errorf("DetectFormat(%q) = %s, want %s", text, got, want)
+		}
+	}
+}
+
+// Text wrapped at a fixed width, as copied from a terminal (with its margin)
+// or a Project Gutenberg book, and texts whose line breaks mean something.
+const (
+	wrappedTerminal = "The kill is the test ending the target sandbox through the\n" +
+		"  public API. It calls the client, which then sends the request\n" +
+		"  through the SDK. That is the same API a user calls to kill a\n" +
+		"  sandbox.\n\n" +
+		"  - The control requests all succeeded. If they failed as well,\n" +
+		"    the gateway path is broken.\n" +
+		"  - Every target request succeeded, after waiting the full four\n" +
+		"    seconds."
+	wrappedProse = "It is a truth universally acknowledged, that a single man in\n" +
+		"possession of a good fortune, must be in want of a wife. However\n" +
+		"little known the feelings or views of such a man may be on his\n" +
+		"first entering a neighbourhood, this truth is so well fixed."
+	wrappedItalics = "It is a truth _universally_ acknowledged, that a single man in\n" +
+		"possession of a good fortune, must be in want of a _wife_. However\n" +
+		"little known the feelings or views of such a man may be on his\n" +
+		"first entering a neighbourhood, this truth is so well fixed."
+	wrappedVerse = wrappedItalics + "\n\n" +
+		"    The woods are lovely, dark and deep,\n    But I have promises to keep."
+	poem = "Whose woods these are I think I know, his house is in the village though;\n" +
+		"He will not see me stopping here to watch his woods fill up with snow.\n" +
+		"My little horse must think it queer to stop without a farmhouse near\n" +
+		"Between the woods and frozen lake, the darkest evening of the year."
+	paragraphPerLine = "The first paragraph of an article goes on for a while about coffee and tea.\n" +
+		"A second one is short.\n" +
+		"The third paragraph is long as well, and covers the history of the drink.\n" +
+		"Fourth."
+)
+
+func TestWrapWidth(t *testing.T) {
+	for name, c := range map[string]struct {
+		text    string
+		wrapped bool
+	}{
+		"terminal":           {wrappedTerminal, true},
+		"book":               {wrappedProse, true},
+		"book with verse":    {wrappedVerse, true},
+		"poem":               {poem, false},
+		"paragraph per line": {paragraphPerLine, false},
+		"address":            {"Dear Sam,\n\n12 Hill Road\nLondon\n\nBest, Ann", false},
+	} {
+		if got := wrapWidth(c.text) > 0; got != c.wrapped {
+			t.Errorf("%s: wrapped = %v, want %v", name, got, c.wrapped)
+		}
+	}
+	// Wrapped, Markdown's joining of lines costs nothing, so a few marks do.
+	for text, want := range map[string]string{
+		wrappedTerminal: "markdown", // two list items, wrapped
+		wrappedItalics:  "markdown", // two _italics_, wrapped
+		wrappedProse:    "text",     // wrapped, but no marks
+		wrappedVerse:    "text",     // two _italics_, but the verse would be code
 	} {
 		if got := DetectFormat(text); got != want {
 			t.Errorf("DetectFormat(%q) = %s, want %s", text, got, want)

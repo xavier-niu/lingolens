@@ -23,7 +23,7 @@ It runs on your own server and uses your own AI key. One server can host a whole
 - Your Ask AI conversations are kept in **Ask AI history**, so you can reread them and keep asking where you left off.
 
 **Bring anything to read**
-- Paste text, or Markdown with headings and lists. Add more to the end of a text later with **Append Text**, and keep your place.
+- Paste text, or Markdown with headings and lists (found on its own; keep it as plain text if you'd rather). Lines wrapped at a terminal's or an email's width flow back into paragraphs. Add more to the end of a text later with **Append Text**, and keep your place.
 - Import a web page from its link: you get just the article, without menus, ads or comments.
 - Add a DRM-free EPUB book, or a PDF with selectable text. Long texts get a table of contents.
 - For sites that block imports, or pages you need to sign in to, use the **bookmarklet** from your browser's bookmarks bar.

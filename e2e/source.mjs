@@ -38,6 +38,11 @@ check('no Markdown option any more', !(await page.$('#src-kinds input[value="mar
 check('nothing disabled or "coming soon"', (await page.$$('#src-kinds input:disabled')).length === 0);
 await page.fill('#src-text', 'Dear Sam,\n\nThanks for the letter. I hope you are well.');
 check('plain text: no Markdown note', !(await visible('#src-md')));
+await page.fill('#src-text', 'Two reasons:\n1. It is cheap.\n2. It is fast.');
+check('a few Markdown marks: plain text, with Markdown offered', await visible('#src-md')
+  && (await page.textContent('#src-md-text')) === 'Saved as plain text, without formatting.' && (await page.textContent('#src-md-switch')) === 'Use Markdown');
+await page.fill('#src-text', 'The test:\n1. It sends requests.\n2. It checks:\n   - they all succeed\n   - the kill came first');
+check('a list in a list is Markdown', (await page.textContent('#src-md-text')).startsWith('Markdown detected'));
 await page.fill('#src-text', '# Packing List\n\n- passport\n- **charger**\n\nRemember the [map](https://example.com).');
 check('Markdown pasted: detected', await visible('#src-md'));
 await page.screenshot({ path: `${OUT}/s-text-md.png` });
@@ -54,8 +59,52 @@ await page.click('#src-save');
 await page.waitForSelector('#reader-view:not([hidden])');
 check('Markdown renders as a list', (await page.$$('#article ul li')).length === 3);
 check('…with bold kept', !!(await page.$('#article strong')));
-const fmt = await page.evaluate(() => fetch('/api/books/' + location.hash.split('/').pop()).then((r) => r.json()).then((b) => b.format));
-check('stored as markdown', fmt === 'markdown');
+const format = () => page.evaluate(() => fetch('/api/books/' + location.hash.split('/').pop(), { cache: 'no-store' }).then((r) => r.json()).then((b) => b.format));
+check('stored as markdown', (await format()) === 'markdown');
+
+// ---- …unless the reader keeps it plain; Edit Text can switch it later
+await openDialog();
+await page.fill('#src-text', '**Packing List**\n\n- passport\n- *charger*');
+check('a bold title alone is Markdown', await visible('#src-md') && (await page.textContent('#src-md-text')).startsWith('Markdown detected'));
+check('…and the note offers plain text instead', (await page.textContent('#src-md-switch')) === 'Use plain text instead');
+await page.click('#src-md-switch');
+check('plain text picked: the note says so, and offers Markdown back',
+  (await page.textContent('#src-md-text')).startsWith('Saved as plain text') && (await page.textContent('#src-md-switch')) === 'Use Markdown');
+await page.click('#src-md-switch');
+check('…which switches back', (await page.textContent('#src-md-text')).startsWith('Markdown detected'));
+await page.click('#src-md-switch');
+await page.fill('#src-text', '**Packing List**\n\n- passport\n- *charger*\n- a map');
+check('the pick holds while typing', (await page.textContent('#src-md-switch')) === 'Use Markdown');
+await page.screenshot({ path: `${OUT}/s-text-plain.png` });
+await page.click('#src-save');
+await page.waitForSelector('#reader-view:not([hidden])');
+await waitForArticleText(page, 'a map');
+check('saved as plain text: the marks show as typed',
+  (await format()) === 'text' && !(await page.$('#article ul, #article strong')) && (await articleText(page)).includes('**Packing List**'));
+await page.click('#btn-menu');
+await page.click('#btn-edit');
+await page.waitForSelector('#source-dialog[open]');
+check('Edit Text keeps it plain, and offers Markdown', await visible('#src-md') && (await page.textContent('#src-md-switch')) === 'Use Markdown');
+await page.click('#src-md-switch');
+await page.click('#src-save');
+await page.waitForSelector('#article ul');
+check('switched to Markdown in Edit Text: it renders', (await page.$$('#article ul li')).length === 3 && !!(await page.$('#article strong')) && (await format()) === 'markdown');
+
+// ---- text copied from a terminal: lines wrapped at its width
+await openDialog();
+const WRAPPED = 'It is a truth universally acknowledged, that a single man in\n'
+  + 'possession of a good fortune, must be in want of a wife. However\n'
+  + 'little known the feelings or views of such a man may be on his\n'
+  + 'first entering a neighbourhood, this truth is so well fixed.';
+await page.fill('#src-text', `${WRAPPED}\n\n  - The control requests all succeeded, so the gateway path\n    is fine.\n  - Every target request succeeded.`);
+check('wrapped, two list items are enough for Markdown', (await page.textContent('#src-md-text')).startsWith('Markdown detected'));
+await page.fill('#src-text', `${WRAPPED}\n\nRoses are red,\nViolets are blue.`);
+check('wrapped prose alone stays plain text', !(await visible('#src-md')));
+await page.click('#src-save');
+await page.waitForSelector('#reader-view:not([hidden])');
+await waitForArticleText(page, 'Violets');
+const brs = await page.$$eval('#article p', (ps) => ps.map((p) => p.querySelectorAll('br').length));
+check('…its wrapped lines flow on; short lines keep their breaks', brs.join() === '0,1', brs.join());
 
 // ---- web page
 await openDialog();
@@ -205,6 +254,8 @@ await page.keyboard.press('Escape');
   await page.waitForSelector('#source-dialog[open]');
   d = await dialog();
   check('zh: the dialog speaks Chinese', d.heading === '追加内容' && d.save === '追加' && (await page.textContent('#src-modes')).includes('编辑'), JSON.stringify(d));
+  await page.fill('#src-more', '## Noon\n\nThe boats came back.');
+  check('zh: Markdown to add: the note, with plain text offered', await visible('#src-md') && (await page.textContent('#src-md-switch')) === '改用纯文本', await page.textContent('#src-md'));
   await page.screenshot({ path: `${OUT}/s-append-zh.png` });
   await page.keyboard.press('Escape');
   await page.evaluate(() => fetch('/api/me/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: 'en' }) }));

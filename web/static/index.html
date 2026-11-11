@@ -531,9 +531,6 @@
 
       <div class="src-panel" data-kind="text">
         <label class="field"><span data-i18n="source.body">Text</span><textarea id="src-text" name="content" rows="12" spellcheck="false" autocomplete="off" data-i18n-placeholder="source.bodyPh"></textarea></label>
-        <p id="src-md" class="src-note src-detected" hidden>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span data-i18n="source.mdDetected">Markdown detected — headings, lists and emphasis will be formatted.</span>
-        </p>
         <p id="src-link-hint" class="src-note" hidden>
           <span data-i18n="source.linkPasted">That looks like a link.</span>
           <button type="button" id="src-use-link" class="link-btn" data-i18n="source.importPage">Import the web page instead</button>
@@ -544,6 +541,12 @@
         <label class="field"><span data-i18n="source.more">Text to add</span><textarea id="src-more" name="more" rows="12" spellcheck="false" autocomplete="off" data-i18n-placeholder="source.morePh"></textarea></label>
         <p class="src-note" data-i18n="source.moreNote">It goes at the end, after a dividing line (---). Your place in the text stays where it is.</p>
       </div>
+      <!-- Under the text, or what's added to it: Markdown or plain text, and a switch. -->
+      <p id="src-md" class="src-note src-detected" aria-live="polite" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        <span><span id="src-md-text" data-i18n="source.mdDetected">Markdown detected — headings, lists and emphasis will be formatted.</span>
+          <button type="button" id="src-md-switch" class="link-btn" data-i18n="source.usePlain">Use plain text instead</button></span>
+      </p>
 
       <p id="src-error" class="field-error" role="alert"></p>
       <div class="row">

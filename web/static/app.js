@@ -11,7 +11,7 @@ import {
 } from './offline.js';
 import {
   MAX_CHARS, MAX_EPUB_BYTES, getBook, createBook, updateBook, deleteBook, saveProgress,
-  importURL, importPage, importEPUB, detectFormat,
+  importURL, importPage, importEPUB, detectFormat, markdownScore, wrapWidth, wrapsBefore,
   minutesLeft, readingStep, isFinished, tintFor, readLegacyData, hasLegacyData, clearLegacyData,
 } from './library.js';
 import { readPDF, isPDF, PDFError } from './pdftext.js';
@@ -420,15 +420,21 @@ function finishBatch({ pending, left }, offline) {
 
 // ------------------------------------------------------------------ reader
 
-// Plain text: blank lines separate paragraphs; single line breaks are kept.
-// The "\n" before each <br> keeps words on either side apart in the segment text.
-// A line of dashes on its own (what goes between a text and what was added to
-// it) is a dividing line.
+// Plain text: blank lines separate paragraphs; single line breaks are kept,
+// except in text wrapped at a fixed width (see wrapWidth), where lines that
+// only ran out of room flow on. A "\n" stays between lines either way, so the
+// segment text (and the glosses' offsets in it) doesn't change; a kept break
+// adds a <br>. A line of dashes on its own (what goes between a text and what
+// was added to it) is a dividing line.
 function renderPlainText(src) {
-  return src.replace(/\r\n?/g, '\n').split(/\n[ \t]*\n/)
+  const text = src.replace(/\r\n?/g, '\n');
+  const width = wrapWidth(text);
+  const lines = (p) => p.split('\n').map((line, i, all) => escapeHTML(line)
+    + (i === all.length - 1 ? '' : width && wrapsBefore(line, all[i + 1], width) ? '\n' : '<br>\n')).join('');
+  return text.split(/\n[ \t]*\n/)
     .map((p) => p.replace(/^\n+|\n+$/g, ''))
     .filter((p) => p.trim())
-    .map((p) => (/^-{3,}$/.test(p.trim()) ? '<hr>' : `<p>${p.split('\n').map(escapeHTML).join('<br>\n')}</p>`))
+    .map((p) => (/^-{3,}$/.test(p.trim()) ? '<hr>' : `<p>${lines(p)}</p>`))
     .join('\n');
 }
 
@@ -2129,6 +2135,10 @@ let editingId = null;
 let srcKind = 'text';
 let srcFile = null;
 let editingFormat = null;
+let editingLooksMd = false; // saved as plain text although it looks like Markdown
+// 'markdown' or 'text' once the reader picks one in the note under the text;
+// until then chosenFormat decides.
+let srcFormat = null;
 // A text on the shelf is changed in one of two ways: 'edit' the whole of it, or
 // 'append' more to its end, after a dividing line.
 let srcMode = 'edit';
@@ -2138,6 +2148,8 @@ const APPEND_SEPARATOR = '\n\n---\n\n'; // as the server puts between a text and
 function openSourceDialog(book = null, { append = false } = {}) {
   editingId = book?.id || null;
   editingFormat = book?.format || null;
+  editingLooksMd = editingFormat === 'text' && detectFormat(book.content || '') === 'markdown';
+  srcFormat = null;
   srcMode = append ? 'append' : 'edit';
   $('#src-title').value = book?.title || '';
   $('#src-text').value = book?.content || '';
@@ -2145,8 +2157,7 @@ function openSourceDialog(book = null, { append = false } = {}) {
   fillTTL(book);
   $('#src-url').value = '';
   setSourceFile(null);
-  setSourceKind('text');
-  updateSrcCount();
+  setSourceKind('text'); // and counts the text
   updateSourceOffline();
   $('#source-dialog').showModal();
   (appending() ? $('#src-more') : $('#src-text')).focus();
@@ -2158,6 +2169,7 @@ function setSourceKind(kind) {
   $('#src-error').textContent = '';
   showSourcePanel();
   labelSourceDialog();
+  updateSrcCount(); // the Markdown note is for text only
 }
 
 function setSourceMode(mode) {
@@ -2208,8 +2220,44 @@ function updateSrcCount() {
   $('#src-count').textContent = n ? t('chars', { n: n.toLocaleString() }) : '';
   const isLink = !editingId && n > 0 && n < 2000 && looksLikeURL(text);
   $('#src-link-hint').hidden = !isLink;
-  // An edited Markdown text stays Markdown (imports are stored that way).
-  $('#src-md').hidden = isLink || !(editingFormat === 'markdown' || (n > 0 && detectFormat(text) === 'markdown'));
+  showFormatNote(srcKind === 'text' && n > 0 && !isLink);
+}
+
+// What saving makes the text: as edited, or with the addition at its end.
+function pendingText() {
+  const text = $('#src-text').value.replace(/\s+$/, '');
+  if (!appending()) return text;
+  const more = $('#src-more').value.trim();
+  return text && more ? text + APPEND_SEPARATOR + more : text || more;
+}
+
+// Markdown or plain text: what the reader picked in the note, else what an
+// edited text was saved as (imports are Markdown; plain text that already
+// looked like Markdown was kept plain on purpose), else what it looks like.
+function chosenFormat(content, looks = detectFormat(content)) {
+  if (srcFormat) return srcFormat;
+  if (editingFormat === 'markdown' || editingLooksMd) return editingFormat;
+  return looks;
+}
+
+// The note under the text says which it will be, with a switch to the other,
+// whenever there's a choice: it's Markdown, or has some of its marks.
+function showFormatNote(show) {
+  const note = $('#src-md');
+  const content = show ? pendingText() : '';
+  const score = show ? markdownScore(content) : 0;
+  const looks = score >= 3 ? 'markdown' : 'text';
+  const format = show ? chosenFormat(content, looks) : 'text';
+  note.hidden = !show || (format === 'text' && score < 2);
+  if (note.hidden) return;
+  const plain = format === 'text';
+  note.classList.toggle('is-plain', plain);
+  const says = plain ? 'source.mdPlain' : looks === 'markdown' ? 'source.mdDetected' : 'source.mdSaved';
+  for (const [el, key] of [[$('#src-md-text'), says],
+    [$('#src-md-switch'), plain ? 'source.useMarkdown' : 'source.usePlain']]) {
+    el.dataset.i18n = key;
+    el.textContent = t(key);
+  }
 }
 
 function formatBytes(n) {
@@ -2275,15 +2323,13 @@ async function submitSource() {
   const adding = appending();
   if (adding) {
     // The text as it stands in Edit (usually as saved), then the addition.
-    const more = $('#src-more').value.trim();
-    if (!more) return fail(t('source.emptyMore'), $('#src-more'));
-    const text = $('#src-text').value.replace(/\s+$/, '');
-    content = text ? text + APPEND_SEPARATOR + more : more;
+    if (!$('#src-more').value.trim()) return fail(t('source.emptyMore'), $('#src-more'));
+    content = pendingText();
     if (content.length > MAX_CHARS) {
       return fail(t('source.tooLong', { n: content.length.toLocaleString(), max: MAX_CHARS.toLocaleString() }), $('#src-more'));
     }
   } else if (srcKind === 'text') {
-    content = $('#src-text').value.replace(/\s+$/, '');
+    content = pendingText();
     if (!content.trim()) return fail(t('source.empty'), $('#src-text'));
     if (content.length > MAX_CHARS) {
       return fail(t('source.tooLong', { n: content.length.toLocaleString(), max: MAX_CHARS.toLocaleString() }), $('#src-text'));
@@ -2302,12 +2348,11 @@ async function submitSource() {
   const ttlDays = chosenTTL();
   try {
     if (editingId) {
-      const format = editingFormat === 'markdown' ? 'markdown' : detectFormat(content);
       await sendProgress(editingId);
-      book = await updateBook(editingId, { title, content, format, ttlDays });
+      book = await updateBook(editingId, { title, content, format: chosenFormat(content), ttlDays });
       holdProgress(editingId);
     } else if (srcKind === 'text') {
-      book = await createBook({ title, content, format: detectFormat(content), ttlDays });
+      book = await createBook({ title, content, format: chosenFormat(content), ttlDays });
     } else if (srcKind === 'url') {
       book = await importURL($('#src-url').value.trim(), title, ttlDays);
     } else if (isPDF(srcFile)) {
@@ -3276,6 +3321,10 @@ async function init() {
     if (e.target.name === 'mode') setSourceMode(e.target.value);
     (appending() ? $('#src-more') : $('#src-text')).focus();
   });
+  $('#src-md-switch').onclick = () => {
+    srcFormat = chosenFormat(pendingText()) === 'markdown' ? 'text' : 'markdown';
+    updateSrcCount();
+  };
   $('#src-use-link').onclick = () => {
     $('#src-url').value = $('#src-text').value.trim();
     $('#src-text').value = '';

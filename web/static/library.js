@@ -31,27 +31,70 @@ export const importEPUB = (file, title, ttlDays = 0) => api('POST', `/api/books/
 
 // Mirrors store.DetectFormat on the server: is pasted text Markdown?
 const MD_STRONG = [
-  /^#{1,6}[ \t]+\S/m, // heading
-  /^(```|~~~)/m, // code fence
-  /^\|?[ \t]*:?-{3,}:?[ \t]*(\|[ \t]*:?-{3,}:?[ \t]*)+\|?[ \t]*$/m, // table rule
+  /^ {0,3}#{1,6}[ \t\u00a0]+\S/m, // heading
+  /^ {0,3}(```|~~~)/m, // code fence
+  /^ {0,3}\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)+\|?[ \t]*$/m, // table rule
+  /^ ?([-*+]|\d{1,3}[.)])[ \t]+\S[^\n]*\n[ \t]{2,}([-*+]|\d{1,3}[.)])[ \t]+\S/m, // list in a list
+  /^[ \t]*\S[^\n]*\n {0,3}={3,}[ \t]*$/m, // heading underlined with ===
+  /(^|[^\w*])\*\*[^\s*]([^*\n]*[^\s*])?\*\*/m, // **bold**
+  /\[[^\]\n]*\]\([^)\s]*[/.#:][^)\s]*([ \t]+("[^"\n]*"|'[^'\n]*'))?\)/, // link or image
 ];
-const MD_LINK = /\[[^\]\n]+\]\((https?:\/\/|\/|#)[^)\s]*\)/g;
 const MD_WEAK = [
   /^[ \t]*([-*+]|\d{1,3}[.)])[ \t]+\S/gm, // list item
-  /^>[ \t]?\S/gm, // quote
-  /\*\*[^*\n]+\*\*|__[^_\n]+__/g, // bold
+  /^ {0,3}>[ \t]?\S/gm, // quote
   /`[^`\n]+`/g, // code span
+  /(^|[^\w*])\*[^\s*]([^*\n]*[^\s*])?\*/gm, // *italic*
+  /(^|[^\w_])__?[^\s_]([^_\n]*[^\s_])?__?($|[^\w_])/gm, // _italic_, __bold__
+  /~~[^\s~]([^~\n]*[^\s~])?~~/g, // ~~struck~~
+  /\[[^\]\n]+\]\[[^\]\n]*\]/g, // [reference link][1]
+  /^ {0,3}\[[^\]\n]+\]:[ \t]*\S/gm, // [1]: its address
 ];
+// Would-be code: Markdown shows a block indented 4 spaces as code.
+const MD_INDENTED = /(^|\n[ \t]*\n)( {4,}|\t)\S/;
 const upTo2 = (re, s) => Math.min(2, (s.match(re) || []).length);
 
-export function detectFormat(content) {
-  const s = content.slice(0, 200_000);
+// How much pasted text looks like Markdown: at 3 it's Markdown. Below that it's
+// plain text, but with 2 or more marks the dialog offers Markdown instead.
+// Text wrapped at a fixed width counts a little: Markdown joins lines, which
+// loses nothing when they're only wrapped (unless it has a block to show as code).
+export function markdownScore(content) {
+  const s = content.slice(0, 200_000).replace(/\r\n?/g, '\n');
   let score = 0;
   for (const re of MD_STRONG) if (re.test(s)) score += 3;
-  score += 2 * upTo2(MD_LINK, s);
   for (const re of MD_WEAK) score += upTo2(re, s);
-  return score >= 3 ? 'markdown' : 'text';
+  if (wrapWidth(s) && !MD_INDENTED.test(s)) score += 1;
+  return score;
 }
+
+// Text copied from a terminal or an email, or a Project Gutenberg book, has
+// line breaks wherever a line ran out of room. wrapWidth finds the width, or 0
+// when the breaks mean something (a poem, an address, a paragraph per line):
+// at least 2 breaks, and half of them, fall mid-sentence where the next word
+// wouldn't have fit. Mirrors store.wrapWidth.
+const BLOCK_START = /^([-*+]|\d{1,3}[.)]|#{1,6}|>)([ \t]|$)/; // a list item, heading or quote
+const SENTENCE_END = /[.!?:;]["'”’)\]]*$/;
+const codePoints = (s) => s.length - (s.match(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g) || []).length;
+
+// Was `line` broken before `next` only because the next word didn't fit?
+export const wrapsBefore = (line, next, width) => !BLOCK_START.test(next)
+  && codePoints(line.replace(/[ \t]+$/, '')) + 1 + codePoints(next.replace(/^[ \t]+/, '').split(/[ \t]/)[0]) > width;
+
+export function wrapWidth(text) {
+  const lines = text.split('\n').map((l) => l.replace(/[ \t]+$/, ''));
+  const width = lines.reduce((w, l) => Math.max(w, codePoints(l)), 0);
+  if (width < 50) return 0;
+  let breaks = 0;
+  let wrapped = 0;
+  for (let i = 0; i + 1 < lines.length; i++) {
+    const next = lines[i + 1].replace(/^[ \t]+/, '');
+    if (!lines[i].trim() || !next || BLOCK_START.test(next)) continue;
+    breaks++;
+    if (!SENTENCE_END.test(lines[i]) && wrapsBefore(lines[i], next, width)) wrapped++;
+  }
+  return wrapped >= 2 && wrapped * 2 >= breaks ? width : 0;
+}
+
+export const detectFormat = (content) => (markdownScore(content) >= 3 ? 'markdown' : 'text');
 
 // Minutes left to read, at least 1 unless finished.
 export function minutesLeft(book, level) {

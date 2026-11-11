@@ -57,39 +57,98 @@ func CountWords(text string) int { return len(wordRe.FindAllStringIndex(text, -1
 
 var (
 	mdStrong = []*regexp.Regexp{ // each one alone is a clear sign
-		regexp.MustCompile(`(?m)^#{1,6}[ \t]+\S`),                                               // heading
-		regexp.MustCompile("(?m)^(```|~~~)"),                                                    // code fence
-		regexp.MustCompile(`(?m)^\|?[ \t]*:?-{3,}:?[ \t]*(\|[ \t]*:?-{3,}:?[ \t]*)+\|?[ \t]*$`), // table rule
+		regexp.MustCompile(`(?m)^ {0,3}#{1,6}[ \t\x{a0}]+\S`),                                                // heading
+		regexp.MustCompile("(?m)^ {0,3}(```|~~~)"),                                                           // code fence
+		regexp.MustCompile(`(?m)^ {0,3}\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)+\|?[ \t]*$`),              // table rule
+		regexp.MustCompile(`(?m)^ ?([-*+]|\d{1,3}[.)])[ \t]+\S[^\n]*\n[ \t]{2,}([-*+]|\d{1,3}[.)])[ \t]+\S`), // list in a list
+		regexp.MustCompile(`(?m)^[ \t]*\S[^\n]*\n {0,3}={3,}[ \t]*$`),                                        // heading underlined with ===
+		regexp.MustCompile(`(?m)(^|[^\w*])\*\*[^\s*]([^*\n]*[^\s*])?\*\*`),                                   // **bold**
+		regexp.MustCompile(`\[[^\]\n]*\]\([^)\s]*[/.#:][^)\s]*([ \t]+("[^"\n]*"|'[^'\n]*'))?\)`),             // link or image
 	}
-	mdLink = regexp.MustCompile(`\[[^\]\n]+\]\((https?://|/|#)[^)\s]*\)`)
 	mdWeak = []*regexp.Regexp{ // common in plain text too; they only count together
-		regexp.MustCompile(`(?m)^[ \t]*([-*+]|\d{1,3}[.)])[ \t]+\S`), // list item
-		regexp.MustCompile(`(?m)^>[ \t]?\S`),                         // quote
-		regexp.MustCompile(`\*\*[^*\n]+\*\*|__[^_\n]+__`),            // bold
-		regexp.MustCompile("`[^`\n]+`"),                              // code span
+		regexp.MustCompile(`(?m)^[ \t]*([-*+]|\d{1,3}[.)])[ \t]+\S`),               // list item
+		regexp.MustCompile(`(?m)^ {0,3}>[ \t]?\S`),                                 // quote
+		regexp.MustCompile("`[^`\n]+`"),                                            // code span
+		regexp.MustCompile(`(?m)(^|[^\w*])\*[^\s*]([^*\n]*[^\s*])?\*`),             // *italic*
+		regexp.MustCompile(`(?m)(^|[^\w_])__?[^\s_]([^_\n]*[^\s_])?__?($|[^\w_])`), // _italic_, __bold__
+		regexp.MustCompile(`~~[^\s~]([^~\n]*[^\s~])?~~`),                           // ~~struck~~
+		regexp.MustCompile(`\[[^\]\n]+\]\[[^\]\n]*\]`),                             // [reference link][1]
+		regexp.MustCompile(`(?m)^ {0,3}\[[^\]\n]+\]:[ \t]*\S`),                     // [1]: its address
 	}
 )
 
-// DetectFormat guesses whether pasted text is Markdown. web/static/app.js
-// (looksLikeMarkdown) applies the same rules for the live hint in the dialog.
+var (
+	mdIndented  = regexp.MustCompile(`(^|\n[ \t]*\n)( {4,}|\t)\S`) // Markdown shows it as code
+	blockStart  = regexp.MustCompile(`^([-*+]|\d{1,3}[.)]|#{1,6}|>)([ \t]|$)`)
+	sentenceEnd = regexp.MustCompile(`[.!?:;]["'”’)\]]*$`)
+)
+
+// DetectFormat guesses whether pasted text is Markdown. web/static/library.js
+// (markdownScore) applies the same rules when the app saves a pasted text and
+// for the note in the dialog. Markup that plain text hardly ever has (a
+// heading, **bold**, a link, a list in a list) is enough on its own; the rest
+// only counts together, since Markdown joins the single line breaks plain
+// text keeps. Text wrapped at a fixed width counts a little: joining its
+// lines loses nothing (unless it has an indented block to show as code).
 func DetectFormat(content string) string {
 	if len(content) > 200_000 {
 		content = content[:200_000]
 	}
+	content = strings.ReplaceAll(strings.ReplaceAll(content, "\r\n", "\n"), "\r", "\n")
 	score := 0
 	for _, re := range mdStrong {
 		if re.MatchString(content) {
 			score += 3
 		}
 	}
-	score += 2 * min(2, len(mdLink.FindAllStringIndex(content, 2)))
 	for _, re := range mdWeak {
 		score += min(2, len(re.FindAllStringIndex(content, 2)))
+	}
+	if wrapWidth(content) > 0 && !mdIndented.MatchString(content) {
+		score++
 	}
 	if score >= 3 {
 		return "markdown"
 	}
 	return "text"
+}
+
+// wrapWidth finds the width text was wrapped at when its line breaks are
+// only where a line ran out of room (copied from a terminal or an email, or
+// a Project Gutenberg book), or 0 when they mean something (a poem, an
+// address, a paragraph per line): at least 2 breaks, and half of them, fall
+// mid-sentence where the next word wouldn't have fit. The web app's
+// wrapWidth (web/static/library.js) is the same, and the reader joins
+// those lines back into paragraphs.
+func wrapWidth(text string) int {
+	lines := strings.Split(text, "\n")
+	width := 0
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " \t")
+		width = max(width, utf8.RuneCountInString(lines[i]))
+	}
+	if width < 50 {
+		return 0
+	}
+	breaks, wrapped := 0, 0
+	for i := 0; i+1 < len(lines); i++ {
+		next := strings.TrimLeft(lines[i+1], " \t")
+		if strings.TrimSpace(lines[i]) == "" || next == "" || blockStart.MatchString(next) {
+			continue
+		}
+		breaks++
+		word := next
+		if j := strings.IndexAny(next, " \t"); j >= 0 {
+			word = next[:j]
+		}
+		if !sentenceEnd.MatchString(lines[i]) && utf8.RuneCountInString(lines[i])+1+utf8.RuneCountInString(word) > width {
+			wrapped++
+		}
+	}
+	if wrapped >= 2 && wrapped*2 >= breaks {
+		return width
+	}
+	return 0
 }
 
 // DeriveTitle takes the first non-empty line, trimmed to about 60 characters.
