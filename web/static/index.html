@@ -54,6 +54,10 @@
         <span class="sr-only" data-i18n="btn.wordbook">Wordbook</span>
         <span id="wb-count" class="count"></span>
       </button>
+      <!-- On a phone the bar keeps its room for the title: Append Text is in the ⋯ menu. -->
+      <button id="btn-append" class="bar-btn reader-only" data-i18n-title="btn.append" data-i18n-aria="btn.append">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5zM13.5 3v5.5H19M12 11.5v6M9 14.5h6"/></svg>
+      </button>
       <button id="btn-menu" class="bar-btn reader-only" popovertarget="menu-pop" data-i18n-title="menu.title" data-i18n-aria="menu.title">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
       </button>
@@ -120,7 +124,7 @@
   <div id="menu-pop" class="pop menu-pop" popover>
     <button type="button" id="btn-toc" class="menu-item" data-i18n="toc.title" hidden>Contents</button>
     <button type="button" id="btn-edit" class="menu-item" data-i18n="btn.edit">Edit text</button>
-    <button type="button" id="btn-append" class="menu-item" data-i18n="btn.append">Append text</button>
+    <button type="button" id="menu-append" class="menu-item" data-i18n="btn.append">Append text</button>
     <a id="btn-settings" class="menu-item" href="#/settings" data-i18n="settings.page">Settings</a>
   </div>
 

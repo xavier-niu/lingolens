@@ -633,6 +633,7 @@ body.chat-open .hint { display: none; }
 /* Centred over the text, not under the open chat sidebar. */
 @media (min-width: 641px) {
   body.chat-open .toast { left: calc((100vw - min(440px, 100vw)) / 2); }
+  #menu-append { display: none; } /* it's a button in the bar */
 }
 /* The part just added to a text, lit up for a moment after "Show". */
 #article .fresh { border-radius: 4px; animation: fresh 2.6s ease-out both; }
@@ -1084,6 +1085,7 @@ body[data-view="login"] main { padding-bottom: 40px; }
 
 @media (max-width: 640px) {
   body[data-view="reader"] .avatar-btn { display: none; } /* room for the title; Settings is in the ⋯ menu */
+  #btn-append { display: none; } /* …and so is Append Text */
   .avatar-btn { width: 34px; margin-left: 2px; }
   .bar-end { gap: 0; } /* room for the book title; buttons keep their size */
   .net-status { padding: 0; width: 28px; justify-content: center; margin-right: 2px; }

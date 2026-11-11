@@ -133,7 +133,6 @@ const progressOffline = await page.evaluate(() => document.querySelector('#read-
 // add to its end offline: the text grows, and the progress stays (a little
 // less of a longer text)
 const ADDED = 'Added on the train. The river was still there in the evening.';
-await page.click('#btn-menu');
 await page.click('#btn-append');
 await page.waitForSelector('#source-dialog[open]');
 await page.fill('#src-more', ADDED);

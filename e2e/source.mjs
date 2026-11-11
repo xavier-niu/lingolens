@@ -200,8 +200,12 @@ await page.keyboard.press('Escape');
   await glossesSettled(page);
   const place = await atTop();
 
+  check('Append Text is a button in the bar, beside the ⋯ menu', await visible('#btn-append')
+    && (await page.getAttribute('#btn-append', 'aria-label')) === 'Append Text' && (await page.$eval('#btn-append', (b) => b.nextElementSibling.id)) === 'btn-menu');
   await page.click('#btn-menu');
-  check('the menu offers Append Text after Edit Text', (await page.$$eval('#menu-pop .menu-item:not([hidden])', (els) => els.map((e) => e.id))).join() === 'btn-edit,btn-append,btn-settings');
+  const menuItems = await page.$$eval('#menu-pop .menu-item', (els) => els.filter((e) => e.checkVisibility()).map((e) => e.id));
+  check('…and not in the menu as well', menuItems.join() === 'btn-edit,btn-settings', menuItems.join());
+  await page.keyboard.press('Escape');
   await page.click('#btn-append');
   await page.waitForSelector('#source-dialog[open]');
   const dialog = () => page.evaluate(() => ({
@@ -252,8 +256,7 @@ await page.keyboard.press('Escape');
   await waitForArticleText(page, 'Noon 30.');
   const bar = await page.$eval('#read-thread > div', (d) => parseInt(d.style.width, 10));
   check('after a reload, the progress bar shows what was kept', bar >= Math.round(0.9 * share * 100) && bar < 100, `${bar}%`);
-  await page.click('#btn-menu');
-  check('zh: 追加内容 in the menu', (await page.textContent('#btn-append')) === '追加内容');
+  check('zh: the bar button says 追加内容', (await page.getAttribute('#btn-append', 'aria-label')) === '追加内容' && (await page.getAttribute('#btn-append', 'title')) === '追加内容');
   await page.click('#btn-append');
   await page.waitForSelector('#source-dialog[open]');
   d = await dialog();
@@ -538,6 +541,16 @@ check('dialog fits a phone', fit);
 await pp.screenshot({ path: `${OUT}/s-phone-epub.png` });
 await pp.click('#src-kinds label:has(input[value="url"])');
 await pp.screenshot({ path: `${OUT}/s-phone-url.png` });
+await pp.keyboard.press('Escape');
+await pp.locator('.book-link').first().click();
+await pp.waitForSelector('#reader-view:not([hidden])');
+check('phone: no Append Text in the bar, so the title keeps its room', !(await pp.isVisible('#btn-append')));
+await pp.click('#btn-menu');
+check('phone: Append Text is in the ⋯ menu', await pp.isVisible('#menu-append'));
+await pp.screenshot({ path: `${OUT}/s-phone-menu.png` });
+await pp.click('#menu-append');
+await pp.waitForSelector('#source-dialog[open]');
+check('…and opens the text on Append', (await pp.$eval('#src-modes input:checked', (i) => i.value)) === 'append' && await pp.isVisible('#src-more'));
 await phone.close();
 
 check('no page errors', errors.length === 0, errors.join(' | '));

@@ -3270,9 +3270,12 @@ async function init() {
     $('#menu-pop').hidePopover?.();
     if (state.book) openSourceDialog(state.book);
   };
-  $('#btn-append').onclick = () => {
+  // A button in the bar; on a phone, an item in the ⋯ menu.
+  const appendText = () => { if (state.book) openSourceDialog(state.book, { append: true }); };
+  $('#btn-append').onclick = appendText;
+  $('#menu-append').onclick = () => {
     $('#menu-pop').hidePopover?.();
-    if (state.book) openSourceDialog(state.book, { append: true });
+    appendText();
   };
   $('#shelf').addEventListener('click', (e) => {
     const id = e.target.closest('[data-del-book]')?.dataset.delBook;
