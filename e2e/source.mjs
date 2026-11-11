@@ -217,6 +217,7 @@ await page.keyboard.press('Escape');
   let d = await dialog();
   check('it opens the text on Append', d.heading === 'Append Text' && d.mode === 'append' && d.save === 'Append', JSON.stringify(d));
   check('…with an empty box for the new text, in focus', await visible('#src-more') && !(await visible('#src-text')) && d.focus === 'src-more' && (await page.inputValue('#src-more')) === '');
+  check('…with no note under it', !(await page.$('.src-panel[data-kind="append"] .src-note')));
   check('…and the title and kind switch as when editing', (await page.inputValue('#src-title')) === 'Harbour Mornings' && !(await visible('#src-kinds')));
   check('…and the text’s time to live: Never, with nothing added', (await page.$eval('#src-ttl', (s) => `${s.value}:${s.selectedOptions[0].textContent}:${s.options.length}`)) === '0:Never:6');
   await page.click('#src-save');
