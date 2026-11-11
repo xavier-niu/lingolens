@@ -535,14 +535,15 @@ function expiryText(b) {
   return n <= 1 ? t('book.expiresSoon') : t('book.expires', { n });
 }
 
-// The "Delete automatically" choices; editing a text that has a time already
-// offers to leave it as it is.
+// The "Delete automatically" choices. Editing or adding to a text that has a
+// time to live adds one more, first and chosen: the days it has left, marked
+// "(inherited)", which leaves its date as it is.
 const TTL_CHOICES = [0, 1, 7, 30, 90, 365];
 function fillTTL(book) {
   const sel = $('#src-ttl');
   const label = (n) => (n === 0 ? t('ttl.never') : n === 1 ? t('ttl.day') : n === 365 ? t('ttl.year') : t('ttl.days', { n }));
   const opts = TTL_CHOICES.map((n) => `<option value="${n}">${escapeHTML(label(n))}</option>`);
-  if (book?.expiresAt) opts.unshift(`<option value="keep">${escapeHTML(t('ttl.current', { d: shortDate(book.expiresAt) }))}</option>`);
+  if (book?.expiresAt) opts.unshift(`<option value="keep">${escapeHTML(t('ttl.inherited', { t: label(Math.max(1, daysLeft(book))) }))}</option>`);
   sel.innerHTML = opts.join('');
   sel.value = book?.expiresAt ? 'keep' : '0';
 }
