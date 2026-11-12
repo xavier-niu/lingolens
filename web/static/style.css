@@ -1104,7 +1104,7 @@ body[data-view="login"] main { padding-bottom: 40px; }
   .shelf { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 14px; }
   .cover { padding: 12px 12px 14px; }
   .cover-title { font-size: 16px; }
-  .article { font-size: calc(var(--read-size, 20px) - 2px); line-height: 2.4; }
+  .article { line-height: 2.4; }
   .level-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .field-grid { grid-template-columns: 1fr; }
   .member { grid-template-columns: 1fr auto; }
