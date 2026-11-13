@@ -1476,6 +1476,22 @@ function fitChatInput() {
   if (!state.chat?.ctl) $('#chat-send').disabled = !el.value.trim();
 }
 
+// iPhone and iPad keep the page its full height under the on-screen keyboard
+// and slide what's on screen up to show the input, which carries the top of the
+// sidebar (its title, the quote) off the screen. While the keyboard is up, fit
+// the sidebar to the part of the screen above it; the conversation gets shorter.
+function fitChatToKeyboard() {
+  const drawer = $('#chat');
+  const vv = window.visualViewport;
+  if (vv && document.activeElement === $('#chat-input') && Math.abs(vv.scale - 1) < 0.01) {
+    drawer.style.setProperty('--vv-top', `${vv.offsetTop}px`);
+    drawer.style.setProperty('--vv-height', `${vv.height}px`);
+  } else {
+    drawer.style.removeProperty('--vv-top');
+    drawer.style.removeProperty('--vv-height');
+  }
+}
+
 // A new question goes to the top of the conversation, with room below for the
 // answer, so the answer is read as it arrives instead of chasing the bottom.
 function startTurn(question) {
@@ -3465,6 +3481,10 @@ async function init() {
     }
   });
   $('#chat-input').addEventListener('input', fitChatInput);
+  $('#chat-input').addEventListener('focus', fitChatToKeyboard);
+  $('#chat-input').addEventListener('blur', fitChatToKeyboard);
+  window.visualViewport?.addEventListener('resize', fitChatToKeyboard);
+  window.visualViewport?.addEventListener('scroll', fitChatToKeyboard);
   $('#chat-hist-btn').onclick = () => {
     if ($('#chat').dataset.mode === 'history' && state.chat) openConversation(state.chat);
     else if ($('#chat').dataset.mode !== 'history') openHistory();

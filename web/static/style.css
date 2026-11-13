@@ -649,8 +649,9 @@ body.chat-open .hint { display: none; }
 }
 
 /* ------------------------------------------------------------ chat drawer */
+/* --vv-top and --vv-height fit it above the on-screen keyboard (fitChatToKeyboard). */
 .drawer {
-  position: fixed; z-index: 30; top: 0; right: 0; bottom: 0; height: 100dvh; width: min(440px, 100vw);
+  position: fixed; z-index: 30; top: var(--vv-top, 0px); right: 0; height: var(--vv-height, 100dvh); width: min(440px, 100vw);
   display: flex; flex-direction: column; overscroll-behavior: contain;
   background: var(--surface); border-left: 1px solid var(--line); box-shadow: var(--shadow-lg);
   animation: drawer-in .26s cubic-bezier(.2, .8, .2, 1);
@@ -1070,6 +1071,7 @@ body[data-view="login"] main { padding-bottom: 40px; }
   .btn.small { height: 34px; }
   .bar-btn { height: 40px; min-width: 40px; }
   .chips.follow .chip { height: 34px; }
+  .chat-form textarea { font-size: 16px; } /* smaller, and iOS zooms in on focus */
   .chat-note { display: none; }
   .icon-btn { width: 40px; height: 40px; }
   .book-del { opacity: 1; }

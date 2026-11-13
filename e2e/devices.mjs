@@ -20,6 +20,25 @@ const browser = await chromium.launch();
 for (const [label, device] of [['phone', devices['iPhone 13']], ['tablet', devices['iPad (gen 7)']], ['tablet-landscape', devices['iPad (gen 7) landscape']]]) {
   // Use Chromium with the device's viewport/touch settings.
   const ctx = await browser.newContext({ ...device, defaultBrowserType: undefined });
+  // Chromium can't show an on-screen keyboard. keyboard(h, pan) stands in for
+  // iOS's: the visible part of the page loses h px at the bottom and slides pan
+  // px down the page, as Safari does to bring the focused input into view.
+  await ctx.addInitScript(() => {
+    const real = window.visualViewport;
+    const fake = new EventTarget();
+    let kb = 0; let pan = 0;
+    Object.defineProperties(fake, {
+      height: { get: () => real.height - kb },
+      offsetTop: { get: () => pan },
+      scale: { get: () => real.scale },
+    });
+    Object.defineProperty(window, 'visualViewport', { value: fake, configurable: true });
+    window.keyboard = (h, p) => {
+      kb = h; pan = p;
+      fake.dispatchEvent(new Event('resize'));
+      fake.dispatchEvent(new Event('scroll'));
+    };
+  });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -65,6 +84,25 @@ for (const [label, device] of [['phone', devices['iPhone 13']], ['tablet', devic
   check(`${label}: chat drawer in viewport`, await inViewport(page, '#chat'));
   check(`${label}: chat input visible`, await inViewport(page, '#chat-form'));
   await page.screenshot({ path: `${OUT}/${label}-chat.png` });
+
+  // Typing with the keyboard up: the sidebar fits the part of the screen above
+  // the keyboard, its title and quote still at the top, the input at the bottom.
+  const chatBox = () => page.evaluate(() => {
+    const box = (s) => document.querySelector(s).getBoundingClientRect();
+    return { top: box('#chat').top, bottom: box('#chat').bottom, head: box('.drawer-head').top, quote: box('#chat-quote').top, form: box('#chat-form').bottom, vh: innerHeight };
+  });
+  await page.focus('#chat-input');
+  await page.evaluate(() => window.keyboard(300, 250));
+  await page.keyboard.type('What does this mean?');
+  let b = await chatBox();
+  check(`${label}: chat fits above the keyboard`, Math.abs(b.top - 250) <= 1 && Math.abs(b.bottom - (b.vh - 50)) <= 1, JSON.stringify(b));
+  check(`${label}: chat title and quote stay on screen while typing`, b.head >= 249 && b.quote > b.head && b.quote < b.form, JSON.stringify(b));
+  check(`${label}: chat input just above the keyboard`, b.form <= b.bottom && b.form > b.bottom - 120, JSON.stringify(b));
+  await page.screenshot({ path: `${OUT}/${label}-chat-keyboard.png` });
+  await page.evaluate(() => { window.keyboard(0, 0); document.activeElement.blur(); });
+  b = await chatBox();
+  check(`${label}: chat full height again once the keyboard is gone`, Math.abs(b.top) <= 1 && Math.abs(b.bottom - b.vh) <= 1, JSON.stringify(b));
+
   await page.tap('#chat-close');
   await page.waitForSelector('#chat', { state: 'hidden' });
 
