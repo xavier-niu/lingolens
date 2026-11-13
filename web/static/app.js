@@ -1478,12 +1478,17 @@ function fitChatInput() {
 
 // iPhone and iPad keep the page its full height under the on-screen keyboard
 // and slide what's on screen up to show the input, which carries the top of the
-// sidebar (its title, the quote) off the screen. While the keyboard is up, fit
-// the sidebar to the part of the screen above it; the conversation gets shorter.
-function fitChatToKeyboard() {
+// sidebar (its title, the quote) and the text beside it off the screen. While
+// the keyboard is up, fit the sidebar to the part of the screen above it (the
+// conversation gets shorter), and slide the page back to where it was.
+// keepPage: undo Safari's slides until the person scrolls something themselves.
+let keepPage = false;
+function fitChatToKeyboard(e) {
   const drawer = $('#chat');
   const vv = window.visualViewport;
+  if (e?.type === 'focus') keepPage = true;
   if (vv && document.activeElement === $('#chat-input') && Math.abs(vv.scale - 1) < 0.01) {
+    if (keepPage && vv.offsetTop > 0) window.scrollBy(0, -vv.offsetTop);
     drawer.style.setProperty('--vv-top', `${vv.offsetTop}px`);
     drawer.style.setProperty('--vv-height', `${vv.height}px`);
   } else {
@@ -3485,6 +3490,7 @@ async function init() {
   $('#chat-input').addEventListener('blur', fitChatToKeyboard);
   window.visualViewport?.addEventListener('resize', fitChatToKeyboard);
   window.visualViewport?.addEventListener('scroll', fitChatToKeyboard);
+  document.addEventListener('touchmove', () => { keepPage = false; }, { passive: true, capture: true });
   $('#chat-hist-btn').onclick = () => {
     if ($('#chat').dataset.mode === 'history' && state.chat) openConversation(state.chat);
     else if ($('#chat').dataset.mode !== 'history') openHistory();
