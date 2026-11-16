@@ -158,6 +158,11 @@ for (const [label, device] of [['phone', devices['iPhone 13']], ['tablet', devic
   await page.tap('#ask-fab');
   await page.waitForSelector('#chat:not([hidden])');
   check(`${label}: tapping Ask AI opens the chat about the selection`, (await page.textContent('#chat')).includes(sel.text.trim().slice(0, 15)));
+  // Ready to type: clearing the selection mustn't take the input's cursor with it.
+  const caret = await page.evaluate(() => ({ focused: document.activeElement?.id, selection: getSelection().type }));
+  check(`${label}: Ask AI leaves the cursor in the question box`, caret.focused === 'chat-input' && caret.selection !== 'None', JSON.stringify(caret));
+  await page.keyboard.type('Why?');
+  check(`${label}: typing goes into the question box`, (await page.inputValue('#chat-input')) === 'Why?');
   check(`${label}: no page errors`, errors.length === 0, errors.join(' | '));
   await ctx.close();
 }

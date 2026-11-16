@@ -3468,8 +3468,10 @@ async function init() {
   fab.addEventListener('click', () => {
     const info = fab._info;
     hideFab();
-    if (info) openChat(info.text, info.passage);
+    // Before the chat input takes focus: cleared after, the selection takes the
+    // input's cursor with it on iOS, and the keyboard comes up typing nowhere.
     window.getSelection()?.removeAllRanges();
+    if (info) openChat(info.text, info.passage);
   });
 
   // Chat drawer
