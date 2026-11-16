@@ -3492,6 +3492,9 @@ async function init() {
   $('#chat-input').addEventListener('blur', fitChatToKeyboard);
   window.visualViewport?.addEventListener('resize', fitChatToKeyboard);
   window.visualViewport?.addEventListener('scroll', fitChatToKeyboard);
+  // Safari can report where the visible part went only after the page has
+  // finished scrolling, with no event of the visual viewport's own.
+  window.addEventListener('scroll', fitChatToKeyboard, { passive: true });
   document.addEventListener('touchmove', () => { keepPage = false; }, { passive: true, capture: true });
   $('#chat-hist-btn').onclick = () => {
     if ($('#chat').dataset.mode === 'history' && state.chat) openConversation(state.chat);
