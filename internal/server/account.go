@@ -27,11 +27,23 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePrefs(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r.Context())
-	var req store.Prefs
+	// The switches as pointers, so "not sent" differs from false. These outer
+	// fields take their JSON names from the embedded Prefs.
+	var req struct {
+		store.Prefs
+		HideWords   *bool `json:"hideWords"`
+		HidePhrases *bool `json:"hidePhrases"`
+	}
 	if !decode(w, r, &req) {
 		return
 	}
 	p := u.Prefs
+	if req.HideWords != nil {
+		p.HideWords = *req.HideWords
+	}
+	if req.HidePhrases != nil {
+		p.HidePhrases = *req.HidePhrases
+	}
 	if req.Level != "" {
 		p.Level = levels.Get(req.Level).ID
 	}

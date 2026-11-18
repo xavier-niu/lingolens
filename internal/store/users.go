@@ -30,15 +30,19 @@ type User struct {
 	CreatedAt string `json:"created_at"`
 }
 
-// Prefs is the user's profile: reading level and interface settings.
+// Prefs is the user's profile: reading level and interface settings. The
+// reading settings are defaults for every device; Reading Options in the web
+// app change them on one device only, without saving them here.
 type Prefs struct {
-	Level     string `json:"level"`
-	Lang      string `json:"lang"`
-	ReadSize  string `json:"readSize"`  // "s" 17px, "sm" 18.5px, "m" 20px, "l" 23px
-	ReadWidth string `json:"readWidth"` // reading column: "n" narrow, "m" standard, "w" wide
-	Theme     string `json:"theme"`     // "system" (follow the device), "light" or "dark"
-	ReadFont  string `json:"readFont"`  // English: "literata", "classic", "sans" or "legible"
-	GlossFont string `json:"glossFont"` // Chinese glosses: "sans" (黑体), "song" (宋体) or "kai" (楷体)
+	Level       string `json:"level"`
+	Lang        string `json:"lang"`
+	ReadSize    string `json:"readSize"`    // "s" 17px, "sm" 18.5px, "m" 20px, "l" 23px
+	ReadWidth   string `json:"readWidth"`   // reading column: "n" narrow, "m" standard, "w" wide
+	Theme       string `json:"theme"`       // "system" (follow the device), "light" or "dark"
+	ReadFont    string `json:"readFont"`    // English: "literata", "classic", "sans" or "legible"
+	GlossFont   string `json:"glossFont"`   // Chinese glosses: "sans" (黑体), "song" (宋体) or "kai" (楷体)
+	HideWords   bool   `json:"hideWords"`   // word glosses off
+	HidePhrases bool   `json:"hidePhrases"` // phrase glosses off
 }
 
 func (p Prefs) withDefaults() Prefs {

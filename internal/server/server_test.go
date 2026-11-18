@@ -229,11 +229,24 @@ func TestPrefs(t *testing.T) {
 	if got.Theme != "dark" || got.Lang != "en" || got.ReadWidth != "w" || got.ReadFont != "legible" || got.GlossFont != "kai" {
 		t.Fatalf("invalid values stored: %+v", got)
 	}
+	// The gloss switches: on until turned off, and left alone when not sent.
+	got = decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]any{"hideWords": true}))
+	if !got.HideWords || got.HidePhrases {
+		t.Fatalf("after hiding word glosses = %+v", got)
+	}
+	got = decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]any{"hidePhrases": true, "readSize": "l"}))
+	if !got.HideWords || !got.HidePhrases || got.ReadSize != "l" {
+		t.Fatalf("after hiding phrase glosses = %+v", got)
+	}
+	got = decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]any{"hideWords": false}))
+	if got.HideWords || !got.HidePhrases {
+		t.Fatalf("after showing word glosses = %+v", got)
+	}
 	me = decodeJSON[struct {
 		User store.User `json:"user"`
 	}](t, e.do(t, c, "GET", "/api/me", nil))
-	if me.User.Prefs.Theme != "dark" {
-		t.Fatalf("theme not persisted: %+v", me.User.Prefs)
+	if me.User.Prefs.Theme != "dark" || !me.User.Prefs.HidePhrases {
+		t.Fatalf("prefs not persisted: %+v", me.User.Prefs)
 	}
 }
 
