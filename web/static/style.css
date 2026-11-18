@@ -515,8 +515,9 @@ label.pop-row:hover { background: var(--hover); }
 .article h1 { font-size: 1.5em; } .article h2 { font-size: 1.3em; } .article h3 { font-size: 1.12em; }
 .article p, .article ul, .article ol, .article blockquote { margin: 0 0 1.1em; }
 .article blockquote { border-left: 2px solid var(--line); padding-left: 18px; color: var(--muted); }
-.article pre { background: var(--sunken); padding: 12px 14px; border-radius: var(--r-sm); overflow-x: auto; line-height: 1.5; font-size: 14px; }
+.article pre { background: var(--sunken); padding: 12px 14px; border-radius: var(--r-sm); overflow-x: auto; line-height: 1.5; font-size: .75em; }
 .article code { font-size: .82em; background: var(--sunken); padding: 1px 5px; border-radius: 4px; }
+.article pre code { font-size: 1em; background: none; padding: 0; border-radius: 0; } /* the block sets the size, with the text */
 .article a { color: var(--phrase); }
 .article table { border-collapse: collapse; display: block; overflow-x: auto; }
 .article td, .article th { border: 1px solid var(--line); padding: 4px 10px; }

@@ -64,6 +64,22 @@ check('…with bold kept', !!(await page.$('#article strong')));
 const format = () => page.evaluate(() => fetch('/api/books/' + location.hash.split('/').pop(), { cache: 'no-store' }).then((r) => r.json()).then((b) => b.format));
 check('stored as markdown', (await format()) === 'markdown');
 
+// ---- a code block is set in proportion to the text, at the chosen text size
+await openDialog();
+await page.fill('#src-text', '# Setup\n\nRun `make demo` first:\n\n```\nmake demo\nopen http://localhost:8080\n```');
+await page.click('#src-save');
+await page.waitForSelector('#reader-view:not([hidden]) #article pre code');
+const codeSizes = () => page.evaluate(() => [
+  getComputedStyle(document.querySelector('#article pre code')).fontSize,
+  getComputedStyle(document.querySelector('#article p code')).fontSize,
+].join());
+check('code is smaller than the text', (await codeSizes()) === '15px,16.4px', await codeSizes());
+await page.click('#btn-display');
+await page.click('#size-seg [data-size="l"]');
+check('…and grows with the text size', (await codeSizes()) === '17.25px,18.86px', await codeSizes());
+await page.click('#size-seg [data-size="m"]');
+await page.keyboard.press('Escape');
+
 // ---- …unless the reader keeps it plain; Edit Text can switch it later
 await openDialog();
 await page.fill('#src-text', '**Packing List**\n\n- passport\n- *charger*');
