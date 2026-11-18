@@ -284,8 +284,13 @@ await page.waitForTimeout(600);
 check('reopening resumes near last position', await page.evaluate(() => window.scrollY > 600), String(await page.evaluate(() => window.scrollY)));
 await page.click('#home-link');
 
-// Reading options: the level
-const pressedLevel = () => page.$eval('#level-seg [aria-pressed="true"]', (b) => b.dataset.level);
+// Reading options: what this device shows, kept in this browser. The level
+// and the defaults are in Settings.
+const accountPrefs = () => page.evaluate(() => fetch('/api/me').then((r) => r.json()).then((m) => m.user.prefs));
+const onDevice = () => page.evaluate(() => {
+  const key = Object.keys(localStorage).find((k) => k.startsWith('lingolens.reading.'));
+  return key ? JSON.parse(localStorage.getItem(key)) : {};
+});
 await page.click('.book-link:has-text("Why Small")');
 await page.waitForSelector('#btn-display:visible');
 await page.click('#btn-display');
@@ -296,13 +301,11 @@ const anchored = await page.evaluate(() => {
   return Math.abs(p.right - b.right) < 2 && p.top >= b.bottom;
 });
 check('reading options open under their button', anchored);
-check('reading options show the current level', (await pressedLevel()) === 'B1' && (await page.textContent('#level-note')).startsWith('Intermediate'), await page.textContent('#level-note'));
-await page.screenshot({ path: `${OUT}/d-level-pop.png` });
-await page.click('#level-seg [data-level="C1"]');
-await page.waitForTimeout(300);
-check('reading options switch the level', (await pressedLevel()) === 'C1' && (await page.textContent('#level-note')).startsWith('Advanced'), await page.textContent('#level-note'));
-check('switching level keeps reading options open', await page.isVisible('#display-pop'));
-check('the level just pressed keeps the focus', await page.evaluate(() => document.activeElement?.dataset.level) === 'C1');
+check('reading options leave the level to Settings', !(await page.$('#display-pop [data-level]')));
+check('reading options say they stay on this device', (await page.textContent('#display-pop .display-foot')).startsWith('Saved on this device only.'));
+const popFits = await page.$eval('#display-pop', (p) => ({ sw: p.scrollWidth, cw: p.clientWidth, w: p.getBoundingClientRect().width,
+  kids: [...p.children].map((c) => `${c.id || c.className}:${Math.round(c.getBoundingClientRect().right - p.getBoundingClientRect().right)}`).join(' ') }));
+check('the note doesn\'t widen reading options', popFits.sw <= popFits.cw && popFits.w < 360, JSON.stringify(popFits));
 await page.keyboard.press('Escape');
 await page.waitForSelector('#display-pop:not(:popover-open)', { state: 'attached' });
 await page.evaluate(() => window.scrollTo(0, 400));
@@ -319,7 +322,7 @@ const phoneSize = await page.evaluate(() => getComputedStyle(document.querySelec
 check('a phone shows the same text size', phoneSize === '18.5px', phoneSize);
 await page.setViewportSize({ width: 1280, height: 860 });
 await page.waitForTimeout(600);
-check('in-between size saved to the account', await page.evaluate(() => fetch('/api/me').then((r) => r.json()).then((m) => m.user.prefs.readSize)) === 'sm');
+check('text size kept on this device, not sent to the account', (await accountPrefs()).readSize === 'm' && (await onDevice()).readSize === 'sm', JSON.stringify(await onDevice()));
 await page.click('#size-seg [data-size="l"]');
 const articleWidth = () => page.evaluate(() => Math.round(document.querySelector('#article').getBoundingClientRect().width));
 check('standard line width by default', await articleWidth() === 820, String(await articleWidth()));
@@ -330,12 +333,13 @@ check('wide line width applies', await articleWidth() === 1040, String(await art
 await page.click('#width-seg [data-width="n"]');
 check('narrow line width applies', await articleWidth() === 680, String(await articleWidth()));
 await page.waitForTimeout(600);
-check('line width saved to the account', await page.evaluate(() => fetch('/api/me').then((r) => r.json()).then((m) => m.user.prefs.readWidth)) === 'n');
+check('line width kept on this device, not sent to the account', (await accountPrefs()).readWidth === 'm' && (await onDevice()).readWidth === 'n');
 await page.reload();
 await page.waitForSelector('#reader-view:not([hidden])');
 check('line width kept after reload', await articleWidth() === 680, String(await articleWidth()));
 await page.click('#btn-display');
 await page.click('#width-seg [data-width="m"]');
+check('choosing the default again follows the default', !('readWidth' in await onDevice()), JSON.stringify(await onDevice()));
 
 // Fonts: English text and Chinese glosses, each chosen on its own.
 const fonts = () => page.evaluate(() => ({
@@ -352,28 +356,67 @@ check('gloss font applies', chosen.gloss.includes('Kai'), chosen.gloss);
 check('the chosen font loads', await page.evaluate(() => document.fonts.ready.then(() => document.fonts.check('16px "Atkinson Hyperlegible Next"'))));
 await page.screenshot({ path: `${OUT}/d-display-fonts.png` });
 await page.waitForTimeout(600);
-check('fonts saved to the account', await page.evaluate(() => fetch('/api/me').then((r) => r.json()).then((m) => `${m.user.prefs.readFont}/${m.user.prefs.glossFont}`)) === 'legible/kai');
+const accountFonts = await accountPrefs();
+check('fonts kept on this device, not sent to the account', `${accountFonts.readFont}/${accountFonts.glossFont}` === 'literata/sans' && JSON.stringify(await onDevice()) === '{"readSize":"l","readFont":"legible","glossFont":"kai"}', JSON.stringify(await onDevice()));
 await page.reload();
 await page.waitForSelector('#reader-view:not([hidden])');
 check('fonts kept after reload', (await fonts()).read.startsWith('"Atkinson Hyperlegible Next"'));
 await page.click('#btn-display');
 await page.click('#font-seg [data-font="literata"]');
 await page.click('#gloss-seg [data-gloss="sans"]');
+
+// Glosses: the switches hide word or phrase glosses on this device.
+const wordGlossShown = () => page.$eval('#article ruby.ann-word rt', (rt) => getComputedStyle(rt).display !== 'none');
+check('word glosses shown by default', await wordGlossShown() && await page.isChecked('#show-words'));
+await page.click('#display-pop label:has(#show-words)');
+check('the switch hides word glosses', !(await wordGlossShown()));
+await page.waitForTimeout(600);
+check('…on this device only', (await accountPrefs()).hideWords === false && (await onDevice()).hideWords === true);
 await page.keyboard.press('Escape');
 
-// Settings page: profile reflects the level; back returns to the book
+// Settings: the level, and the reading defaults for every device.
 await page.click('#btn-menu');
 await page.click('#btn-settings');
 await page.waitForSelector('#settings-view:not([hidden])');
-check('profile shows the level chosen in the reader', await page.$eval('#profile-levels [aria-checked="true"]', (b) => b.dataset.level) === 'C1');
-await page.click('#profile-levels [data-level="B1"]');
+check('profile shows the level', await page.$eval('#profile-levels [aria-checked="true"]', (b) => b.dataset.level) === 'B1');
+await page.click('#profile-levels [data-level="C1"]');
 await page.waitForTimeout(300);
-check('profile level saved to the account', await page.evaluate(() => fetch('/api/me').then((r) => r.json()).then((m) => m.user.prefs.level)) === 'B1');
+check('profile level saved to the account', (await accountPrefs()).level === 'C1');
+await page.click('#profile-levels [data-level="B1"]');
+check('Settings shows the defaults, not this device\'s choices', (await page.getAttribute('#def-size-seg [data-size="m"]', 'aria-pressed')) === 'true' && await page.isChecked('#def-words'));
+check('Settings says what this device sets for itself', await page.isVisible('#reading-local')
+  && (await page.textContent('#reading-local-text')) === 'This device has its own Reading Options for: Word glosses, Text size.', await page.textContent('#reading-local-text'));
 await page.screenshot({ path: `${OUT}/d-settings.png`, fullPage: true });
+await page.click('#def-size-seg [data-size="s"]');
+await page.click('#def-font-seg [data-font="sans"]');
+await page.click('#settings-view label:has(#def-phrases)');
+await page.waitForTimeout(600);
+const defaults = await accountPrefs();
+check('defaults from Settings saved to the account', defaults.readSize === 's' && defaults.readFont === 'sans' && defaults.hidePhrases === true, JSON.stringify(defaults));
+check('…and this device uses the one just chosen', !('readSize' in await onDevice()) && (await page.textContent('#reading-local-text')) === 'This device has its own Reading Options for: Word glosses.');
+await page.click('#reading-reset');
+check('"Use the defaults here" drops this device\'s choices', JSON.stringify(await onDevice()) === '{}' && !(await page.isVisible('#reading-local')));
 check('settings breadcrumb: Shelf / book / Settings', (await page.$$eval('#crumbs .crumb', (els) => els.map((e) => e.textContent))).join(' / ') === 'Shelf / Why Small Habits Matter / Settings');
 await page.click('#crumbs a[href^="#/read/"]');
 await page.waitForSelector('#reader-view:not([hidden])');
 check('settings back returns to the book', (await page.textContent('#book-title')) === 'Why Small Habits Matter');
+const shown = await page.evaluate(() => {
+  const a = document.querySelector('#article');
+  return { size: getComputedStyle(a).fontSize, font: getComputedStyle(a).fontFamily, words: !a.classList.contains('hide-words'), phrases: !a.classList.contains('hide-phrases') };
+});
+check('the reader follows the defaults', shown.size === '17px' && !shown.font.startsWith('Literata') && shown.words && !shown.phrases, JSON.stringify(shown));
+await page.click('#btn-display');
+check('reading options show them', (await page.getAttribute('#size-seg [data-size="s"]', 'aria-pressed')) === 'true' && !(await page.isChecked('#show-phrases')));
+await page.click('#display-defaults');
+await page.waitForSelector('#settings-view:not([hidden])');
+const atReading = await page.$eval('#set-reading-h', (h) => Math.round(h.closest('section').getBoundingClientRect().top));
+check('"Change the defaults" opens Settings at Reading', atReading >= 0 && atReading < 120, String(atReading));
+await page.click('#def-size-seg [data-size="m"]');
+await page.click('#def-font-seg [data-font="literata"]');
+await page.click('#settings-view label:has(#def-phrases)');
+await page.waitForTimeout(600);
+const restored = await accountPrefs();
+check('defaults restored', restored.readSize === 'm' && restored.readFont === 'literata' && restored.hidePhrases === false, JSON.stringify(restored));
 await page.click('#home-link');
 await page.waitForSelector('#library-view:not([hidden])');
 
@@ -428,6 +471,8 @@ check('phone reader header fits', rdOv <= 0, `${rdOv}px`);
 await pp.screenshot({ path: `${OUT}/p-reader.png` });
 await pp.goto(BASE + '#/settings');
 await pp.waitForSelector('#settings-view:not([hidden])');
+const setOv = await pp.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+check('phone settings no overflow', setOv <= 0, `${setOv}px`);
 await pp.screenshot({ path: `${OUT}/p-settings.png`, fullPage: true });
 
 check('no console/page errors', errors.length === 0, errors.join(' | '));

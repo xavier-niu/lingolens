@@ -38,7 +38,7 @@ It runs on your own server and uses your own AI key. One server can host a whole
 - Works on phones, tablets and computers. You come back to where you stopped, on any device.
 - Progress counts what you've had time to read, so jumping to the end to see how long a text is doesn't mark it finished.
 - Works offline: read your whole shelf, save words and add texts without a connection. Everything syncs when you're back online.
-- Choose the English font (Literata, classic serif, sans or Atkinson Hyperlegible) and the Chinese font (黑体, 宋体 or 楷体), plus text size, line width, and a light or dark theme.
+- Choose the English font (Literata, classic serif, sans or Atkinson Hyperlegible) and the Chinese font (黑体, 宋体 or 楷体), plus text size, line width, and a light or dark theme. Set your defaults in Settings for every device, or change them on one device while you read.
 - The interface is in English or Chinese.
 - Texts can delete themselves after a day, a week, a month or longer. Texts saved by AI agents go after 30 days unless you keep them.
 
@@ -143,7 +143,7 @@ See [Development](docs/development.md) for more.
 1. **Create your account.** On a new server, the first visit asks for the admin's email and password.
 2. **Set up your AI model.** Open **Settings**, choose your English level, pick a provider and model, and paste your API key.
 3. **Add something to read.** Choose **Add Source** and paste text, enter a link, or pick a book or PDF. On an empty shelf, **Use a Sample Text** gives you something to try.
-4. **Read.** Glosses appear as you scroll. Tap a word for details, select text to **Ask AI**, and use **Aa** for fonts and text size.
+4. **Read.** Glosses appear as you scroll. Tap a word for details, select text to **Ask AI**, and use **Aa** for fonts and text size on this device.
 5. **Invite others.** As admin, add accounts in **Settings → Members**. Each person sets up their own level and AI key.
 
 ## Learn more

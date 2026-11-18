@@ -58,7 +58,14 @@ check('reader options show the same choice', (await pressed(page, '#display-pop 
 await page.screenshot({ path: `${OUT}/t-reader-dark-pop.png` });
 await page.click('#display-pop [data-mode="light"]');
 check('reader quick switch works', (await bg(page)) === LIGHT);
-check('both switches stay in step', (await pressed(page, '#theme-seg')) === 'light');
+check('…on this device: Settings keeps the default', (await pressed(page, '#theme-seg')) === 'dark');
+await page.waitForTimeout(300);
+check('…and so does the profile', (await prefs(page)) === 'dark');
+await page.reload();
+await page.waitForSelector('#reader-view:not([hidden])');
+check('the reader\'s choice survives reload', (await bg(page)) === LIGHT);
+await page.click('#btn-display');
+await page.waitForSelector('#display-pop:popover-open');
 await page.click('#display-pop [data-mode="dark"]');
 await page.keyboard.press('Escape');
 await page.screenshot({ path: `${OUT}/t-reader-dark.png` });

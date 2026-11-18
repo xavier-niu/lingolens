@@ -205,8 +205,8 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 }
 .seg button:hover { color: var(--ink); }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
-.theme-seg button, #width-seg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 1; }
-.theme-seg svg, #width-seg svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.theme-seg button, #width-seg button, .width-seg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 1; }
+.theme-seg svg, #width-seg svg, .width-seg svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon-seg button { padding: 0 9px; }
 
 /* Font choices in Reading Options: each name set in its own font. */
@@ -214,7 +214,6 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .pop-block > span { display: block; margin-bottom: 6px; }
 .font-seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
 .font-seg.zh { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.font-seg.level-seg { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .font-seg button { height: 34px; padding: 0 8px; font-size: 15px; font-weight: 400; color: var(--ink-2); }
 .font-seg button[data-font="literata"] { font-family: var(--font-literata); }
 .font-seg button[data-font="classic"] { font-family: var(--font-classic); }
@@ -223,9 +222,11 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .font-seg button[data-gloss="sans"] { font-family: var(--zh-sans); }
 .font-seg button[data-gloss="song"] { font-family: var(--zh-song); }
 .font-seg button[data-gloss="kai"] { font-family: var(--zh-kai); font-size: 16px; }
-.level-seg button { padding: 0; font-size: 14px; }
 /* Wraps to the popover's width instead of widening it. */
-.level-note { width: 0; min-width: 100%; margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
+.pop-foot.display-foot {
+  box-sizing: border-box; width: 0; min-width: 100%; margin: 6px 0 0; padding: 10px 10px 4px;
+  border-top: 1px solid var(--line); line-height: 1.5;
+}
 /* Switching themes recolours everything at once instead of animating each control. */
 .theme-switching, .theme-switching * { transition: none !important; }
 
@@ -966,6 +967,22 @@ body.chat-open .hint { display: none; }
 .set-inline { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .set-block > .field:first-child { margin-top: 0; }
 
+/* Reading defaults: one card, a row for each option. */
+.set-row {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px;
+  padding: 12px 0; border-top: 1px solid var(--line);
+}
+.set-row:first-child { padding-top: 0; border-top: 0; }
+.set-row:last-child { padding-bottom: 0; }
+label.set-row { cursor: pointer; }
+.set-label { font-size: 14.5px; font-weight: 500; }
+.set-row .font-seg { width: 420px; max-width: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.set-row .font-seg.zh { width: 300px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.set-local {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0 0 12px; padding: 10px 14px;
+  border: 1px solid var(--line); border-radius: var(--r); background: var(--sunken); font-size: 13.5px; color: var(--ink-2);
+}
+
 .level-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
 .level-card {
   position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
@@ -1109,6 +1126,8 @@ body[data-view="login"] main { padding-bottom: 40px; }
   .cover-title { font-size: 16px; }
   .article { line-height: 2.4; }
   .level-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .set-row .font-seg, .set-row .font-seg.zh { width: 100%; }
+  .set-row .font-seg:not(.zh) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .field-grid { grid-template-columns: 1fr; }
   .member { grid-template-columns: 1fr auto; }
   .token-form { flex-direction: column; align-items: stretch; }

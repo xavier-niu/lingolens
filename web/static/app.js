@@ -69,7 +69,7 @@ function providerProblem() {
 
 const state = {
   me: null, // the signed-in user
-  prefs: { level: 'B1', lang: 'en', readSize: 'm', readWidth: 'm', theme: 'system', readFont: 'literata', glossFont: 'sans' },
+  prefs: { level: 'B1', lang: 'en', readSize: 'm', readWidth: 'm', theme: 'system', readFont: 'literata', glossFont: 'sans', hideWords: false, hidePhrases: false },
   model: null,
   books: [], // the shelf, without content
   segments: new Map(), // id -> { el, text }
@@ -1928,9 +1928,11 @@ function showSettings() {
   $('#tk-env').textContent = '';
   loadTokens();
   renderBookmarklet();
-  if (scrollToBookmarklet) $('#set-clip-h').closest('section').scrollIntoView({ block: 'start' });
+  renderReadingDefaults();
+  const at = settingsAt && document.getElementById(settingsAt);
+  if (at) at.closest('section').scrollIntoView({ block: 'start' });
   else window.scrollTo(0, 0);
-  scrollToBookmarklet = false;
+  settingsAt = '';
 }
 
 // ------------------------------------------------------------------ bookmarklet
@@ -1940,7 +1942,9 @@ function showSettings() {
 // instead: run on any page, it opens LingoLens at #/clip and hands that tab the
 // page (or just the selected part) once the tab says it's ready. It posts only to
 // this server's origin, and the tab asks before adding anything to the shelf.
-let scrollToBookmarklet = false; // "Set it up" links open Settings at this section
+// Links that open Settings at one section ("Set it up" for the bookmarklet,
+// "Change the defaults" in Reading Options) put its heading's id here.
+let settingsAt = '';
 
 function bookmarkletCode() {
   const app = location.origin + location.pathname;
@@ -2480,36 +2484,108 @@ function levelName(lv) {
   return getLang() === 'zh' ? lv.label.replace(/^\S+\s*/, '') : lv.name;
 }
 
-// The level in Reading Options: A1–C2, and what the chosen one means.
-function renderLevelUI() {
-  const seg = $('#level-seg');
-  const { levels } = serverConfig;
-  if (!seg.children.length) seg.innerHTML = levels.map((l) => `<button type="button" data-level="${l.id}">${l.id}</button>`).join('');
-  // Updated in place, so the button just pressed keeps the focus.
-  for (const b of seg.children) {
-    const l = levels.find((x) => x.id === b.dataset.level);
-    b.title = levelName(l);
-    b.setAttribute('aria-label', `${l.id} ${levelName(l)}`);
-  }
-  const current = getLevel();
-  markPressed('#level-seg', 'level', current);
-  const lv = levels.find((l) => l.id === current);
-  $('#level-note').textContent = lv ? `${levelName(lv)} · ${lv.hint}, ${t('level.words', { n: lv.vocab.toLocaleString() })}` : '';
-}
-
-// The level lives in the profile; Reading Options is a quick way to change it.
+// The level lives in the profile and is chosen in Settings; the reader
+// annotates for it when a text is opened.
 function setLevel(id) {
   if (id === getLevel()) return;
   savePrefs({ level: id });
-  renderLevelUI();
-  const view = document.body.dataset.view;
-  if (view === 'settings') renderProfileLevels();
-  else if (state.book) openBook(state.book.id); // re-annotate for the new level
-  else renderShelf();
+  renderProfileLevels();
 }
 
 function markPressed(groupSel, attr, value) {
   for (const b of document.querySelectorAll(`${groupSel} button`)) b.setAttribute('aria-pressed', String(b.dataset[attr] === value));
+}
+
+// ------------------------------------------------------------------ reading options
+
+// Settings holds the defaults, saved to the profile and the same on every
+// device. Reading Options in the reader change them on this device only: what
+// differs from the default is kept in this browser and never sent. `attr` is
+// the data attribute of each choice's button; the gloss switches are inverted
+// checkboxes.
+const READING = {
+  hideWords: { label: 'toggle.words' },
+  hidePhrases: { label: 'toggle.phrases' },
+  readSize: { attr: 'size', values: ['s', 'sm', 'm', 'l'], label: 'display.size' },
+  readWidth: { attr: 'width', values: ['n', 'm', 'w'], label: 'display.width' },
+  readFont: { attr: 'font', values: ['literata', 'classic', 'sans', 'legible'], label: 'display.font' },
+  glossFont: { attr: 'gloss', values: ['sans', 'song', 'kai'], label: 'display.glossFont' },
+  theme: { attr: 'mode', values: ['system', 'light', 'dark'], label: 'theme.title' },
+};
+const READING_DEFAULTS = { hideWords: false, hidePhrases: false, readSize: 'm', readWidth: 'm', readFont: 'literata', glossFont: 'sans', theme: 'system' };
+
+const validReading = (key, v) => (READING[key].values ? READING[key].values.includes(v) : typeof v === 'boolean');
+
+let deviceReading = {}; // this device's Reading Options, where they differ from the defaults
+const deviceReadingKey = () => `lingolens.reading.${state.me?.id}`;
+
+function loadDeviceReading() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(deviceReadingKey())) || {}; } catch { /* none, or private mode */ }
+  deviceReading = Object.fromEntries(Object.entries(saved).filter(([k, v]) => READING[k] && validReading(k, v)));
+}
+
+function saveDeviceReading() {
+  try {
+    if (Object.keys(deviceReading).length) localStorage.setItem(deviceReadingKey(), JSON.stringify(deviceReading));
+    else localStorage.removeItem(deviceReadingKey());
+  } catch { /* private mode: kept until the page closes */ }
+}
+
+const readingDefault = (key) => (validReading(key, state.prefs[key]) ? state.prefs[key] : READING_DEFAULTS[key]);
+
+// What this device shows: its own choice, or else the default.
+function currentReading() {
+  return Object.fromEntries(Object.keys(READING).map((k) => [k, k in deviceReading ? deviceReading[k] : readingDefault(k)]));
+}
+
+// Reading Options: kept on this device. Choosing the default again drops the
+// device's own choice, so it follows the default from then on.
+function setDeviceReading(key, value) {
+  if (!state.me || !validReading(key, value)) return;
+  if (value === readingDefault(key)) delete deviceReading[key];
+  else deviceReading[key] = value;
+  saveDeviceReading();
+  applyReading();
+}
+
+// Settings: the default, saved to the profile. Chosen here, so this device
+// uses it too.
+function setReadingDefault(key, value) {
+  if (!state.me || !validReading(key, value)) return;
+  delete deviceReading[key];
+  saveDeviceReading();
+  if (value !== readingDefault(key)) savePrefs({ [key]: value });
+  applyReading();
+}
+
+function resetDeviceReading() {
+  deviceReading = {};
+  saveDeviceReading();
+  applyReading();
+}
+
+function applyReading(r = currentReading()) {
+  applyReadSize(r.readSize);
+  applyReadWidth(r.readWidth);
+  applyFonts(r);
+  applyGlosses(r);
+  if (r.theme !== appliedTheme()) applyTheme(r.theme);
+  markPressed('#display-pop .theme-seg', 'mode', r.theme);
+  renderReadingDefaults();
+}
+
+// Settings: the defaults, and which of them this device sets for itself.
+function renderReadingDefaults() {
+  const d = Object.fromEntries(Object.keys(READING).map((k) => [k, readingDefault(k)]));
+  $('#def-words').checked = !d.hideWords;
+  $('#def-phrases').checked = !d.hidePhrases;
+  for (const [key, { attr }] of Object.entries(READING)) {
+    if (attr) markPressed(`#settings-view [data-reading="${key}"]`, attr, d[key]);
+  }
+  const own = Object.keys(READING).filter((k) => k in deviceReading);
+  $('#reading-local').hidden = !own.length;
+  $('#reading-local-text').textContent = t('reading.local', { list: own.map((k) => t(READING[k].label)).join(t('list.sep')) });
 }
 
 const READ_SIZES = { s: '17px', sm: '18.5px', m: '20px', l: '23px' };
@@ -2527,12 +2603,10 @@ function applyReadWidth(width) {
   markPressed('#width-seg', 'width', v);
 }
 
-// The reading font and the Chinese gloss font (Reading Options).
-const READ_FONTS = ['literata', 'classic', 'sans', 'legible'];
-const GLOSS_FONTS = ['sans', 'song', 'kai'];
+// The reading font and the Chinese gloss font.
 function applyFonts({ readFont, glossFont }) {
-  const read = READ_FONTS.includes(readFont) ? readFont : 'literata';
-  const gloss = GLOSS_FONTS.includes(glossFont) ? glossFont : 'sans';
+  const read = validReading('readFont', readFont) ? readFont : 'literata';
+  const gloss = validReading('glossFont', glossFont) ? glossFont : 'sans';
   const root = document.documentElement.style;
   root.setProperty('--read-font', `var(--font-${read})`);
   root.setProperty('--zh', `var(--zh-${gloss})`);
@@ -2540,13 +2614,20 @@ function applyFonts({ readFont, glossFont }) {
   markPressed('#gloss-seg', 'gloss', gloss);
 }
 
+function applyGlosses({ hideWords, hidePhrases }) {
+  $('#article').classList.toggle('hide-words', hideWords);
+  $('#article').classList.toggle('hide-phrases', hidePhrases);
+  $('#show-words').checked = !hideWords;
+  $('#show-phrases').checked = !hidePhrases;
+}
+
 // "system" follows the device; theme.js (loaded in <head>) does the work and
 // remembers the choice in this browser so the next visit paints correctly at once.
+const appliedTheme = () => document.documentElement.dataset.theme || 'system';
 function applyTheme(theme) {
   const root = document.documentElement;
   root.classList.add('theme-switching');
-  const t = window.lingolensTheme ? window.lingolensTheme(theme) : 'system';
-  markPressed('.theme-seg', 'mode', t);
+  if (window.lingolensTheme) window.lingolensTheme(theme);
   requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
 }
 
@@ -2572,7 +2653,7 @@ function keepPopoverOnScreen(pop) {
 
 // Re-render everything that holds translated text after a language switch.
 function refreshLanguage() {
-  renderLevelUI();
+  renderReadingDefaults();
   markPressed('#lang-seg', 'lang', getLang());
   if (document.body.dataset.view === 'library') renderShelf();
   else updateBookStat();
@@ -2675,7 +2756,7 @@ async function onSynced() {
     return;
   }
   if (!state.me || me?.user?.id !== state.me.id) return;
-  const before = { level: getLevel(), lang: state.prefs.lang, readSize: state.prefs.readSize, readWidth: state.prefs.readWidth, theme: state.prefs.theme, readFont: state.prefs.readFont, glossFont: state.prefs.glossFont };
+  const before = { level: getLevel(), reading: JSON.stringify(currentReading()) };
   state.me = me.user;
   renderAvatar();
   state.model = me.model;
@@ -2684,17 +2765,15 @@ async function onSynced() {
   state.booksLoaded = true;
   state.wordbook = wordbook;
   state.known = new Set(known);
-  if (state.prefs.theme !== before.theme) applyTheme(state.prefs.theme);
-  if (state.prefs.readSize !== before.readSize) applyReadSize(state.prefs.readSize);
-  if (state.prefs.readWidth !== before.readWidth) applyReadWidth(state.prefs.readWidth);
-  if (state.prefs.readFont !== before.readFont || state.prefs.glossFont !== before.glossFont) applyFonts(state.prefs);
+  // New defaults show where this device doesn't set its own.
+  if (JSON.stringify(currentReading()) !== before.reading) applyReading();
+  else renderReadingDefaults();
   updateWordbookBadge();
   refreshKnownMarks();
   if (state.prefs.lang && state.prefs.lang !== getLang()) {
     setLang(state.prefs.lang);
     refreshLanguage(); // re-renders everything on screen
   } else {
-    renderLevelUI();
     const view = document.body.dataset.view;
     if (view === 'library') renderShelf();
     if (view === 'reader') updateBookStat();
@@ -2837,10 +2916,8 @@ async function startSession(me, { offline = false } = {}) {
   state.model = me.model;
   state.prefs = { ...state.prefs, ...me.user.prefs };
   if (state.prefs.lang && state.prefs.lang !== getLang()) setLang(state.prefs.lang);
-  applyReadSize(state.prefs.readSize);
-  applyReadWidth(state.prefs.readWidth);
-  applyFonts(state.prefs);
-  applyTheme(state.prefs.theme);
+  loadDeviceReading();
+  applyReading();
   try {
     const [wordbook, known] = await Promise.all([loadData('wordbook'), loadData('known')]);
     state.wordbook = wordbook;
@@ -3207,11 +3284,10 @@ async function init() {
   }
 
   applyI18n();
-  renderLevelUI();
   markPressed('#lang-seg', 'lang', getLang());
   applyReadSize('m');
   applyReadWidth('m');
-  markPressed('.theme-seg', 'mode', document.documentElement.dataset.theme || 'system');
+  markPressed('.theme-seg', 'mode', appliedTheme());
 
   // Header popovers
   for (const pop of document.querySelectorAll('[popover]')) {
@@ -3220,10 +3296,6 @@ async function init() {
   }
   window.addEventListener('resize', () => {
     for (const pop of document.querySelectorAll('[popover]:popover-open')) anchorPopover(pop);
-  });
-  $('#level-seg').addEventListener('click', (e) => {
-    const id = e.target.closest('[data-level]')?.dataset.level;
-    if (id) setLevel(id);
   });
   for (const sel of ['#lang-seg', '#login-lang']) {
     $(sel).addEventListener('click', (e) => {
@@ -3234,43 +3306,25 @@ async function init() {
       refreshLanguage();
     });
   }
-  for (const seg of document.querySelectorAll('.theme-seg')) {
-    seg.addEventListener('click', (e) => {
-      const theme = e.target.closest('[data-mode]')?.dataset.mode;
-      if (!theme) return;
-      applyTheme(theme);
-      if (state.me) savePrefs({ theme });
-    });
+  // Reading options: in the reader for this device, in Settings as the defaults.
+  for (const el of document.querySelectorAll('[data-reading]')) {
+    const key = el.dataset.reading;
+    const set = el.closest('#display-pop') ? setDeviceReading : setReadingDefault;
+    if (el.type === 'checkbox') {
+      el.addEventListener('change', () => set(key, !el.checked)); // "Word glosses" on = hideWords false
+    } else {
+      const { attr } = READING[key];
+      el.addEventListener('click', (e) => {
+        const v = e.target.closest(`[data-${attr}]`)?.dataset[attr];
+        if (v) set(key, v);
+      });
+    }
   }
-  $('#size-seg').addEventListener('click', (e) => {
-    const size = e.target.closest('[data-size]')?.dataset.size;
-    if (!size) return;
-    savePrefs({ readSize: size });
-    applyReadSize(size);
-  });
-  $('#font-seg').addEventListener('click', (e) => {
-    const readFont = e.target.closest('[data-font]')?.dataset.font;
-    if (!readFont) return;
-    savePrefs({ readFont });
-    applyFonts({ ...state.prefs, readFont });
-  });
-  $('#gloss-seg').addEventListener('click', (e) => {
-    const glossFont = e.target.closest('[data-gloss]')?.dataset.gloss;
-    if (!glossFont) return;
-    savePrefs({ glossFont });
-    applyFonts({ ...state.prefs, glossFont });
-  });
-  $('#width-seg').addEventListener('click', (e) => {
-    const width = e.target.closest('[data-width]')?.dataset.width;
-    if (!width) return;
-    savePrefs({ readWidth: width });
-    applyReadWidth(width);
-  });
-
-
-  const article = $('#article');
-  $('#show-words').addEventListener('change', (e) => article.classList.toggle('hide-words', !e.target.checked));
-  $('#show-phrases').addEventListener('change', (e) => article.classList.toggle('hide-phrases', !e.target.checked));
+  $('#reading-reset').onclick = resetDeviceReading;
+  $('#display-defaults').onclick = () => {
+    $('#display-pop').hidePopover?.();
+    settingsAt = 'set-reading-h';
+  };
 
   // Shelf and sources
   $('#btn-add').onclick = () => openSourceDialog();
@@ -3328,7 +3382,7 @@ async function init() {
   document.addEventListener('click', (e) => {
     if (!e.target.closest('[data-clip-setup]')) return;
     $('#source-dialog').close();
-    scrollToBookmarklet = true;
+    settingsAt = 'set-clip-h';
     if (location.hash === '#/settings') { e.preventDefault(); showSettings(); }
   });
   $('#token-list').addEventListener('click', (e) => {
