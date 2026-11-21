@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -35,7 +36,8 @@ func TestToMarkdown(t *testing.T) {
 y := 2</code></pre>
 		<p>1984. A year to remember.</p>
 		<p>Use * and _ and [brackets] carefully.</p>
-		<img src="a.png" alt="picture">
+		<img src="https://pics.example/a.png" alt="picture" width="600" height="400">
+		<p>All aboard <img src="https://pics.example/1f686.svg" alt="🚆"> tonight.</p>
 		<table><tr><th>Word</th><th>Meaning</th></tr><tr><td>cat</td><td>猫</td></tr></table>
 		<div>Loose text in a div</div>
 		<script>alert(1)</script>
@@ -50,12 +52,77 @@ y := 2</code></pre>
 		"```\nx := 1\ny := 2\n```",
 		"1984\\. A year to remember.",
 		"Use \\* and \\_ and \\[brackets\\] carefully.",
+		"All aboard 🚆 tonight.",
 		"Word · Meaning",
 		"cat · 猫",
 		"Loose text in a div",
 	}, "\n\n")
 	if got != want {
 		t.Fatalf("got:\n%s\n\nwant:\n%s", got, want)
+	}
+}
+
+// A web page's pictures stay, where they were, loaded from the site; icons,
+// avatars, pixels and placeholders don't.
+func TestPagePictures(t *testing.T) {
+	doc, err := html.Parse(strings.NewReader(`<body>
+		<figure><a href="/media/1"><img src="/img/chart.png" alt="Oil prices, 2026" width="687" height="465"></a>
+			<figcaption>Oil prices</figcaption></figure>
+		<p>Prices fell <img src="https://abs.example/emoji/1f4c9.svg" alt="📉"> again <img src="icon.svg"> this week.</p>
+		<p>A map <img src="map.jpg" alt="Map" width="400px" height="300"> of the routes.</p>
+		<div><picture><source srcset="map.avif"><img src="data:image/gif;base64,R0lGOD" srcset="small.jpg 480w, large.jpg 1200w" alt='Lazy "quoted"'></picture></div>
+		<p><img src="avatar.jpg" width="40" height="40"> <img src="pixel.gif" width="1" height="1"> <img src="rule.png" width="900" height="4"></p>
+		<p><img src="javascript:alert(1)"> <img src="data:image/png;base64,AAAA"> <img alt="no source"></p>
+		<h2><img src="logo.png" width="200" height="80">Routes</h2>
+		<ul><li><img src="dot.png" width="200" height="200">First stop</li></ul>
+		<ol><li>Board the train <img src="step1.jpg" width="500" height="300" alt="Platform 3"><ul><li><img src="seat.jpg" width="400" height="300"></li></ul></li>
+			<li><img src="check.svg"> Find your cabin</li>
+			<li><img src="bunk.jpg" width="400" height="300"><ul><li>Pull the ladder down</li></ul></li></ol>
+		<table><tr><th colspan="2">Nightjet</th></tr>
+			<tr><td colspan="2"><img src="train.jpg" width="250" height="160" alt="A Nightjet"></td></tr>
+			<tr><td>Operator</td><td><img src="flag.png" width="23" height="15"> ÖBB <img src="tick.svg"></td></tr>
+			<tr><td><img src="map.png" width="120" height="120"></td><td>Routes</td></tr></table>
+		<p><em>Look here <img src="photo.jpg" width="300" height="200"></em></p>
+		<blockquote><p><img src="quote.png"></p></blockquote>
+	</body>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := url.Parse("https://news.example/a/story")
+	got := pageMarkdown(doc, page)
+	want := strings.Join([]string{
+		`<img src="https://news.example/img/chart.png" alt="Oil prices, 2026" width="687" height="465">`,
+		"Oil prices",
+		"Prices fell 📉 again this week.",
+		"A map",
+		`<img src="https://news.example/a/map.jpg" alt="Map" width="400" height="300">`,
+		"of the routes.",
+		`<img src="https://news.example/a/large.jpg" alt="Lazy &#34;quoted&#34;">`,
+		"## Routes",
+		`- First stop <img src="https://news.example/a/dot.png" alt="" width="200" height="200">`,
+		`1. Board the train <img src="https://news.example/a/step1.jpg" alt="Platform 3" width="500" height="300">` + "\n" +
+			`   - <img src="https://news.example/a/seat.jpg" alt="" width="400" height="300">` + "\n" +
+			"2. Find your cabin\n" +
+			`3. <img src="https://news.example/a/bunk.jpg" alt="" width="400" height="300">` + "\n\n" +
+			"   - Pull the ladder down",
+		"Nightjet",
+		`<img src="https://news.example/a/train.jpg" alt="A Nightjet" width="250" height="160">`,
+		"Operator · ÖBB",
+		"Routes",
+		`<img src="https://news.example/a/map.png" alt="" width="120" height="120">`,
+		"*Look here*",
+		`<img src="https://news.example/a/photo.jpg" alt="" width="300" height="200">`,
+		`> <img src="https://news.example/a/quote.png" alt="">`,
+	}, "\n\n")
+	if got != want {
+		t.Fatalf("got:\n%s\n\nwant:\n%s", got, want)
+	}
+	if text := ToMarkdown(doc); strings.Contains(text, "<img") || !strings.Contains(text, "Prices fell 📉 again") {
+		t.Errorf("ToMarkdown kept a picture, or lost an emoji:\n%s", text)
+	}
+	if !textless(`<img src="https://a.example/1.png" alt="">`+"\n\n> <img src=\"https://a.example/2.png\" alt=\"\">\n\n- <img src=\"https://a.example/3.png\" alt=\"\">\n  <img src=\"https://a.example/4.png\" alt=\"\">\n12. <img src=\"https://a.example/5.png\" alt=\"\">") ||
+		textless("<img src=\"x\" alt=\"\">\n\nWords.") || textless("- Words <img src=\"x\" alt=\"\">") {
+		t.Error("textless is wrong")
 	}
 }
 
@@ -250,6 +317,42 @@ func TestPageArticle(t *testing.T) {
 	}
 }
 
+// An article on X, shaped as the bookmarklet sends it (sizes as shown): its
+// charts stay with their captions; avatars and emoji pictures don't, though an
+// emoji's text does.
+func TestPageArticleFromX(t *testing.T) {
+	const x = `<!doctype html><html><head><title>The Letter on X: "Is This A Bubble?" / X</title></head><body>
+<div id="react-root"><main role="main"><section aria-labelledby="h">
+<article role="article" data-testid="tweet">
+<div><a href="/TheLetter"><img alt="@TheLetter" src="https://pbs.twimg.com/profile_images/1/a_normal.jpg" width="40" height="40"></a>
+<span>The Letter</span><span>@TheLetter</span></div>
+<div class="x-article-body"><div data-article-body-html="">
+<p><span>Our most common question right now: is there a bubble, and did it pop? Stocks have lost an average of $225 billion per day for 31 straight trading days.</span></p>
+<p><span>Before we begin, it is important to understand how much has happened since October, the last time the index hit a record high </span><img alt="📈" src="https://abs-0.twimg.com/emoji/v2/svg/1f4c8.svg" width="17" height="17"><span>.</span></p>
+<figure><div><a href="/TheLetter/article/1/media/2"><img alt="" src="https://pbs.twimg.com/media/chart1.png" width="566" height="383"></a></div><figcaption>The index and recent events, since October</figcaption></figure>
+<p><span>Over the last 45 days, the market has seen countless headlines, an earnings season, concerns about spending and cash flow, a Fed meeting and an election.</span></p>
+<figure><div><a href="/TheLetter/article/1/media/3"><img alt="" src="https://pbs.twimg.com/media/chart2.jpg" width="566" height="378"></a></div><figcaption>Spending and free cash flow</figcaption></figure>
+<p><span>These are real concerns, and a lot of these fears are already priced in, but they will persist until there is more clarity on the return on this spending.</span></p>
+</div></div>
+</article></section></main></div></body></html>`
+	doc, err := PageArticle(x, "https://x.com/TheLetter/status/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"record high 📈.",
+		`<img src="https://pbs.twimg.com/media/chart1.png" alt="" width="566" height="383">` + "\n\nThe index and recent events, since October",
+		`<img src="https://pbs.twimg.com/media/chart2.jpg" alt="" width="566" height="378">`,
+	} {
+		if !strings.Contains(doc.Content, want) {
+			t.Errorf("missing %q in:\n%s", want, doc.Content)
+		}
+	}
+	if strings.Contains(doc.Content, "profile_images") || strings.Contains(doc.Content, "emoji/v2") {
+		t.Errorf("an avatar or an emoji's picture kept:\n%s", doc.Content)
+	}
+}
+
 func TestSitelessTitle(t *testing.T) {
 	body, _ := html.Parse(strings.NewReader(`<h1>Night  Trains</h1><h2>Why - and how</h2>`))
 	for in, want := range map[string]string{
@@ -279,6 +382,10 @@ func TestSelection(t *testing.T) {
 	doc, err = Selection("<span>Only this.</span>", "https://forum.example/t/1", "Thread Title")
 	if err != nil || doc.Title != "Thread Title" || doc.Content != "Only this." {
 		t.Fatalf("doc = %+v, err = %v", doc, err)
+	}
+	doc, err = Selection(`<p>Before.</p><a href="/p/1"><img src="/pics/a.jpg" width="500" height="300"></a><p>After.</p>`, "https://forum.example/t/1", "T")
+	if err != nil || doc.Content != "Before.\n\n"+`<img src="https://forum.example/pics/a.jpg" alt="" width="500" height="300">`+"\n\nAfter." {
+		t.Fatalf("selected picture: doc = %+v, err = %v", doc, err)
 	}
 	if _, err := Selection("<img src=x><script>1</script>", "https://forum.example/", "x"); err == nil {
 		t.Error("a selection without text was accepted")

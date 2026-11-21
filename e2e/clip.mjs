@@ -74,9 +74,52 @@ check('added and opened, with the article’s title', bookTitle === 'Night Train
 check('article text kept', art.includes('fall asleep to the sound of the wheels'));
 check('text added by the page’s scripts kept', art.includes('a conductor knocks on the door'));
 check('menus and footer left out', !/Join now|Members only/.test(art));
+// The page doesn't give the chart's size; the bookmarklet sends the size shown,
+// which also tells the 24px icon from a picture.
+const chart = `<img src="${SITE}chart.svg" alt="Night train routes" width="600" height="300">`;
+check('the picture kept, by its full address and shown size', art.includes(chart), art.match(/<img[^>]*>/g)?.join(' '));
+check('…with its caption after it', art.includes(`${chart}\n\nRoutes added since 2020`));
+check('…but not the icon', !art.includes('width="24"'));
+check('an emoji drawn as a picture keeps its text', art.includes('All aboard 🚆 for the sleeper.'));
+check('a list item keeps its picture', art.includes(`- Most cabins sleep two to six people, in bunks that fold away by day. <img src="${SITE}chart.svg" alt="Cabin plan" width="300" height="150">\n- Some trains`));
+check('a table row’s picture follows it', art.includes(`Nightjet · Vienna to Paris, three nights a week\n\n<img src="${SITE}chart.svg" alt="Nightjet route map" width="400" height="200">`));
+check('…and nothing else', art.match(/<img /g)?.length === 3, art.match(/<img[^>]*>/g)?.join(' '));
+const pic = tab.locator('#article > img');
+await pic.first().scrollIntoViewIfNeeded();
+await tab.waitForFunction(() => document.querySelector('#article > img')?.naturalWidth > 0, null, { timeout: 5000 }).catch(() => {});
+check('the reader shows it, loaded from the site',
+  await pic.first().evaluate((m) => m.naturalWidth > 0 && m.referrerPolicy === 'no-referrer' && m.loading === 'lazy' && m.getBoundingClientRect().width <= m.parentElement.clientWidth));
+await tab.screenshot({ path: `${OUT}/c-picture.png` });
+const inList = tab.locator('#article li > img');
+await inList.scrollIntoViewIfNeeded();
+check('a list item’s picture sits under its text', await inList.evaluate((m) => {
+  const words = document.createRange(); // all of the item's text before it
+  words.setStart(m.parentElement, 0);
+  words.setEndBefore(m);
+  return getComputedStyle(m).display === 'block' && m.getBoundingClientRect().top >= words.getBoundingClientRect().bottom - 1;
+}));
+check('…and the table’s picture is shown', await pic.count() === 2);
+await tab.screenshot({ path: `${OUT}/c-picture-list.png` });
 await tab.goBack().catch(() => {});
 check('Back doesn’t return to the import', !(await tab.evaluate(() => location.hash)).startsWith('#/clip'));
 await tab.close();
+
+// ---- a selection with a picture in it
+await site.evaluate(() => {
+  const r = document.createRange();
+  r.setStartBefore(document.querySelector('article p'));
+  r.setEndAfter(document.querySelector('article figure'));
+  getSelection().removeAllRanges();
+  getSelection().addRange(r);
+});
+tab = await runBookmarklet(site);
+await tab.waitForSelector('#clip-page:not([hidden])', { timeout: 10000 });
+await tab.click('#clip-save');
+await tab.waitForSelector('#reader-view:not([hidden])', { timeout: 10000 });
+art = await stored(tab);
+check('a selected picture is kept, with its shown size', art.includes(`breakfast.\n\n${chart}\n\nRoutes added since 2020`), art);
+await tab.close();
+await site.evaluate(() => getSelection().removeAllRanges());
 
 // ---- only the selection
 await site.goto(SITE + 'article.html');

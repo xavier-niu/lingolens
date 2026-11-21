@@ -257,8 +257,8 @@ func Selection(fragment, pageURL, title string) (*Doc, error) {
 	for _, n := range nodes {
 		box.AppendChild(n)
 	}
-	content := strings.TrimSpace(ToMarkdown(box))
-	if content == "" {
+	content := strings.TrimSpace(pageMarkdown(box, u))
+	if textless(content) {
 		return nil, userErr("The selection has no text. Select the part to read, or nothing for the whole article.")
 	}
 	title = strings.TrimSpace(title)
@@ -275,14 +275,15 @@ func pageAddress(page, pageURL string) (*url.URL, error) {
 	return NormalizeURL(pageURL)
 }
 
-// extract finds the article in a parsed page and converts it to Markdown.
+// extract finds the article in a parsed page and converts it to Markdown, with
+// its pictures.
 func extract(doc *html.Node, u *url.URL) (*Doc, error) {
 	article, err := readability.FromDocument(doc, u)
 	if err != nil || article.Node == nil {
 		return nil, userErr("Couldn't find the article text on that page.")
 	}
-	content := strings.TrimSpace(ToMarkdown(article.Node))
-	if content == "" {
+	content := strings.TrimSpace(pageMarkdown(article.Node, u))
+	if textless(content) {
 		return nil, userErr("Couldn't find the article text on that page.")
 	}
 	title := siteless(strings.TrimSpace(article.Title()), doc)

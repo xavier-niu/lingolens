@@ -35,7 +35,7 @@ await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 
 // ---- fixtures: a tiny static server, standing in for "a web page" and "an EPUB link"
-const TYPES = { '.html': 'text/html; charset=utf-8', '.epub': 'application/epub+zip', '.txt': 'text/plain; charset=utf-8' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.epub': 'application/epub+zip', '.txt': 'text/plain; charset=utf-8', '.svg': 'image/svg+xml' };
 const site = createServer(async (req, res) => {
   const name = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\/+/, '');
   if (!name || name.includes('/') || name.startsWith('.')) { res.writeHead(404).end(); return; }

@@ -3,7 +3,7 @@
 Choose **Add Source** on the shelf. A text can come from:
 
 - **Text:** paste it. Markdown (headings, lists, emphasis, links) is detected automatically. Up to 2,000,000 characters.
-- **Web page:** enter a link. LingoLens fetches the page and keeps just the article, without menus, ads or comments.
+- **Web page:** enter a link. LingoLens fetches the page and keeps just the article, without menus, ads or comments. Its pictures (photos, charts, diagrams) come along: the reader loads them from the site as you reach them, without telling the site where they're shown, so they need a connection. Icons, avatars and tiny images are left out, and emoji drawn as pictures keep their text.
 - **Book or PDF:** a DRM-free EPUB (each chapter keeps its heading, and the book gets a Contents list) or a PDF with selectable text. Up to 50 MB.
 
 Each text can be set to **Delete automatically** after a day, a week, 30 or 90 days, or a year; by default texts are kept forever. Change it later with **Edit text**. The shelf shows the days left on each cover.

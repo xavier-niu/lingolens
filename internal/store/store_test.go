@@ -604,3 +604,12 @@ func must[T any](v T, err error) T {
 	}
 	return v
 }
+
+func TestCountWordsSkipsPictures(t *testing.T) {
+	text := "Night trains are back.\n\n" +
+		`<img src="https://pics.example/media/night-train.jpg" alt="A sleeper cabin at night" width="566" height="383">` +
+		"\n\nThe cabins are small ![a bunk](https://pics.example/bunk_\\(1\\).png) but clever."
+	if got := CountWords(text); got != 10 {
+		t.Errorf("CountWords = %d, want 10", got)
+	}
+}

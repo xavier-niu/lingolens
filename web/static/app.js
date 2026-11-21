@@ -101,6 +101,16 @@ function renderMarkdown(src) {
   return DOMPurify.sanitize(marked.parse(src, { gfm: true }));
 }
 
+// Pictures in texts load from their own sites, without a Referer: it would tell
+// them where they're shown, and sites that refuse other sites' pages their
+// pictures let requests without one through. Lazily, as the reader nears them.
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node.tagName !== 'IMG') return;
+  node.setAttribute('referrerpolicy', 'no-referrer');
+  node.setAttribute('loading', 'lazy');
+  node.setAttribute('decoding', 'async');
+});
+
 function escapeHTML(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -1949,12 +1959,19 @@ let settingsAt = '';
 function bookmarkletCode() {
   const app = location.origin + location.pathname;
   // Plain ES2017, no comments: it runs inside other people's pages. Scripts,
-  // styles and frames are dropped to keep the message small.
-  const js = `(()=>{const A=${JSON.stringify(app)},O=new URL(A).origin,d=document,`
-    + `c=d.documentElement.cloneNode(true);`
+  // styles and frames are dropped to keep the message small. F gives the
+  // pictures copied into k what their originals (o, in the same order) show: the
+  // address the browser chose (from a srcset, or after lazy loading) and, once
+  // loaded, the size they're shown at, so the server can tell photos and charts
+  // from icons and avatars.
+  const js = `(()=>{const A=${JSON.stringify(app)},O=new URL(A).origin,d=document,I=[...d.querySelectorAll('img')],`
+    + `F=(k,o)=>{const q=k.querySelectorAll('img');if(q.length===o.length)q.forEach((m,i)=>{const x=o[i],u=x.currentSrc||x.src;`
+    + `if(/^https?:/.test(u))m.setAttribute('src',u);if(x.complete&&x.naturalWidth){m.setAttribute('width',x.width);m.setAttribute('height',x.height)}})},`
+    + `c=d.documentElement.cloneNode(true);F(c,I);`
     + `c.querySelectorAll('script,style,noscript,template,iframe,svg,canvas,object,embed,link').forEach(n=>n.remove());`
     + `let s='';const g=getSelection();`
-    + `if(g&&!g.isCollapsed){const b=d.createElement('div');for(let i=0;i<g.rangeCount;i++)b.append(g.getRangeAt(i).cloneContents());s=b.innerHTML}`
+    + `if(g&&!g.isCollapsed){const b=d.createElement('div');for(let i=0;i<g.rangeCount;i++){const r=g.getRangeAt(i),k=r.cloneContents();`
+    + `F(k,I.filter(m=>r.intersectsNode(m)));b.append(k)}s=b.innerHTML}`
     + `const p={type:'lingolens:page',url:location.href,title:d.title,html:'<!doctype html>'+c.outerHTML,selection:s},w=open(A+'#/clip');`
     + `if(!w){alert(${JSON.stringify(t('clip.popup'))});return}`
     + `const f=e=>{if(e.source===w&&e.origin===O&&e.data==='lingolens:ready')w.postMessage(p,O)};`

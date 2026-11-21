@@ -523,6 +523,9 @@ label.pop-row:hover { background: var(--hover); }
 .article table { border-collapse: collapse; display: block; overflow-x: auto; }
 .article td, .article th { border: 1px solid var(--line); padding: 4px 10px; }
 .article img { max-width: 100%; height: auto; }
+/* A page's pictures (photos, charts) stand on their own line, as on the page. */
+.article > img { display: block; margin: 0 auto 1.1em; border-radius: var(--r-sm); }
+.article li > img { display: block; margin: .4em 0 .8em; border-radius: var(--r-sm); }
 .article hr { margin: 2em 0; border: 0; border-top: 1px solid var(--line); }
 .seg-failed { text-decoration: underline wavy color-mix(in srgb, var(--danger) 45%, transparent); text-decoration-skip-ink: none; text-underline-offset: 7px; }
 

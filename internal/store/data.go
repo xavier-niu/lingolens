@@ -51,9 +51,15 @@ func expiry(ttl time.Duration) string {
 // live keeps expired texts out of every read, before the sweep deletes them.
 const live = `(expires_at = '' OR expires_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
 
-var wordRe = regexp.MustCompile(`[A-Za-z]+(?:['’-][A-Za-z]+)*`)
+var (
+	wordRe = regexp.MustCompile(`[A-Za-z]+(?:['’-][A-Za-z]+)*`)
+	// Pictures aren't words: an <img> tag, or Markdown's ![alt](address).
+	pictureRe = regexp.MustCompile(`<img\b[^>]*>|!\[(?:\\.|[^\]\\])*\]\((?:\\.|[^)\\])*\)`)
+)
 
-func CountWords(text string) int { return len(wordRe.FindAllStringIndex(text, -1)) }
+func CountWords(text string) int {
+	return len(wordRe.FindAllStringIndex(pictureRe.ReplaceAllString(text, " "), -1))
+}
 
 var (
 	mdStrong = []*regexp.Regexp{ // each one alone is a clear sign

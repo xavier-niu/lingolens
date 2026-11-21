@@ -363,7 +363,8 @@ export async function loadData(name) {
 // ------------------------------------------------------------------ texts the server would count
 
 const WORD_RE = /[A-Za-z]+(?:['’-][A-Za-z]+)*/g;
-const countWords = (s) => (s.match(WORD_RE) || []).length;
+const PICTURE_RE = /<img\b[^>]*>|!\[(?:\\.|[^\]\\])*\]\((?:\\.|[^)\\])*\)/g; // pictures aren't words
+const countWords = (s) => (s.replace(PICTURE_RE, ' ').match(WORD_RE) || []).length;
 
 function deriveTitle(content) {
   for (let line of content.split('\n')) {

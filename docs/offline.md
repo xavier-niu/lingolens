@@ -4,7 +4,7 @@ Each browser keeps a copy of the signed-in account: the shelf with every text's 
 
 ## What works offline
 
-You can read any text on the shelf (paragraphs annotated before show their glosses; the others are glossed when you're back), open words you looked up before, save words, mark words known, add pasted text or a PDF (once a PDF has been read online, which loads the PDF reader), edit or delete texts and change settings.
+You can read any text on the shelf (paragraphs annotated before show their glosses; the others are glossed when you're back; pictures from web pages load from their sites, so they show only if the browser still has them), open words you looked up before, save words, mark words known, add pasted text or a PDF (once a PDF has been read online, which loads the PDF reader), edit or delete texts and change settings.
 
 New lookups, Ask AI, web-page and EPUB imports and account settings need a connection.
 
