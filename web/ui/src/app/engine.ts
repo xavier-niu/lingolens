@@ -578,6 +578,7 @@ export function openCard(el: HTMLElement) {
   const idx = +el.dataset.ann!
   if (!engine.anns[idx]) return
   dismissHint()
+  hideFab()
   closeCard()
   engine.activeAnn = idx
   el.classList.add("active")
@@ -680,10 +681,30 @@ function selectionInfo(): SelectionInfo | null {
 // Mouse: just above the selection. Touch: docked at the bottom of the screen,
 // clear of the system's Copy / Look Up menu, which iOS and Android put above or
 // below the selection depending on the room there.
+//
+// It never shows with a word's card, which has Ask AI too. Selecting the word
+// whose card is open, as a double-click or a long-press on it does, leaves
+// just the card. Selecting more closes the card: the selection is what to ask
+// about.
 export function maybeShowFab() {
-  const info = selectionInfo()
+  if (selectsCardWord()) return hideFab()
+  let info = selectionInfo()
+  if (info && engine.activeAnn != null) {
+    closeCard()
+    info = selectionInfo() // a word going back to plain text can move its ends
+  }
   if (!info) return hideFab()
   set({ fab: { info, docked: isTouch() } })
+}
+
+// Whether the selection is (part of) the word whose card is open.
+function selectsCardWord() {
+  const idx = engine.activeAnn
+  const ruby = rubyEl(idx)
+  const sel = window.getSelection()
+  if (!ruby || !sel || sel.isCollapsed || !sel.rangeCount) return false
+  const range = sel.getRangeAt(0)
+  return range.intersectsNode(ruby) && cleanSelectionText(range).length <= engine.anns[idx!].text.length
 }
 export function hideFab() {
   if (get().fab) set({ fab: null })

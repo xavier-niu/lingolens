@@ -87,6 +87,53 @@ await page.click('#card [data-act="known"]');
 check('"I Know This" hides the word\'s gloss', await page.$$eval('#article ruby.ann', (rs) => rs.filter((r) => r.firstChild?.textContent === 'dinner')
   .every((r) => r.classList.contains('known') && getComputedStyle(r.querySelector('rt')).display === 'none')));
 
+// A double-click opens a word's card and selects the word too. The card has
+// Ask AI, so the Ask AI button for selections stays away.
+const askShown = () => page.isVisible('#ask-fab');
+const selected = () => page.evaluate(() => !getSelection().isCollapsed);
+// The first word on screen without a gloss, and where to click it.
+const plainWord = () => page.evaluate(() => {
+  const w = document.createTreeWalker(document.querySelector('#article'), NodeFilter.SHOW_TEXT);
+  while (w.nextNode()) {
+    const n = w.currentNode; const m = /[A-Za-z]{5,}/.exec(n.data);
+    if (m && !n.parentElement.closest('ruby, a, code')) {
+      const r = document.createRange(); r.setStart(n, m.index + 1); r.setEnd(n, m.index + m[0].length - 1);
+      const b = r.getBoundingClientRect(); const x = b.left + b.width / 2; const y = b.top + b.height / 2;
+      if (b.top > 60 && b.bottom < innerHeight && document.elementFromPoint(x, y) === n.parentElement) return { word: m[0], x, y };
+    }
+  }
+});
+const plain = await plainWord();
+await page.mouse.dblclick(plain.x, plain.y);
+await page.waitForSelector('#card:not([hidden]) [data-act="ask"]');
+await page.waitForTimeout(150);
+check('double-clicking a word shows its card, without the Ask AI button',
+  (await page.textContent('#card .lemma')) === plain.word && await selected() && !(await askShown()));
+await page.keyboard.press('Escape');
+const dinnerNow = await page.$$eval('#article ruby.ann', (rs) => {
+  const b = rs.find((r) => r.firstChild?.textContent === 'dinner').getBoundingClientRect();
+  return { x: b.left + b.width / 2, y: b.bottom - 8 };
+});
+await page.mouse.dblclick(dinnerNow.x, dinnerNow.y);
+await page.waitForSelector('#card:not([hidden])');
+await page.waitForTimeout(150);
+check('…and a glossed word too', (await page.textContent('#card .lemma')) === 'dinner' && await selected() && !(await askShown()));
+// Selecting more than the word: the selection is what to ask about.
+await page.evaluate(() => {
+  const r = document.createRange(); r.selectNodeContents(document.querySelectorAll('#article p')[1]);
+  getSelection().removeAllRanges(); getSelection().addRange(r);
+});
+const free = await page.evaluate(() => {
+  const b = document.querySelectorAll('#article p')[1].getBoundingClientRect();
+  for (let y = b.top + 4; y < b.bottom; y += 8) {
+    for (const x of [b.left + 20, b.right - 20]) if (!document.elementFromPoint(x, y)?.closest('#card')) return { x, y };
+  }
+});
+await page.mouse.move(free.x, free.y); await page.mouse.up();
+await page.waitForSelector('#ask-fab:not([hidden])');
+check('selecting more than the word closes its card for the Ask AI button', !(await page.$('#card')));
+await page.evaluate(() => getSelection().removeAllRanges());
+
 // Select a paragraph -> Ask AI
 await page.evaluate(() => {
   const p = document.querySelectorAll('#article p')[1];
