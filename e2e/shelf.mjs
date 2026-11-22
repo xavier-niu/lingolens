@@ -221,11 +221,37 @@ check('same selection offers to continue', (await page.textContent('#chat-resume
 await page.click('#chat-resume');
 await page.waitForSelector('#chat-turns .turn');
 check('continue reopens that conversation', (await page.$$('#chat-turns .turn')).length === asked + 2);
+// Pressing on the text, to select more or look a word up, leaves the sidebar
+// open; pressing on a blank part of the page closes it.
+const chatOpen = () => page.isVisible('#chat');
+const line = await page.$eval('#article p:nth-of-type(3)', (p) => {
+  p.scrollIntoView({ block: 'center' });
+  const r = document.createRange(); r.selectNodeContents(p);
+  const first = r.getClientRects()[0]; const b = p.getBoundingClientRect();
+  return { x: b.left + 4, y: first.top + first.height / 2, to: b.left + 200 };
+});
+await page.waitForTimeout(300);
+await page.mouse.move(line.x, line.y); await page.mouse.down();
+await page.mouse.move(line.to, line.y, { steps: 5 }); await page.mouse.up();
+check('selecting text leaves the sidebar open', await selected() && await chatOpen());
+const word = await plainWord();
+await page.mouse.click(word.x, word.y);
+await page.waitForSelector('#card:not([hidden])');
+check('clicking a word leaves it open too', (await page.textContent('#card .lemma')) === word.word && await chatOpen());
+await page.click('#card .lemma');
+check('…and so does pressing on its card', await chatOpen());
+await page.keyboard.press('Escape');
+check('Escape closes the card first', !(await page.$('#card')) && await chatOpen());
 await page.click('#chat-hist-btn');
 await page.waitForSelector('.hist-item');
-await page.mouse.click(300, 400); // outside the sidebar
+const gap = await page.evaluate(() => {
+  const [a, b] = [...document.querySelectorAll('#article p')].slice(1, 3).map((p) => p.getBoundingClientRect());
+  return { x: a.left + 40, y: (a.bottom + b.top) / 2 };
+});
+check('the space between paragraphs is blank', await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.id, gap) === 'article');
+await page.mouse.click(gap.x, gap.y);
 await page.waitForSelector('#chat', { state: 'hidden' });
-check('clicking outside closes the sidebar', true);
+check('clicking a blank part of the page closes the sidebar', true);
 await page.click('#btn-history');
 await page.waitForSelector('.hist-item');
 await page.hover('.hist-item');

@@ -479,17 +479,29 @@ function useKeyboardFit(ref: React.RefObject<HTMLElement | null>) {
   }, [ref])
 }
 
-// A press anywhere outside the sidebar closes it (the Ask AI button, the
-// history button, notices, menus and dialogs above it don't count).
+// A press on a blank part of the page outside the sidebar closes it: the
+// margins, between paragraphs, the header. A press on the text leaves it open,
+// so the reader can select more to ask about, or look a word up. So do the
+// word card, the Ask AI button, the history button, notices, and the menus
+// and dialogs above it.
 export function useChatDismiss() {
   React.useEffect(() => {
     const down = (e: PointerEvent) => {
       if (get().drawer !== "open" || e.button > 0) return
       const target = e.target as Element
-      if (target.closest?.("#chat, #ask-fab, #btn-history, #toast, [data-sonner-toaster], [data-radix-popper-content-wrapper], [data-slot=dialog-content], [data-slot=alert-dialog-content], [data-slot=dialog-overlay], [data-slot=alert-dialog-overlay], #banner")) return
+      if (onText(target)) return
+      if (target.closest?.("#chat, #card, #ask-fab, #btn-history, #toast, [data-sonner-toaster], [data-radix-popper-content-wrapper], [data-slot=dialog-content], [data-slot=alert-dialog-content], [data-slot=dialog-overlay], [data-slot=alert-dialog-overlay], #banner")) return
       closeChat()
     }
     document.addEventListener("pointerdown", down)
     return () => document.removeEventListener("pointerdown", down)
   }, [])
+}
+
+// Whether a press on `target` is on the article's text. The article's blank
+// parts (its margins, the space between paragraphs) are the article element
+// itself; everything in it is text, but for pictures and rules.
+function onText(target: Element) {
+  const article = target.closest?.("#article")
+  return !!article && target !== article && !target.closest("img, hr")
 }
