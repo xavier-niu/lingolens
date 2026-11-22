@@ -104,6 +104,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/agent/texts/{id}", s.requireAgent(s.handleAgentGetText))
 	mux.HandleFunc("PUT /api/agent/texts/{id}", s.requireAgent(s.handleAgentReplace))
 	mux.HandleFunc("POST /api/agent/texts/{id}/append", s.requireAgent(s.handleAgentAppend))
+	mux.HandleFunc("DELETE /api/agent/texts/{id}", s.requireAgent(s.handleAgentDelete))
+	// The agent API as an MCP server (Streamable HTTP), for agents that speak MCP.
+	mcpHandler := s.mcpHandler()
+	for _, method := range []string{"POST", "GET", "DELETE"} {
+		mux.Handle(method+" /mcp", mcpHandler)
+	}
 	mux.HandleFunc("POST /api/books/import/url", s.requireUser(s.handleImportURL))
 	mux.HandleFunc("POST /api/books/import/page", s.requireUser(s.handleImportPage))
 	mux.HandleFunc("POST /api/books/import/epub", s.requireUser(s.handleImportEPUB))
@@ -111,9 +117,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/books/{id}", s.requireUser(s.handleUpdateBook))
 	mux.HandleFunc("PUT /api/books/{id}/progress", s.requireUser(s.handleBookProgress))
 	mux.HandleFunc("DELETE /api/books/{id}", s.requireUser(s.handleDeleteBook))
-	mux.HandleFunc("GET /api/wordbook", s.requireUser(s.handleListWordbook))
-	mux.HandleFunc("PUT /api/wordbook/{key}", s.requireUser(s.handlePutWordbook))
-	mux.HandleFunc("DELETE /api/wordbook/{key}", s.requireUser(s.handleDeleteWordbook))
 	mux.HandleFunc("GET /api/known", s.requireUser(s.handleListKnown))
 	mux.HandleFunc("PUT /api/known/{lemma}", s.requireUser(s.handleSetKnown(true)))
 	mux.HandleFunc("DELETE /api/known/{lemma}", s.requireUser(s.handleSetKnown(false)))
@@ -138,7 +141,7 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		next.ServeHTTP(w, r)
-		if strings.HasPrefix(r.URL.Path, "/api/") {
+		if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/mcp" {
 			s.opts.Logger.Info("request", "method", r.Method, "path", r.URL.Path, "dur", time.Since(start).Round(time.Millisecond))
 		}
 	})

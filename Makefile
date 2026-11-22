@@ -8,7 +8,11 @@ DEMO_DATA     ?= /tmp/lingolens-demo
 DEMO_EMAIL    ?= demo@admin.com
 DEMO_PASSWORD ?= admin
 
-.PHONY: demo demo-reset test e2e e2e-docker e2e-bin
+.PHONY: build ui ui-dev demo demo-reset test e2e e2e-docker e2e-bin
+
+NPM ?= $(shell command -v npm 2>/dev/null)
+NODE_IMAGE ?= node:22-alpine
+UI_DEPS = web/ui/node_modules/.package-lock.json
 
 # Playwright's image; keep the version in step with e2e/package.json.
 E2E_IMAGE ?= mcr.microsoft.com/playwright:v1.64.1-noble
@@ -18,12 +22,35 @@ SUITES    ?=
 # the container's root to you (and --user would break writes to the mount).
 DOCKER_USER = $(shell docker info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless || echo "--user $$(id -u):$$(id -g)")
 
+# The server with its web app built in: ./lingolens
+build: ui
+	$(GO) build -o lingolens ./cmd/lingolens
+
+# The web app (web/ui: React and shadcn/ui), built into web/dist, which the
+# server embeds. Without a local Node, it builds in Node's Docker image.
+ifneq ($(NPM),)
+ui: $(UI_DEPS)
+	cd web/ui && npm run build
+
+$(UI_DEPS): web/ui/package-lock.json
+	cd web/ui && npm ci --no-audit --no-fund
+else
+ui:
+	docker run --rm $(DOCKER_USER) -e HOME=/tmp -v "$(CURDIR):/src" -w /src/web/ui $(NODE_IMAGE) \
+		sh -c 'npm ci --no-audit --no-fund && npm run build'
+endif
+
+# The web app with hot reload on http://localhost:5173, using the API of a
+# server on :8080 (run `make demo` in another terminal).
+ui-dev: $(UI_DEPS)
+	cd web/ui && npm run dev
+
 # A demo server with the Fake model enabled (no API key needed; pick a real
 # provider in Settings for actual glosses). The demo admin is created on the
 # first run only, while the data directory has no accounts: `make demo-reset`
 # starts over. For local demos only: the password is short and the Fake model
 # is on.
-demo:
+demo: ui
 	LINGOLENS_DEV_FAKE=1 \
 	LINGOLENS_ADMIN_EMAIL='$(DEMO_EMAIL)' \
 	LINGOLENS_ADMIN_PASSWORD='$(DEMO_PASSWORD)' \
@@ -33,7 +60,8 @@ demo:
 demo-reset:
 	rm -rf $(DEMO_DATA)
 
-# Go unit and integration tests (the same as CI's "test" job).
+# Go unit and integration tests (the same as CI's "test" job, which also
+# builds the web app first so its service-worker check runs).
 test:
 	$(GO) vet ./...
 	$(GO) test ./...
@@ -51,5 +79,5 @@ e2e-docker: e2e-bin
 		sh -c 'npm ci --no-audit --no-fund && node run.mjs $(SUITES)'
 
 # A static binary, so it also runs inside the Playwright image.
-e2e-bin:
+e2e-bin: ui
 	CGO_ENABLED=0 $(GO) build -o e2e/.bin/lingolens ./cmd/lingolens

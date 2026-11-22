@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -373,36 +372,7 @@ func (s *Server) handleDeleteBook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// ---------------------------------------------------------------- wordbook & known words
-
-func (s *Server) handleListWordbook(w http.ResponseWriter, r *http.Request) {
-	entries, err := s.opts.Store.ListWordbook(r.Context(), currentUser(r.Context()).ID)
-	if err != nil {
-		s.internalError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, entries)
-}
-
-func (s *Server) handlePutWordbook(w http.ResponseWriter, r *http.Request) {
-	var entry json.RawMessage
-	if !decode(w, r, &entry) {
-		return
-	}
-	if err := s.opts.Store.PutWordbook(r.Context(), currentUser(r.Context()).ID, r.PathValue("key"), entry); err != nil {
-		writeError(w, http.StatusBadRequest, sentence(err))
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-}
-
-func (s *Server) handleDeleteWordbook(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Store.DeleteWordbook(r.Context(), currentUser(r.Context()).ID, r.PathValue("key")); err != nil {
-		s.internalError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-}
+// ---------------------------------------------------------------- known words
 
 func (s *Server) handleListKnown(w http.ResponseWriter, r *http.Request) {
 	words, err := s.opts.Store.ListKnown(r.Context(), currentUser(r.Context()).ID)

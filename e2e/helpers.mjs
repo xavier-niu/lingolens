@@ -79,3 +79,21 @@ export const waitForArticleText = (page, text, timeout = 8000) => page.waitForFu
   copy.querySelectorAll('rt').forEach((rt) => rt.remove());
   return copy.textContent.includes(text);
 }, text, { timeout });
+
+// Answers yes to the app's own confirmation (an alert dialog: "Delete this
+// text?"), if it asks within `ms`. Returns whether it asked.
+export async function accept(page, ms = 3000) {
+  const ok = await page.waitForSelector('#confirm-ok', { timeout: ms }).catch(() => null);
+  if (ok) {
+    await ok.click();
+    await page.waitForSelector('#confirm-dialog', { state: 'detached' });
+  }
+  return !!ok;
+}
+
+// Waits for the element's entrance animation (a menu opening, say) to end, so
+// it's measured where it stays.
+export const settled = (page, sel) => page.waitForFunction((sel) => {
+  const el = document.querySelector(sel);
+  return !!el && el.getAnimations({ subtree: true }).every((a) => a.playState !== 'running' || a.effect?.getTiming().iterations === Infinity);
+}, sel);

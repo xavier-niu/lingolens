@@ -5,6 +5,8 @@ Dockerfile
 .dockerignore
 *.md
 e2e
+web/ui/node_modules
+web/dist
 /lingolens
 /dist
 /data

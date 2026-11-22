@@ -1,6 +1,6 @@
 ---
 name: lingolens
-description: Save a reply, explanation, article or notes to the user's LingoLens shelf as a Markdown text, so they can read it later with Chinese glosses pitched at their English level, or add to, fix or rewrite a text saved there before. Use when the user asks to send, save or put something "in LingoLens", "on my shelf" or "in my reading list", asks for English reading material for LingoLens (for example "write me a B1 article about coffee and put it in LingoLens"), or asks to add to, update, correct, rewrite or retitle a text already in LingoLens.
+description: Save a reply, explanation, article or notes to the user's LingoLens shelf as a Markdown text, so they can read it later with Chinese glosses pitched at their English level, or list, show, add to, fix, rewrite or delete a text saved there before. Use when the user asks to send, save or put something "in LingoLens", "on my shelf" or "in my reading list", asks for English reading material for LingoLens (for example "write me a B1 article about coffee and put it in LingoLens"), asks to add to, update, correct, rewrite or retitle a text already in LingoLens, asks what is in LingoLens, or asks to delete or remove a text from it.
 ---
 
 # LingoLens
@@ -10,7 +10,14 @@ with Chinese glosses above the words and phrases the reader probably doesn't kno
 at their CEFR level (A1–C2), and lets them tap any word or ask AI about a
 sentence. This skill uploads Markdown to the user's shelf through the agent API:
 as a new text, added to the end of one saved before, or as a new version of one
-saved before.
+saved before. It can also list, show and delete the texts agents saved.
+
+**MCP tools first.** If your tools include LingoLens's MCP server (`create_book`,
+`list_books`, `show_book`, `update_book`, `delete_book`), use them instead of
+the script: they do the same, and everything below about writing, finding,
+adding to, changing and deleting texts applies to them too. `update_book` with
+`mode: "append"` adds to a text; without it, it rewrites the text. Where the
+script takes `--note`, the tools take `note`.
 
 ## Setup
 
@@ -75,6 +82,21 @@ The script prints a link that opens the text in the reader. Give the user that
 link. The script lives next to this file: run it from the skill directory or by
 its full path.
 
+### A note to find it again
+
+Give every text you save a note that says where it came from, so you (or a
+later turn of this conversation) can find it again without guessing by title:
+
+```bash
+scripts/upload.sh reply.md --title "Optional Title" --note "session: SESSION_ID"
+```
+
+Use your session or conversation id if you know it (from your instructions or
+your environment); otherwise a few words you'll recognize, like
+`"coffee lessons, Nov 2026"`. The note is up to 500 characters and isn't shown
+in the reader. Adding to or rewriting a text keeps its note; `--note "…"` there
+replaces it, and `--note ""` removes it.
+
 ### How long texts stay
 
 A text you save **deletes itself after 30 days**, so quick replies don't pile up
@@ -92,17 +114,25 @@ scripts/upload.sh reply.md --title "Optional Title" --ttl 0
 ## Finding a text saved before
 
 To add to or change a text, you need its ID. If it was saved in this
-conversation, the ID is the end of its link (`…/#/read/ID`). Otherwise list the
-texts agents saved, newest change first:
+conversation, the ID is the end of its link (`…/#/read/ID`). If you saved it
+with a note, find it by the note; this lists the texts whose note contains it:
+
+```bash
+scripts/upload.sh --list --note "SESSION_ID"
+```
+
+Otherwise list all the texts agents saved, newest change first, 20 at a time:
 
 ```bash
 scripts/upload.sh --list
 ```
 
-Each line is `ID`, words, last changed and title, separated by tabs. Pick the one
-whose title matches what the user means. If none matches, say so (and, when they
-asked to add to it, save a new text). If several might, ask the user which one;
-don't guess.
+Each line is `ID`, words, last changed, title and note, separated by tabs. When
+there are more, the last line says how many there are in all and gives the
+command for the next page (`--list --cursor …`); run it to see the next 20, and
+stop as soon as you've found the text. Pick the one whose note or title matches
+what the user means. If none matches, say so (and, when they asked to add to it, save a new
+text). If several might, ask the user which one; don't guess.
 
 Only texts saved by agents can be read, added to or changed. The user's own texts
 (pasted, web pages, books) aren't listed, and the API answers 404 for them.
@@ -164,6 +194,26 @@ To add a new section, prefer adding to the text (above) over rewriting it. A
 rewrite replaces the whole text, including anything added to it since you read
 it, so get it again right before you change it.
 
+## Deleting a text
+
+Delete a text only when the user asks to ("delete my coffee notes", "remove the
+phrasal verbs text from LingoLens"). It goes from the shelf on all their
+devices, and it can't be undone.
+
+1. **Find the text's ID** (above). If more than one text might be the one they
+   mean, ask which; don't guess.
+2. **Delete it:**
+
+   ```bash
+   scripts/upload.sh --delete ID
+   ```
+
+   It prints the deleted text's title. Tell the user it's gone.
+
+Only texts agents saved can be deleted; the user deletes their own texts in
+LingoLens. Texts agents save also delete themselves after their days run out,
+so there's no need to clean up after a conversation.
+
 ## Without the script
 
 ```bash
@@ -173,26 +223,32 @@ curl -fsS -X POST "$LINGOLENS_URL/api/agent/texts?title=Optional%20Title" \
   --data-binary @reply.md
 ```
 
-JSON works too: `Content-Type: application/json` with `{"title": "…", "markdown": "…", "ttlDays": 30}`.
+JSON works too: `Content-Type: application/json` with `{"title": "…", "markdown": "…", "ttlDays": 30, "note": "…"}`.
 `ttlDays` (or `?ttlDays=` with raw Markdown) is how many days the text stays,
-30 when left out and 0 for never. A successful response is `201` with
-`{"id", "title", "format", "words", "updatedAt", "expiresAt", "url"}`; `expiresAt`
-is empty for a text that is kept.
+30 when left out and 0 for never. `note` (or `?note=`) is the note to find it
+by. A successful response is `201` with
+`{"id", "title", "format", "words", "updatedAt", "expiresAt", "note", "url"}`;
+`expiresAt` is empty for a text that is kept.
 
 To add to a text, send the new part the same way (a title is ignored) to
 `POST $LINGOLENS_URL/api/agent/texts/ID/append`; it answers `200` with the same
 fields. To rewrite one, send the whole new text the same way to
 `PUT $LINGOLENS_URL/api/agent/texts/ID` (a title renames it; none keeps it).
+Either way a `note` replaces the text's note (`""` removes it), and none keeps it.
 `GET $LINGOLENS_URL/api/agent/texts/ID` returns one with its Markdown (with
 `Accept: text/markdown`, the Markdown alone), and
-`GET $LINGOLENS_URL/api/agent/texts` lists the texts agents saved, newest change
-first, with the same fields.
+`DELETE $LINGOLENS_URL/api/agent/texts/ID` deletes one (`204`).
+`GET $LINGOLENS_URL/api/agent/texts?limit=20` lists the texts agents saved,
+newest change first, a page at a time: `{"texts": [...], "nextCursor": "…",
+"total": N}`, each text with the same fields; add `&cursor=` with the
+`nextCursor` for the next page (there's none on the last page). `limit` is 1 to
+100. Add `&note=` to list only the texts whose note contains it.
 
 | Status | Meaning |
 | --- | --- |
 | 401 | Token missing, wrong or revoked. Ask the user to create a new one. |
-| 400 | The text was rejected (for example, it was empty); the `error` field says why. |
-| 404 | Reading or changing a text that was deleted or that the user added themselves. Save a new text. |
+| 400 | The text was rejected (for example, it was empty), or a cursor or limit is wrong; the `error` field says why. |
+| 404 | Reading, changing or deleting a text that was deleted or that the user added themselves. Save a new text instead of changing it. |
 | 413 | Too large. Split it into parts and upload each one; when adding, save the new part as a new text. |
 
 ## Privacy

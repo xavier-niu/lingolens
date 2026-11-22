@@ -21,18 +21,14 @@ It runs on your own server and uses your own AI key. One server can host a whole
 - Tap any word, glossed or not, to hear it or choose **Look Up** or **Details** for its meaning in this sentence, other meanings and examples. The model is only asked when you choose.
 - Select a sentence and choose **Ask AI** to ask about its grammar, a translation or more examples.
 - Your Ask AI conversations are kept in **Ask AI history**, so you can reread them and keep asking where you left off.
+- Mark words you know so their glosses go away (and bring them back in Settings).
 
 **Bring anything to read**
 - Paste text, or Markdown with headings and lists (found on its own; keep it as plain text if you'd rather). Lines wrapped at a terminal's or an email's width flow back into paragraphs. Add more to the end of a text later with **Append Text**, and keep your place.
 - Import a web page from its link: you get just the article, without menus, ads or comments.
 - Add a DRM-free EPUB book, or a PDF with selectable text. Long texts get a table of contents.
 - For sites that block imports, or pages you need to sign in to, use the **bookmarklet** from your browser's bookmarks bar.
-- Let **AI agents** such as Claude Code save their replies to your shelf, and add follow-ups to the same text.
-
-**Keep what you learn**
-- Save words to your wordbook, together with the sentence you found them in.
-- Mark words you know so their glosses go away.
-- Export the wordbook to CSV for Anki.
+- Let **AI agents** such as Claude Code save their replies to your shelf, add follow-ups to the same text, and list, update or delete what they saved, with the skill or the built-in **MCP server**.
 
 **Read anywhere, your way**
 - Works on phones, tablets and computers. You come back to where you stopped, on any device.
@@ -129,10 +125,10 @@ docker start lingolens
 
 ### Without Docker
 
-LingoLens is a single program with no other dependencies. To build it from source you need [Go](https://go.dev/dl/) 1.27 or later:
+LingoLens is a single program with no other dependencies. To build it from source you need [Go](https://go.dev/dl/) 1.27 or later and [Node.js](https://nodejs.org/) 20 or later, for the web app built into it:
 
 ```sh
-go build -o lingolens ./cmd/lingolens
+make build
 ./lingolens -addr 0.0.0.0:8080 -data /var/lib/lingolens
 ```
 
@@ -149,7 +145,7 @@ See [Development](docs/development.md) for more.
 ## Learn more
 
 - [Adding texts](docs/importing.md): web pages, PDFs and the bookmarklet
-- [AI agents](docs/agents.md): let Claude Code and other agents save their replies to your shelf
+- [AI agents](docs/agents.md): let Claude Code and other agents save their replies to your shelf, with the skill or over MCP
 - [Offline use](docs/offline.md): what works without a connection, and how syncing works
 - [Configuration](docs/configuration.md): all settings, and managing accounts from the command line
 - [Security](docs/security.md): how accounts, keys and imports are protected

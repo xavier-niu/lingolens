@@ -22,7 +22,7 @@ await signIn(app, user);
 
 // ---- the server can't fetch the page: the Add Source hint leads to the bookmarklet
 await app.locator('#btn-add:visible, #btn-add-empty:visible').first().click();
-await app.waitForSelector('#source-dialog[open]');
+await app.waitForSelector('#source-dialog[data-state="open"]');
 await app.click('#src-kinds label:has(input[value="url"])');
 check('Web Page panel mentions the bookmarklet', await app.isVisible('#source-dialog [data-clip-setup]'));
 await app.fill('#src-url', SITE + 'blocked.html');

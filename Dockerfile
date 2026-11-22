@@ -1,5 +1,14 @@
 # syntax=docker/dockerfile:1
 
+# ---- web app ----
+FROM --platform=$BUILDPLATFORM node:22-alpine AS ui
+WORKDIR /src/web/ui
+COPY web/ui/package.json web/ui/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+COPY web/ui/ ./
+# Writes /src/web/dist, which the server embeds.
+RUN npm run build
+
 # ---- build ----
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
 WORKDIR /src
@@ -8,6 +17,7 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 COPY . .
+COPY --from=ui /src/web/dist ./web/dist
 ARG TARGETOS
 ARG TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod \

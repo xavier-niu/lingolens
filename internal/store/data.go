@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -27,9 +28,24 @@ type Book struct {
 	LastReadAt string  `json:"lastReadAt"`
 	// When the text deletes itself (its time to live runs out); "" = never.
 	ExpiresAt string `json:"expiresAt"`
+	// What the agent that saved it noted with it, to find it again (its
+	// session id, say); "" for none and for the user's own texts.
+	Note string `json:"note,omitempty"`
 }
 
 const MaxBookChars = 2_000_000 // a long novel
+
+// MaxNoteChars is how long an agent's note on a text may be.
+const MaxNoteChars = 500
+
+// ValidateNote trims an agent's note and checks its length.
+func ValidateNote(note string) (string, error) {
+	note = strings.TrimSpace(note)
+	if utf8.RuneCountInString(note) > MaxNoteChars {
+		return "", fmt.Errorf("the note is too long (at most %d characters)", MaxNoteChars)
+	}
+	return note, nil
+}
 
 var ErrTooLong = errors.New("the text is too long")
 
@@ -89,7 +105,7 @@ var (
 	sentenceEnd = regexp.MustCompile(`[.!?:;]["'”’)\]]*$`)
 )
 
-// DetectFormat guesses whether pasted text is Markdown. web/static/library.js
+// DetectFormat guesses whether pasted text is Markdown. web/ui/src/lib/library.js
 // (markdownScore) applies the same rules when the app saves a pasted text and
 // for the note in the dialog. Markup that plain text hardly ever has (a
 // heading, **bold**, a link, a list in a list) is enough on its own; the rest
@@ -124,7 +140,7 @@ func DetectFormat(content string) string {
 // a Project Gutenberg book), or 0 when they mean something (a poem, an
 // address, a paragraph per line): at least 2 breaks, and half of them, fall
 // mid-sentence where the next word wouldn't have fit. The web app's
-// wrapWidth (web/static/library.js) is the same, and the reader joins
+// wrapWidth (web/ui/src/lib/library.js) is the same, and the reader joins
 // those lines back into paragraphs.
 func wrapWidth(text string) int {
 	lines := strings.Split(text, "\n")
@@ -197,11 +213,11 @@ func ValidateBook(title, format, content string) (string, string, error) {
 	return title, format, nil
 }
 
-const bookCols = `id, title, format, words, progress, pos, created_at, updated_at, last_read_at, expires_at`
+const bookCols = `id, title, format, words, progress, pos, created_at, updated_at, last_read_at, expires_at, note`
 
 func scanBook(row interface{ Scan(...any) error }, withContent bool) (*Book, error) {
 	var b Book
-	dest := []any{&b.ID, &b.Title, &b.Format, &b.Words, &b.Progress, &b.Pos, &b.CreatedAt, &b.UpdatedAt, &b.LastReadAt, &b.ExpiresAt}
+	dest := []any{&b.ID, &b.Title, &b.Format, &b.Words, &b.Progress, &b.Pos, &b.CreatedAt, &b.UpdatedAt, &b.LastReadAt, &b.ExpiresAt, &b.Note}
 	if withContent {
 		dest = append(dest, &b.Content)
 	}
@@ -238,26 +254,30 @@ func (s *Store) GetBook(ctx context.Context, userID int64, id string) (*Book, er
 }
 
 func (s *Store) CreateBook(ctx context.Context, userID int64, title, format, content string) (*Book, error) {
-	return s.createBook(ctx, userID, title, format, content, "", "", 0)
+	return s.createBook(ctx, userID, title, format, content, "", "", "", 0)
 }
 
 // CreateBookRef creates a book; `ref` is the creating device's own id for it (from
 // a text added offline). Creating again with the same ref returns the first book.
 func (s *Store) CreateBookRef(ctx context.Context, userID int64, title, format, content, ref string) (*Book, error) {
-	return s.createBook(ctx, userID, title, format, content, ref, "", 0)
+	return s.createBook(ctx, userID, title, format, content, ref, "", "", 0)
 }
 
 // CreateAgentBook creates a book for one of the user's agents, which may later
-// add to it (AppendAgentBook). It deletes itself after ttl (0: never).
-func (s *Store) CreateAgentBook(ctx context.Context, userID int64, title, format, content string, ttl time.Duration) (*Book, error) {
-	return s.createBook(ctx, userID, title, format, content, "", originAgent, ttl)
+// add to it (AppendAgentBook), with the agent's note on it (see Book.Note). It
+// deletes itself after ttl (0: never).
+func (s *Store) CreateAgentBook(ctx context.Context, userID int64, title, format, content, note string, ttl time.Duration) (*Book, error) {
+	return s.createBook(ctx, userID, title, format, content, "", originAgent, note, ttl)
 }
 
 const originAgent = "agent"
 
-func (s *Store) createBook(ctx context.Context, userID int64, title, format, content, ref, origin string, ttl time.Duration) (*Book, error) {
+func (s *Store) createBook(ctx context.Context, userID int64, title, format, content, ref, origin, note string, ttl time.Duration) (*Book, error) {
 	title, format, err := ValidateBook(title, format, content)
 	if err != nil {
+		return nil, err
+	}
+	if note, err = ValidateNote(note); err != nil {
 		return nil, err
 	}
 	if len(ref) > 64 {
@@ -274,8 +294,8 @@ func (s *Store) createBook(ctx context.Context, userID int64, title, format, con
 		}
 	}
 	id, ts := randomHex(8), now()
-	_, err = s.db.ExecContext(ctx, `INSERT INTO books (id, user_id, title, format, content, words, created_at, updated_at, client_ref, origin, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, userID, title, format, content, CountWords(content), ts, ts, ref, origin, expiry(ttl))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO books (id, user_id, title, format, content, words, created_at, updated_at, client_ref, origin, expires_at, note)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, userID, title, format, content, CountWords(content), ts, ts, ref, origin, expiry(ttl), note)
 	if err != nil {
 		return nil, err
 	}
@@ -311,10 +331,11 @@ func (s *Store) UpdateBook(ctx context.Context, userID int64, id, title, format,
 }
 
 // ListAgentBooks returns the texts the user's agents added, without their
-// content, most recently changed first.
-func (s *Store) ListAgentBooks(ctx context.Context, userID int64) ([]Book, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+bookCols+` FROM books WHERE user_id = ? AND origin = ? AND `+live+`
-		ORDER BY updated_at DESC, rowid DESC`, userID, originAgent)
+// content, most recently changed first; with a note, only those whose note
+// contains it.
+func (s *Store) ListAgentBooks(ctx context.Context, userID int64, note string) ([]Book, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+bookCols+` FROM books WHERE user_id = ? AND origin = ? AND `+live+` AND `+noteHas+`
+		ORDER BY updated_at DESC, rowid DESC`, userID, originAgent, note, note)
 	if err != nil {
 		return nil, err
 	}
@@ -328,6 +349,50 @@ func (s *Store) ListAgentBooks(ctx context.Context, userID int64) ([]Book, error
 		out = append(out, *b)
 	}
 	return out, rows.Err()
+}
+
+// noteHas keeps the texts whose note contains the given text (twice: "" keeps
+// all). instr, not LIKE: a note is matched as written, % and _ included.
+const noteHas = `(? = '' OR instr(note, ?) > 0)`
+
+// ListAgentBooksPage returns up to limit texts agents added (with a note, those
+// whose note contains it), without their content, most recently changed first, starting after the one changed at
+// afterUpdated with id afterID (both empty for the first page), and whether
+// more follow. Paging by the last text shown, not by a count, so a text
+// changed between pages doesn't make another one show twice or not at all.
+func (s *Store) ListAgentBooksPage(ctx context.Context, userID int64, note, afterUpdated, afterID string, limit int) ([]Book, bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+bookCols+` FROM books WHERE user_id = ? AND origin = ? AND `+live+` AND `+noteHas+`
+		AND (? = '' OR updated_at < ? OR (updated_at = ? AND id < ?))
+		ORDER BY updated_at DESC, id DESC LIMIT ?`,
+		userID, originAgent, note, note, afterUpdated, afterUpdated, afterUpdated, afterID, limit+1)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	out := []Book{}
+	for rows.Next() {
+		b, err := scanBook(rows, false)
+		if err != nil {
+			return nil, false, err
+		}
+		out = append(out, *b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	if len(out) > limit {
+		return out[:limit], true, nil
+	}
+	return out, false, nil
+}
+
+// CountAgentBooks counts the texts agents added (with a note, those whose note
+// contains it).
+func (s *Store) CountAgentBooks(ctx context.Context, userID int64, note string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM books WHERE user_id = ? AND origin = ? AND `+live+` AND `+noteHas,
+		userID, originAgent, note, note).Scan(&n)
+	return n, err
 }
 
 // AgentSeparator goes between a text and what an agent adds to it: a
@@ -345,12 +410,12 @@ func (s *Store) GetAgentBook(ctx context.Context, userID int64, id string) (*Boo
 // separator line, and starts its time to live again. Texts the user added
 // themselves are ErrNotFound. The reading position and progress keep pointing
 // at the same place, now a smaller share of the longer text.
-func (s *Store) AppendAgentBook(ctx context.Context, userID int64, id, more string) (*Book, error) {
+func (s *Store) AppendAgentBook(ctx context.Context, userID int64, id, more string, note *string) (*Book, error) {
 	more = strings.TrimSpace(more)
 	if more == "" {
 		return nil, errors.New("the text is empty")
 	}
-	return s.changeAgentBook(ctx, userID, id, func(b *Book) error {
+	return s.changeAgentBook(ctx, userID, id, note, func(b *Book) error {
 		content := strings.TrimRightFunc(b.Content, unicode.IsSpace)
 		next := content + AgentSeparator + more
 		if utf8.RuneCountInString(next) > MaxBookChars {
@@ -377,8 +442,8 @@ func keptShare(old, next string) (float64, bool) {
 // title unless title is empty, and starts its time to live again. Texts the
 // user added themselves are ErrNotFound. The reader stays at the same share of
 // the text, which is the right place when only parts of it changed.
-func (s *Store) ReplaceAgentBook(ctx context.Context, userID int64, id, title, format, content string) (*Book, error) {
-	return s.changeAgentBook(ctx, userID, id, func(b *Book) error {
+func (s *Store) ReplaceAgentBook(ctx context.Context, userID int64, id, title, format, content string, note *string) (*Book, error) {
+	return s.changeAgentBook(ctx, userID, id, note, func(b *Book) error {
 		if title == "" {
 			title = b.Title
 		}
@@ -394,10 +459,30 @@ func (s *Store) ReplaceAgentBook(ctx context.Context, userID int64, id, title, f
 	})
 }
 
+// DeleteAgentBook deletes a text an agent added. Texts the user added
+// themselves are ErrNotFound: only the user deletes those.
+func (s *Store) DeleteAgentBook(ctx context.Context, userID int64, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM books WHERE user_id = ? AND id = ? AND origin = ? AND `+live, userID, id, originAgent)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // changeAgentBook loads a live text an agent added, lets change edit its
-// title, format, content and reading place, and saves it with a fresh
-// updated_at and time to live.
-func (s *Store) changeAgentBook(ctx context.Context, userID int64, id string, change func(*Book) error) (*Book, error) {
+// title, format, content and reading place, gives it a new note unless note is
+// nil, and saves it with a fresh updated_at and time to live.
+func (s *Store) changeAgentBook(ctx context.Context, userID int64, id string, note *string, change func(*Book) error) (*Book, error) {
+	var newNote string
+	if note != nil {
+		var err error
+		if newNote, err = ValidateNote(*note); err != nil {
+			return nil, err
+		}
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -410,6 +495,9 @@ func (s *Store) changeAgentBook(ctx context.Context, userID int64, id string, ch
 	}
 	if err := change(b); err != nil {
 		return nil, err
+	}
+	if note != nil {
+		b.Note = newNote
 	}
 	// Devices refetch a text when its updated_at changes, so it always moves on,
 	// even within the second of the last change.
@@ -424,8 +512,8 @@ func (s *Store) changeAgentBook(ctx context.Context, userID int64, id string, ch
 		expires = renewed
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE books SET title = ?, format = ?, content = ?, words = ?, progress = ?, pos = ?,
-		updated_at = ?, expires_at = ? WHERE user_id = ? AND id = ?`,
-		b.Title, b.Format, b.Content, CountWords(b.Content), b.Progress, b.Pos, ts, expires, userID, id); err != nil {
+		updated_at = ?, expires_at = ?, note = ? WHERE user_id = ? AND id = ?`,
+		b.Title, b.Format, b.Content, CountWords(b.Content), b.Progress, b.Pos, ts, expires, b.Note, userID, id); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -497,45 +585,10 @@ func (s *Store) DeleteBook(ctx context.Context, userID int64, id string) error {
 	return nil
 }
 
-// ---------------------------------------------------------------- wordbook & known words
+// ---------------------------------------------------------------- known words
 
-const maxEntryBytes = 8 << 10
-
-// ListWordbook returns saved entries (opaque JSON from the client), newest first.
-func (s *Store) ListWordbook(ctx context.Context, userID int64) ([]json.RawMessage, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT entry FROM wordbook WHERE user_id = ? ORDER BY added_at DESC, rowid DESC`, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []json.RawMessage{}
-	for rows.Next() {
-		var e string
-		if err := rows.Scan(&e); err != nil {
-			return nil, err
-		}
-		out = append(out, json.RawMessage(e))
-	}
-	return out, rows.Err()
-}
-
-func (s *Store) PutWordbook(ctx context.Context, userID int64, key string, entry json.RawMessage) error {
-	key = strings.ToLower(strings.TrimSpace(key))
-	if key == "" || len(key) > 200 {
-		return errors.New("invalid word")
-	}
-	if len(entry) > maxEntryBytes || !json.Valid(entry) {
-		return errors.New("invalid wordbook entry")
-	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO wordbook (user_id, key, entry, added_at) VALUES (?, ?, ?, ?)
-		ON CONFLICT (user_id, key) DO UPDATE SET entry = excluded.entry`, userID, key, string(entry), now())
-	return err
-}
-
-func (s *Store) DeleteWordbook(ctx context.Context, userID int64, key string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM wordbook WHERE user_id = ? AND key = ?`, userID, strings.ToLower(strings.TrimSpace(key)))
-	return err
-}
+// The wordbook (saved words) is gone; its table stays, with what people saved,
+// and goes with their account.
 
 func (s *Store) ListKnown(ctx context.Context, userID int64) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT lemma FROM known_words WHERE user_id = ? ORDER BY lemma`, userID)

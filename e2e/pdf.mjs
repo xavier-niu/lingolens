@@ -3,7 +3,7 @@
 // printed by Chromium itself, so they're real PDFs with embedded fonts.
 import { chromium } from 'playwright';
 import { BASE, freshUser, signIn, checker, articleText } from './helpers.mjs';
-import { toMarkdown } from '../web/static/pdftext.js';
+import { toMarkdown } from '../web/ui/src/lib/pdftext.js';
 
 const OUT = process.argv[2];
 const { check } = checker();
@@ -70,7 +70,7 @@ const openFileKind = async () => {
   await page.goto(BASE + '#/');
   await page.waitForSelector('#library-view:not([hidden])');
   await page.locator('#btn-add:visible, #btn-add-empty:visible').first().click();
-  await page.waitForSelector('#source-dialog[open]');
+  await page.waitForSelector('#source-dialog[data-state="open"]');
   await page.click('#src-kinds label:has(input[value="file"])');
 };
 const errorText = async () => {

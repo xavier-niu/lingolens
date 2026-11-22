@@ -1,6 +1,6 @@
 // Shelf + reader flow, plus screenshots for design review.
 import { chromium, devices } from 'playwright';
-import { BASE, freshUser, signIn, checker } from './helpers.mjs';
+import { BASE, freshUser, signIn, checker, accept, settled } from './helpers.mjs';
 const OUT = process.argv[2];
 const { check } = checker();
 const LONG = Array.from({ length: 120 }, (_, i) => `Paragraph ${i + 1}. The extraordinary committee deliberated extensively, and by and large reached unanimous conclusions about infrastructure.`).join('\n\n');
@@ -19,7 +19,7 @@ await signIn(page, reader);
 check('empty shelf shown', await page.isVisible('#shelf-empty'));
 check('header avatar shows the initial', (await page.textContent('#avatar')) === 'R');
 await page.click('#btn-account');
-await page.waitForSelector('#account-pop:popover-open');
+await page.waitForSelector('#account-pop[data-state="open"]');
 check('account menu shows who is signed in', (await page.textContent('#acct-pop-name')) === reader.email);
 await page.screenshot({ path: `${OUT}/d-account.png` });
 await page.keyboard.press('Escape');
@@ -77,6 +77,15 @@ check('…and offers to take it away again', (await page.textContent('#card [dat
 await page.screenshot({ path: `${OUT}/d-card-glossed.png` });
 await page.keyboard.press('Escape');
 check('an added gloss stays', (await dinnerGlosses())[0]?.length > 0);
+// "I Know This": the word's gloss goes (Settings can bring it back, below).
+const dinner = await page.$$eval('#article ruby.ann', (rs) => {
+  const b = rs.find((r) => r.firstChild?.textContent === 'dinner').getBoundingClientRect();
+  return { x: b.left + b.width / 2, y: b.bottom - 8 };
+});
+await page.mouse.click(dinner.x, dinner.y);
+await page.click('#card [data-act="known"]');
+check('"I Know This" hides the word\'s gloss', await page.$$eval('#article ruby.ann', (rs) => rs.filter((r) => r.firstChild?.textContent === 'dinner')
+  .every((r) => r.classList.contains('known') && getComputedStyle(r.querySelector('rt')).display === 'none')));
 
 // Select a paragraph -> Ask AI
 await page.evaluate(() => {
@@ -172,9 +181,9 @@ await page.waitForSelector('#chat', { state: 'hidden' });
 check('clicking outside closes the sidebar', true);
 await page.click('#btn-history');
 await page.waitForSelector('.hist-item');
-page.once('dialog', (d) => d.accept());
 await page.hover('.hist-item');
 await page.click('.hist-del');
+check('deleting a conversation asks first', await accept(page));
 await page.waitForSelector('#hist-status:not(:empty)');
 check('conversation deleted from history', (await savedChats()).length === 0);
 await page.click('#chat-close');
@@ -294,7 +303,8 @@ const onDevice = () => page.evaluate(() => {
 await page.click('.book-link:has-text("Why Small")');
 await page.waitForSelector('#btn-display:visible');
 await page.click('#btn-display');
-await page.waitForSelector('#display-pop:popover-open');
+await page.waitForSelector('#display-pop[data-state="open"]');
+await settled(page, '#display-pop');
 const anchored = await page.evaluate(() => {
   const b = document.querySelector('#btn-display').getBoundingClientRect();
   const p = document.querySelector('#display-pop').getBoundingClientRect();
@@ -307,7 +317,7 @@ const popFits = await page.$eval('#display-pop', (p) => ({ sw: p.scrollWidth, cw
   kids: [...p.children].map((c) => `${c.id || c.className}:${Math.round(c.getBoundingClientRect().right - p.getBoundingClientRect().right)}`).join(' ') }));
 check('the note doesn\'t widen reading options', popFits.sw <= popFits.cw && popFits.w < 360, JSON.stringify(popFits));
 await page.keyboard.press('Escape');
-await page.waitForSelector('#display-pop:not(:popover-open)', { state: 'attached' });
+await page.waitForSelector('#display-pop', { state: 'detached' });
 await page.evaluate(() => window.scrollTo(0, 400));
 await page.waitForTimeout(300);
 check('book title shown in the header breadcrumb', (await page.textContent('#crumbs [aria-current="page"]')) === 'Why Small Habits Matter');
@@ -378,6 +388,10 @@ await page.keyboard.press('Escape');
 await page.click('#btn-menu');
 await page.click('#btn-settings');
 await page.waitForSelector('#settings-view:not([hidden])');
+check('Settings counts the words marked known', (await page.textContent('#known-count')).includes(': 1.'), await page.textContent('#known-count'));
+await page.click('#known-clear');
+check('…and can show their glosses again', await accept(page)
+  && (await page.evaluate(() => fetch('/api/known').then((r) => r.json()))).length === 0 && await page.isDisabled('#known-clear'));
 check('profile shows the level', await page.$eval('#profile-levels [aria-checked="true"]', (b) => b.dataset.level) === 'B1');
 await page.click('#profile-levels [data-level="C1"]');
 await page.waitForTimeout(300);
@@ -436,10 +450,10 @@ await page.click('#home-link');
 await page.emulateMedia({ colorScheme: 'light' });
 
 // Delete a book
-page.once('dialog', (d) => d.accept());
 const before = (await page.$$('.book')).length;
 await page.hover('.book >> nth=0');
 await page.click('.book >> nth=0 >> .book-del');
+check('deleting a book asks first', await accept(page));
 await page.waitForTimeout(200);
 check('delete removes a book', (await page.$$('.book')).length === before - 1);
 

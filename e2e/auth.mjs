@@ -128,8 +128,8 @@ await lp.waitForSelector('#shelf .book');
 const titles = await lp.$$eval('.cover-title', (s) => s.map((x) => x.textContent));
 check('browser texts imported into the account', titles.includes('An Old Saved Text'), titles.join(' | '));
 check('import keeps reading progress', (await lp.textContent('.book-stat')).includes('40% read'));
-check('wordbook imported', (await lp.textContent('#wb-count')) === '1');
-check('browser copy removed after import', await lp.evaluate(() => localStorage.getItem('lingolens.library') === null));
+check('known words imported', (await lp.evaluate(() => fetch('/api/known').then((r) => r.json()))).includes('apple'));
+check('browser copy removed after import', await lp.evaluate(() => localStorage.getItem('lingolens.library') === null && localStorage.getItem('lingolens.wordbook') === null));
 await legacy.close();
 
 check('no console/page errors', errors.length === 0, errors.join(' | '));

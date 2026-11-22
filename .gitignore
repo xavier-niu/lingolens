@@ -6,4 +6,8 @@
 /e2e/node_modules/
 /e2e/out/
 /e2e/.bin/
+/web/ui/node_modules/
+# The built web app (make ui); only the placeholder that lets Go embed it is kept.
+/web/dist/*
+!/web/dist/.gitkeep
 /data/

@@ -1,6 +1,6 @@
 # Offline use
 
-Each browser keeps a copy of the signed-in account: the shelf with every text's content (downloaded in the background), glosses for paragraphs already annotated, looked-up words, the wordbook, known words and the profile. A service worker ([`sw.js`](../web/static/sw.js)) keeps the app itself.
+Each browser keeps a copy of the signed-in account: the shelf with every text's content (downloaded in the background), glosses for paragraphs already annotated, looked-up words, known words and the profile. A service worker ([`sw.template.js`](../web/ui/sw.template.js), which the build fills with the app's files) keeps the app itself.
 
 ## What works offline
 

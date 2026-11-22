@@ -10,7 +10,7 @@ LingoLens is configured with command-line flags or environment variables. In Doc
 | `LINGOLENS_ADMIN_EMAIL`, `LINGOLENS_ADMIN_PASSWORD` | unset | Create this admin on first start (only while there are no accounts) |
 | `LINGOLENS_SECURE_COOKIES=1` | off | Mark the session cookie `Secure`; set it when serving over HTTPS (e.g. behind a TLS proxy) |
 | `LINGOLENS_PUBLIC_URL` | from each request | How people reach the app, e.g. `https://read.example.com`; used in the links returned to agents. Set it behind a proxy. |
-| `-static` / `LINGOLENS_STATIC_DIR` | embedded | Serve the UI from a directory instead (frontend development, no rebuild needed) |
+| `-static` / `LINGOLENS_STATIC_DIR` | embedded | Serve the UI from a directory instead, such as `web/dist` after `make ui` (no Go rebuild needed) |
 | `LINGOLENS_FETCH_ALLOW_PRIVATE=1` | off | Let web-page import reach private and loopback addresses. For local testing only. |
 | `LINGOLENS_DEV_FAKE=1` | off | Enables an offline "Fake" provider for UI development and tests. It does not translate. |
 
@@ -26,7 +26,7 @@ After that, accounts are created by an admin, either in **Settings → Members**
 lingolens user add -email reader@example.com [-name "Mei"] [-admin]
 lingolens user list
 lingolens user passwd -email reader@example.com   # also signs them out everywhere
-lingolens user delete -email reader@example.com   # deletes their shelf, wordbook and settings
+lingolens user delete -email reader@example.com   # deletes their shelf, known words and settings
 ```
 
 In Docker, run these inside the container: `docker exec -it lingolens /lingolens user add -email reader@example.com`.

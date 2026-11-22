@@ -24,6 +24,17 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/ui/package-lock.json
+      # Type-checks and builds the web app, so the Go tests check what it ships.
+      - name: Build web app
+        working-directory: web/ui
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
       - run: go vet ./...
       - run: go test -race ./...
 
@@ -40,7 +51,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: e2e/package-lock.json
+          cache-dependency-path: |
+            e2e/package-lock.json
+            web/ui/package-lock.json
+      - name: Build web app
+        working-directory: web/ui
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
       - name: Build server
         run: CGO_ENABLED=0 go build -o e2e/.bin/lingolens ./cmd/lingolens
       - name: Install Playwright and Chromium

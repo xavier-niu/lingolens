@@ -1,7 +1,7 @@
 // Add Source (text with Markdown detection, web page, EPUB), Contents, and Agent Access.
 // PDFs have their own suite (pdf.mjs).
 import { chromium, devices } from 'playwright';
-import { BASE, SITE, fixture, freshUser, signIn, checker, articleText, waitForArticleText, glossesSettled } from './helpers.mjs';
+import { BASE, SITE, fixture, freshUser, signIn, checker, articleText, waitForArticleText, glossesSettled, accept } from './helpers.mjs';
 
 const OUT = process.argv[2];
 const { check } = checker();
@@ -19,7 +19,7 @@ const openDialog = async () => {
   await page.goto(BASE + '#/');
   await page.waitForSelector('#library-view:not([hidden])');
   await page.locator('#btn-add:visible, #btn-add-empty:visible').first().click();
-  await page.waitForSelector('#source-dialog[open]');
+  await page.waitForSelector('#source-dialog[data-state="open"]');
 };
 const kinds = () => page.$$eval('#src-kinds input', (xs) => xs.map((x) => x.value));
 const visible = (sel) => page.isVisible(sel);
@@ -99,14 +99,42 @@ await page.waitForSelector('#reader-view:not([hidden])');
 await waitForArticleText(page, 'a map');
 check('saved as plain text: the marks show as typed',
   (await format()) === 'text' && !(await page.$('#article ul, #article strong')) && (await articleText(page)).includes('**Packing List**'));
+check('plain text that is Markdown: the reader offers to show it formatted', await visible('#md-offer'));
+await page.click('#md-keep');
+check('…Keep Plain Text puts the offer away', !(await visible('#md-offer')));
+await page.reload();
+await page.waitForSelector('#reader-view:not([hidden])');
+await waitForArticleText(page, 'a map');
+check('…for good, on this device', !(await visible('#md-offer')));
 await page.click('#btn-menu');
 await page.click('#btn-edit');
-await page.waitForSelector('#source-dialog[open]');
+await page.waitForSelector('#source-dialog[data-state="open"]');
 check('Edit Text keeps it plain, and offers Markdown', await visible('#src-md') && (await page.textContent('#src-md-switch')) === 'Use Markdown');
 await page.click('#src-md-switch');
 await page.click('#src-save');
 await page.waitForSelector('#article ul');
 check('switched to Markdown in Edit Text: it renders', (await page.$$('#article ul li')).length === 3 && !!(await page.$('#article strong')) && (await format()) === 'markdown');
+
+// ---- stored as plain text, but Markdown (sent by an agent as plain text, or
+// pasted before its marks were recognised): the reader offers to format it
+{
+  const KILL = 'The timeline in the test:\n1. It sends 20 requests through the gateway.\n2. It checks:\n   - The control requests all succeeded.\n   - Every target request succeeded.';
+  const id = await page.evaluate(async (content) => {
+    const json = { 'Content-Type': 'application/json' };
+    const b = await fetch('/api/books', { method: 'POST', headers: json, body: JSON.stringify({ title: 'The Kill', content, format: 'text' }) }).then((r) => r.json());
+    await fetch(`/api/books/${b.id}/progress`, { method: 'PUT', headers: json, body: JSON.stringify({ pos: 0, progress: 0.5 }) });
+    return b.id;
+  }, KILL);
+  await page.goto(BASE + '#/read/' + id);
+  await waitForArticleText(page, 'Every target');
+  check('Markdown stored as plain text: the reader offers to format it', await visible('#md-offer') && !(await page.$('#article ol')));
+  await page.screenshot({ path: `${OUT}/s-md-offer.png` });
+  await page.click('#md-apply');
+  await page.waitForSelector('#article ol li ul li');
+  const kept = await page.evaluate((id) => fetch('/api/books/' + id, { cache: 'no-store' }).then((r) => r.json()), id);
+  check('…Show Formatted renders its lists and saves it as Markdown', kept.format === 'markdown' && !(await visible('#md-offer')), kept.format);
+  check('…keeping what has been read', kept.progress >= 0.5, String(kept.progress));
+}
 
 // ---- text copied from a terminal: lines wrapped at its width
 await openDialog();
@@ -170,7 +198,7 @@ check('all five chapters', (await page.$$('#article h2')).length === 5);
 await page.click('#btn-menu');
 check('Contents offered for a book with chapters', await visible('#btn-toc'));
 await page.click('#btn-toc');
-await page.waitForSelector('#toc-dialog[open]');
+await page.waitForSelector('#toc-dialog[data-state="open"]');
 const items = await page.$$eval('#toc-list a', (as) => as.map((a) => a.textContent));
 check('Contents lists the chapters', items.join('|') === 'Chapter One|Chapter Two|Chapter Three|Chapter Four|Chapter Five', items.join('|'));
 await page.screenshot({ path: `${OUT}/s-toc.png` });
@@ -187,7 +215,7 @@ await page.keyboard.press('Escape');
 // ---- editing a Markdown import keeps it Markdown
 await page.click('#btn-menu');
 await page.click('#btn-edit');
-await page.waitForSelector('#source-dialog[open]');
+await page.waitForSelector('#source-dialog[data-state="open"]');
 check('editing hides the kind switch', !(await visible('#src-kinds')));
 check('editing an import keeps Markdown', await visible('#src-md'));
 await page.keyboard.press('Escape');
@@ -223,7 +251,7 @@ await page.keyboard.press('Escape');
   check('…and not in the menu as well', menuItems.join() === 'btn-edit,btn-settings', menuItems.join());
   await page.keyboard.press('Escape');
   await page.click('#btn-append');
-  await page.waitForSelector('#source-dialog[open]');
+  await page.waitForSelector('#source-dialog[data-state="open"]');
   const dialog = () => page.evaluate(() => ({
     heading: document.querySelector('#source-heading').textContent,
     mode: document.querySelector('#src-modes input:checked')?.value,
@@ -276,7 +304,7 @@ await page.keyboard.press('Escape');
   check('after a reload, the progress bar shows what was kept', bar >= Math.round(0.9 * share * 100) && bar < 100, `${bar}%`);
   check('zh: the bar button says 追加内容', (await page.getAttribute('#btn-append', 'aria-label')) === '追加内容' && (await page.getAttribute('#btn-append', 'title')) === '追加内容');
   await page.click('#btn-append');
-  await page.waitForSelector('#source-dialog[open]');
+  await page.waitForSelector('#source-dialog[data-state="open"]');
   d = await dialog();
   check('zh: the dialog speaks Chinese', d.heading === '追加内容' && d.save === '追加' && (await page.textContent('#src-modes')).includes('编辑'), JSON.stringify(d));
   await page.fill('#src-more', '## Noon\n\nThe boats came back.');
@@ -329,7 +357,7 @@ await page.keyboard.press('Escape');
   const jumpTo = async (n) => {
     await p.click('#btn-menu');
     await p.click('#btn-toc');
-    await p.waitForSelector('#toc-dialog[open]');
+    await p.waitForSelector('#toc-dialog[data-state="open"]');
     await p.click(`#toc-list a >> nth=${n}`);
   };
   const onScreen = () => p.$$eval('#article [data-seg]', (els) => els.filter((el) => {
@@ -400,6 +428,15 @@ check('token listed by name and hint only', (await page.textContent('#token-list
 const token = env.match(/llat_\w+/)[0];
 check('skills CLI command shown', (await page.textContent('#skill-cmd')) === 'npx skills add xavier-niu/lingolens');
 check('skill download link', (await page.getAttribute('a[download][href="/skills/lingolens.zip"]', 'href')) === '/skills/lingolens.zip');
+check('MCP address shown, with a command for Claude Code', (await page.textContent('#mcp-url')) === BASE + 'mcp'
+  && (await page.textContent('#mcp-cmd')).startsWith(`claude mcp add --transport http lingolens ${BASE}mcp `));
+// The same token works over MCP: one JSON-RPC call lists the tools.
+const tools = await page.evaluate(async (tok) => (await fetch('/mcp', {
+  method: 'POST', credentials: 'omit',
+  headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+  body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+}).then((r) => r.json())).result?.tools.map((t) => t.name).sort().join(), token);
+check('MCP tools: create, delete, list, show and update books', tools === 'create_book,delete_book,list_books,show_book,update_book', tools);
 await page.screenshot({ path: `${OUT}/s-agent.png`, fullPage: true });
 await page.locator('section.set-section:has(> .set-head #set-agent-h)').screenshot({ path: `${OUT}/s-agent-section.png` });
 
@@ -515,12 +552,12 @@ const expiry = () => page.evaluate((id) => fetch('/api/books/' + id, { cache: 'n
 const expiresBefore = await expiry();
 const appendLine = async (line, ttl) => {
   await page.click('#btn-append');
-  await page.waitForSelector('#source-dialog[open]');
+  await page.waitForSelector('#source-dialog[data-state="open"]');
   const offered = await page.$eval('#src-ttl', (s) => ({ value: s.value, label: s.selectedOptions[0].textContent, all: [...s.options].map((o) => o.textContent) }));
   if (ttl) await page.selectOption('#src-ttl', ttl);
   await page.fill('#src-more', line);
   await page.click('#src-save');
-  await page.waitForFunction(() => !document.querySelector('#source-dialog').open);
+  await page.waitForFunction(() => !document.querySelector('#source-dialog'));
   await waitForArticleText(page, line);
   return offered;
 };
@@ -534,12 +571,12 @@ check('…or sets a new one', Math.abs(expiresNow - (Date.now() + 7 * 864e5)) < 
   `${new Date(expiresNow).toISOString()} · ${await page.textContent('#book-stat')}`);
 await page.click('#btn-menu');
 await page.click('#btn-edit');
-await page.waitForSelector('#source-dialog[open]');
+await page.waitForSelector('#source-dialog[data-state="open"]');
 check('edit: the time just set is inherited', (await page.$eval('#src-ttl', (s) => s.selectedOptions[0].textContent)) === 'After 7 days (inherited)');
 await page.screenshot({ path: `${OUT}/s-ttl-dialog.png` });
 await page.selectOption('#src-ttl', '0');
 await page.click('#src-save');
-await page.waitForFunction(() => !document.querySelector('#source-dialog').open);
+await page.waitForFunction(() => !document.querySelector('#source-dialog'));
 await page.waitForFunction(() => !document.querySelector('#book-stat').textContent.includes('deletes'));
 const kept = await page.evaluate((id) => fetch('/api/books/' + id).then((r) => r.json()), up.body.id);
 check('kept forever: no time to live left', kept.expiresAt === '', kept.expiresAt);
@@ -547,7 +584,7 @@ check('kept forever: no time to live left', kept.expiresAt === '', kept.expiresA
 await page.goto(BASE + '#/');
 await page.waitForSelector('#library-view:not([hidden])');
 await page.locator('#btn-add:visible, #btn-add-empty:visible').first().click();
-await page.waitForSelector('#source-dialog[open]');
+await page.waitForSelector('#source-dialog[data-state="open"]');
 check('new text: kept forever unless chosen, with nothing inherited', (await page.inputValue('#src-ttl')) === '0'
   && !(await page.$$eval('#src-ttl option', (os) => os.some((o) => o.textContent.includes('inherited')))));
 await page.fill('#src-text', 'A note for this week only.');
@@ -560,6 +597,7 @@ await page.waitForSelector('#settings-view:not([hidden])');
 check('token hidden after leaving Settings', !(await visible('#token-new')));
 check('last use recorded', !(await page.textContent('#token-list')).includes('never used'));
 await page.click('#token-list [data-revoke]');
+check('revoking asks first', await accept(page));
 await page.waitForSelector('#token-empty', { state: 'visible' });
 check('token revoked', true);
 const after = await page.evaluate((tok) => fetch('/api/agent/whoami', { credentials: 'omit', headers: { Authorization: `Bearer ${tok}` } }).then((r) => r.status), token);
@@ -572,7 +610,7 @@ const pp = await phone.newPage();
 pp.on('pageerror', (e) => errors.push(String(e)));
 await signIn(pp, user);
 await pp.locator('#btn-add:visible, #btn-add-empty:visible').first().click();
-await pp.waitForSelector('#source-dialog[open]');
+await pp.waitForSelector('#source-dialog[data-state="open"]');
 await pp.click('#src-kinds label:has(input[value="file"])');
 const fit = await pp.evaluate(() => {
   const d = document.querySelector('#source-dialog').getBoundingClientRect();
@@ -591,7 +629,7 @@ await pp.click('#btn-menu');
 check('phone: Append Text is in the ⋯ menu', await pp.isVisible('#menu-append'));
 await pp.screenshot({ path: `${OUT}/s-phone-menu.png` });
 await pp.click('#menu-append');
-await pp.waitForSelector('#source-dialog[open]');
+await pp.waitForSelector('#source-dialog[data-state="open"]');
 check('…and opens the text on Append', (await pp.$eval('#src-modes input:checked', (i) => i.value)) === 'append' && await pp.isVisible('#src-more'));
 await phone.close();
 

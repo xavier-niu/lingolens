@@ -143,6 +143,9 @@ var migrations = []string{
 	);
 	CREATE INDEX chats_recent ON chats(user_id, updated_at);
 	CREATE INDEX chats_book ON chats(book_id);`,
+	// 7: a note an agent keeps with a text it saved (its session id, say), so it
+	// can find the text again.
+	`ALTER TABLE books ADD COLUMN note TEXT NOT NULL DEFAULT '';`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

@@ -297,9 +297,9 @@ func TestUsersCannotSeeEachOthersData(t *testing.T) {
 	if list := decodeJSON[[]store.Book](t, e.do(t, b, "GET", "/api/books", nil)); len(list) != 0 {
 		t.Fatal("b sees a's books")
 	}
-	status(t, e.do(t, a, "PUT", "/api/wordbook/mitigate", map[string]string{"lemma": "mitigate"}))
-	if wb := decodeJSON[[]json.RawMessage](t, e.do(t, b, "GET", "/api/wordbook", nil)); len(wb) != 0 {
-		t.Fatal("b sees a's wordbook")
+	status(t, e.do(t, a, "PUT", "/api/known/mitigate", nil))
+	if known := decodeJSON[[]string](t, e.do(t, b, "GET", "/api/known", nil)); len(known) != 0 {
+		t.Fatal("b sees a's known words")
 	}
 	if list := decodeJSON[[]store.Book](t, e.do(t, a, "GET", "/api/books", nil)); len(list) != 1 {
 		t.Fatal("a lost their book")

@@ -193,18 +193,9 @@ func TestBooksAreScopedToTheirOwner(t *testing.T) {
 	}
 }
 
-func TestWordbookAndKnown(t *testing.T) {
+func TestKnownWords(t *testing.T) {
 	s := newTestStore(t)
 	u := mustUser(t, s, "a@example.com", false)
-	_ = s.PutWordbook(ctx, u.ID, "Mitigate", json.RawMessage(`{"lemma":"mitigate"}`))
-	_ = s.PutWordbook(ctx, u.ID, "mitigate", json.RawMessage(`{"lemma":"mitigate","zh":"减轻"}`))
-	list, _ := s.ListWordbook(ctx, u.ID)
-	if len(list) != 1 || !bytes.Contains(list[0], []byte("减轻")) {
-		t.Fatalf("wordbook = %s", list)
-	}
-	if err := s.PutWordbook(ctx, u.ID, "x", json.RawMessage(`not json`)); err == nil {
-		t.Fatal("invalid entry accepted")
-	}
 	_ = s.SetKnown(ctx, u.ID, "Apple", true)
 	_ = s.SetKnown(ctx, u.ID, "banana", true)
 	_ = s.SetKnown(ctx, u.ID, "banana", false)
@@ -422,7 +413,7 @@ func TestAppendAgentBook(t *testing.T) {
 	u, _ := s.CreateUser(ctx, "ag@example.com", "", "password 12345", false)
 	other, _ := s.CreateUser(ctx, "ot@example.com", "", "password 12345", false)
 	mine, _ := s.CreateBook(ctx, u.ID, "Mine", "markdown", "My own notes.")
-	a, err := s.CreateAgentBook(ctx, u.ID, "Coffee", "markdown", "# Coffee\n\nPart one.\n\n", AgentTTL)
+	a, err := s.CreateAgentBook(ctx, u.ID, "Coffee", "markdown", "# Coffee\n\nPart one.\n\n", "", AgentTTL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +421,7 @@ func TestAppendAgentBook(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	b, err := s.AppendAgentBook(ctx, u.ID, a.ID, "\n## More\n\nPart two.\n")
+	b, err := s.AppendAgentBook(ctx, u.ID, a.ID, "\n## More\n\nPart two.\n", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,30 +431,30 @@ func TestAppendAgentBook(t *testing.T) {
 	if b.Title != "Coffee" || b.Words != CountWords(b.Content) {
 		t.Fatalf("book = %+v", b)
 	}
-	if c, _ := s.AppendAgentBook(ctx, u.ID, a.ID, "Part three."); c.UpdatedAt <= b.UpdatedAt || b.UpdatedAt <= a.UpdatedAt {
+	if c, _ := s.AppendAgentBook(ctx, u.ID, a.ID, "Part three.", nil); c.UpdatedAt <= b.UpdatedAt || b.UpdatedAt <= a.UpdatedAt {
 		t.Fatalf("updatedAt %s → %s → %s: devices wouldn't refetch", a.UpdatedAt, b.UpdatedAt, c.UpdatedAt)
 	}
 	if b.Pos <= 0.4 || b.Pos >= 0.8 || b.Progress != b.Pos {
 		t.Fatalf("pos %v, progress %v: should still point at the end of part one", b.Pos, b.Progress)
 	}
 
-	list, _ := s.ListAgentBooks(ctx, u.ID)
+	list, _ := s.ListAgentBooks(ctx, u.ID, "")
 	if len(list) != 1 || list[0].ID != a.ID || list[0].Content != "" {
 		t.Fatalf("agent books = %+v", list)
 	}
 	for name, err := range map[string]error{
-		"the user's own text": func() error { _, err := s.AppendAgentBook(ctx, u.ID, mine.ID, "x"); return err }(),
-		"another user's text": func() error { _, err := s.AppendAgentBook(ctx, other.ID, a.ID, "x"); return err }(),
-		"no such text":        func() error { _, err := s.AppendAgentBook(ctx, u.ID, "nope", "x"); return err }(),
+		"the user's own text": func() error { _, err := s.AppendAgentBook(ctx, u.ID, mine.ID, "x", nil); return err }(),
+		"another user's text": func() error { _, err := s.AppendAgentBook(ctx, other.ID, a.ID, "x", nil); return err }(),
+		"no such text":        func() error { _, err := s.AppendAgentBook(ctx, u.ID, "nope", "x", nil); return err }(),
 	} {
 		if !errors.Is(err, ErrNotFound) {
 			t.Errorf("%s: %v, want not found", name, err)
 		}
 	}
-	if _, err := s.AppendAgentBook(ctx, u.ID, a.ID, "  \n"); err == nil {
+	if _, err := s.AppendAgentBook(ctx, u.ID, a.ID, "  \n", nil); err == nil {
 		t.Error("empty addition accepted")
 	}
-	if _, err := s.AppendAgentBook(ctx, u.ID, a.ID, strings.Repeat("x", MaxBookChars)); !errors.Is(err, ErrTooLong) {
+	if _, err := s.AppendAgentBook(ctx, u.ID, a.ID, strings.Repeat("x", MaxBookChars), nil); !errors.Is(err, ErrTooLong) {
 		t.Errorf("too long: %v", err)
 	}
 }
@@ -474,7 +465,7 @@ func TestReplaceAgentBook(t *testing.T) {
 	u, _ := s.CreateUser(ctx, "rp@example.com", "", "password 12345", false)
 	other, _ := s.CreateUser(ctx, "ro@example.com", "", "password 12345", false)
 	mine, _ := s.CreateBook(ctx, u.ID, "Mine", "markdown", "My own notes.")
-	a, _ := s.CreateAgentBook(ctx, u.ID, "Coffee", "markdown", "# Coffee\n\nPart one has a mistaek.", AgentTTL)
+	a, _ := s.CreateAgentBook(ctx, u.ID, "Coffee", "markdown", "# Coffee\n\nPart one has a mistaek.", "", AgentTTL)
 	if err := s.SaveProgress(ctx, u.ID, a.ID, 0.5, 0.4); err != nil {
 		t.Fatal(err)
 	}
@@ -484,7 +475,7 @@ func TestReplaceAgentBook(t *testing.T) {
 	if err != nil || got.Content != a.Content || got.Content == "" {
 		t.Fatalf("get = %+v, %v", got, err)
 	}
-	b, err := s.ReplaceAgentBook(ctx, u.ID, a.ID, "", "", "# Coffee\n\nPart one has no mistake.")
+	b, err := s.ReplaceAgentBook(ctx, u.ID, a.ID, "", "", "# Coffee\n\nPart one has no mistake.", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -500,24 +491,24 @@ func TestReplaceAgentBook(t *testing.T) {
 	if at, _ := time.Parse(time.RFC3339, b.ExpiresAt); time.Until(at) < AgentTTL-time.Minute {
 		t.Fatalf("rewriting should renew to 30 days: %s", b.ExpiresAt)
 	}
-	if b, _ = s.ReplaceAgentBook(ctx, u.ID, a.ID, "  Coffee Basics ", "", b.Content); b.Title != "Coffee Basics" {
+	if b, _ = s.ReplaceAgentBook(ctx, u.ID, a.ID, "  Coffee Basics ", "", b.Content, nil); b.Title != "Coffee Basics" {
 		t.Fatalf("renamed to %q", b.Title)
 	}
 	for name, err := range map[string]error{
 		"get the user's own text":     func() error { _, err := s.GetAgentBook(ctx, u.ID, mine.ID); return err }(),
-		"replace the user's own text": func() error { _, err := s.ReplaceAgentBook(ctx, u.ID, mine.ID, "", "", "x"); return err }(),
-		"another user's text":         func() error { _, err := s.ReplaceAgentBook(ctx, other.ID, a.ID, "", "", "x"); return err }(),
+		"replace the user's own text": func() error { _, err := s.ReplaceAgentBook(ctx, u.ID, mine.ID, "", "", "x", nil); return err }(),
+		"another user's text":         func() error { _, err := s.ReplaceAgentBook(ctx, other.ID, a.ID, "", "", "x", nil); return err }(),
 		"another user's get":          func() error { _, err := s.GetAgentBook(ctx, other.ID, a.ID); return err }(),
-		"no such text":                func() error { _, err := s.ReplaceAgentBook(ctx, u.ID, "nope", "", "", "x"); return err }(),
+		"no such text":                func() error { _, err := s.ReplaceAgentBook(ctx, u.ID, "nope", "", "", "x", nil); return err }(),
 	} {
 		if !errors.Is(err, ErrNotFound) {
 			t.Errorf("%s: %v, want not found", name, err)
 		}
 	}
-	if _, err := s.ReplaceAgentBook(ctx, u.ID, a.ID, "", "", " \n"); err == nil {
+	if _, err := s.ReplaceAgentBook(ctx, u.ID, a.ID, "", "", " \n", nil); err == nil {
 		t.Error("empty text accepted")
 	}
-	if _, err := s.ReplaceAgentBook(ctx, u.ID, a.ID, "", "", strings.Repeat("x", MaxBookChars+1)); !errors.Is(err, ErrTooLong) {
+	if _, err := s.ReplaceAgentBook(ctx, u.ID, a.ID, "", "", strings.Repeat("x", MaxBookChars+1), nil); !errors.Is(err, ErrTooLong) {
 		t.Errorf("too long: %v", err)
 	}
 	if b, _ := s.GetBook(ctx, u.ID, mine.ID); b.Content != "My own notes." {
@@ -557,37 +548,37 @@ func TestBookTTL(t *testing.T) {
 	}
 
 	// Agents' texts: 30 days, renewed by an addition, never shortened or added to a kept text.
-	a, _ := s.CreateAgentBook(ctx, u.ID, "Agent", "markdown", "Part one.", AgentTTL)
+	a, _ := s.CreateAgentBook(ctx, u.ID, "Agent", "markdown", "Part one.", "", AgentTTL)
 	if !near(in(a), AgentTTL) {
 		t.Fatalf("agent text expires in %v", in(a))
 	}
 	s.db.ExecContext(ctx, `UPDATE books SET expires_at = ? WHERE id = ?`, expiry(24*time.Hour), a.ID)
-	if a, _ = s.AppendAgentBook(ctx, u.ID, a.ID, "Part two."); !near(in(a), AgentTTL) {
+	if a, _ = s.AppendAgentBook(ctx, u.ID, a.ID, "Part two.", nil); !near(in(a), AgentTTL) {
 		t.Fatalf("adding should renew to 30 days, got %v", in(a))
 	}
 	s.SetBookTTL(ctx, u.ID, a.ID, 90*24*time.Hour)
-	if a, _ = s.AppendAgentBook(ctx, u.ID, a.ID, "Part three."); !near(in(a), 90*24*time.Hour) {
+	if a, _ = s.AppendAgentBook(ctx, u.ID, a.ID, "Part three.", nil); !near(in(a), 90*24*time.Hour) {
 		t.Fatalf("adding shortened a 90-day ttl to %v", in(a))
 	}
 	s.SetBookTTL(ctx, u.ID, a.ID, 0)
-	if a, _ = s.AppendAgentBook(ctx, u.ID, a.ID, "Part four."); a.ExpiresAt != "" {
+	if a, _ = s.AppendAgentBook(ctx, u.ID, a.ID, "Part four.", nil); a.ExpiresAt != "" {
 		t.Fatalf("adding gave a kept text a ttl: %q", a.ExpiresAt)
 	}
 
 	// Expired: gone from every read at once, deleted by the sweep.
-	old, _ := s.CreateAgentBook(ctx, u.ID, "Old", "markdown", "Old news.", AgentTTL)
+	old, _ := s.CreateAgentBook(ctx, u.ID, "Old", "markdown", "Old news.", "", AgentTTL)
 	s.db.ExecContext(ctx, `UPDATE books SET expires_at = ? WHERE id = ?`, time.Now().Add(-time.Minute).UTC().Format(time.RFC3339), old.ID)
 	if _, err := s.GetBook(ctx, u.ID, old.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expired text still readable: %v", err)
 	}
-	for _, list := range [][]Book{must(s.ListBooks(ctx, u.ID)), must(s.ListAgentBooks(ctx, u.ID))} {
+	for _, list := range [][]Book{must(s.ListBooks(ctx, u.ID)), must(s.ListAgentBooks(ctx, u.ID, ""))} {
 		for _, b := range list {
 			if b.ID == old.ID {
 				t.Fatal("expired text still listed")
 			}
 		}
 	}
-	if _, err := s.AppendAgentBook(ctx, u.ID, old.ID, "more"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.AppendAgentBook(ctx, u.ID, old.ID, "more", nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("added to an expired text: %v", err)
 	}
 	if n, err := s.DeleteExpiredBooks(ctx); err != nil || n != 1 {
@@ -611,5 +602,62 @@ func TestCountWordsSkipsPictures(t *testing.T) {
 		"\n\nThe cabins are small ![a bunk](https://pics.example/bunk_\\(1\\).png) but clever."
 	if got := CountWords(text); got != 10 {
 		t.Errorf("CountWords = %d, want 10", got)
+	}
+}
+
+// An agent's note on its text: kept with it, changed only when given, and
+// what the agent finds its texts by.
+func TestAgentBookNote(t *testing.T) {
+	s := newTestStore(t)
+	u := mustUser(t, s, "a@example.com", false)
+	mine, _ := s.CreateBook(ctx, u.ID, "Mine", "text", "My own notes, session abc.")
+	a, err := s.CreateAgentBook(ctx, u.ID, "Coffee", "markdown", "Part one.", "  session abc-1  ", AgentTTL)
+	if err != nil || a.Note != "session abc-1" {
+		t.Fatalf("created with note %q: %v", a.Note, err)
+	}
+	b, _ := s.CreateAgentBook(ctx, u.ID, "Tea", "markdown", "Part one.", "session xyz; 50%_off", AgentTTL)
+	s.CreateAgentBook(ctx, u.ID, "Plain", "markdown", "No note.", "", AgentTTL)
+
+	ids := func(books []Book) (out []string) {
+		for _, x := range books {
+			out = append(out, x.ID)
+		}
+		return out
+	}
+	if found, _ := s.ListAgentBooks(ctx, u.ID, "abc"); len(found) != 1 || found[0].ID != a.ID {
+		t.Fatalf("note abc finds %v (not the user's own text, whatever it says)", ids(found))
+	}
+	if found, _, _ := s.ListAgentBooksPage(ctx, u.ID, "50%_", "", "", 10); len(found) != 1 || found[0].ID != b.ID {
+		t.Fatalf("a note is matched as written, %% and _ too: %v", ids(found))
+	}
+	if n, _ := s.CountAgentBooks(ctx, u.ID, "session"); n != 2 {
+		t.Fatalf("count with note session = %d", n)
+	}
+	if all, _ := s.ListAgentBooks(ctx, u.ID, ""); len(all) != 3 {
+		t.Fatalf("no note lists all %d agent texts", len(all))
+	}
+
+	// Changing a text keeps its note unless a new one is given ("" clears it).
+	a, _ = s.AppendAgentBook(ctx, u.ID, a.ID, "Part two.", nil)
+	if a.Note != "session abc-1" {
+		t.Fatalf("append without a note: %q", a.Note)
+	}
+	note := "session abc-2"
+	if a, _ = s.ReplaceAgentBook(ctx, u.ID, a.ID, "", "", "Rewritten.", &note); a.Note != note {
+		t.Fatalf("replace with a note: %q", a.Note)
+	}
+	empty := ""
+	if a, _ = s.AppendAgentBook(ctx, u.ID, a.ID, "More.", &empty); a.Note != "" {
+		t.Fatalf("an empty note clears it: %q", a.Note)
+	}
+	long := strings.Repeat("x", MaxNoteChars+1)
+	if _, err := s.CreateAgentBook(ctx, u.ID, "Long", "markdown", "x", long, AgentTTL); err == nil {
+		t.Fatal("a note over the limit was saved")
+	}
+	if _, err := s.ReplaceAgentBook(ctx, u.ID, b.ID, "", "", "x", &long); err == nil {
+		t.Fatal("a note over the limit replaced one")
+	}
+	if got, _ := s.GetBook(ctx, u.ID, mine.ID); got.Note != "" {
+		t.Fatalf("the user's own text has a note: %q", got.Note)
 	}
 }

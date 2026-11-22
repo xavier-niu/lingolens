@@ -1,7 +1,7 @@
 // Offline mode: the app opens without a connection, the shelf and glosses come
 // from this browser, changes wait in the outbox and sync when back online.
 import { chromium, devices } from 'playwright';
-import { BASE, freshUser, signIn, checker, fixture, waitForArticleText, glossesSettled } from './helpers.mjs';
+import { BASE, freshUser, signIn, checker, fixture, waitForArticleText, glossesSettled, accept } from './helpers.mjs';
 
 const OUT = process.argv[2];
 const { check } = checker();
@@ -107,10 +107,10 @@ if (pt2) {
   await page.click('#article ruby.ann >> text=dinner');
   check('looked-up word still explained offline', true);
 }
-// save it to the wordbook
-const saveBtn = await page.$('#card [data-act="save"]');
-if (saveBtn) await saveBtn.click();
-await page.keyboard.press('Escape');
+// mark it known: its gloss goes, here at once and on the server once back online
+const knownBtn = await page.$('#card [data-act="known"]');
+if (knownBtn) await knownBtn.click();
+else await page.keyboard.press('Escape');
 
 // a new word needs the network
 const pt3 = await wordPoint(page, 'river');
@@ -134,7 +134,7 @@ const progressOffline = await page.evaluate(() => document.querySelector('#read-
 // less of a longer text)
 const ADDED = 'Added on the train. The river was still there in the evening.';
 await page.click('#btn-append');
-await page.waitForSelector('#source-dialog[open]');
+await page.waitForSelector('#source-dialog[data-state="open"]');
 await page.fill('#src-more', ADDED);
 await page.click('#src-save');
 await page.waitForSelector('#toast:not([hidden])');
@@ -153,7 +153,7 @@ check('a book never opened online reads offline', await waitForArticleText(page,
 await page.goto(BASE + '#/');
 await page.waitForSelector('#library-view:not([hidden])');
 await page.locator('#btn-add:visible, #btn-add-empty:visible').first().click();
-await page.waitForSelector('#source-dialog[open]');
+await page.waitForSelector('#source-dialog[data-state="open"]');
 check('offline note in Add Source', await page.isVisible('#src-offline'));
 check('web page disabled offline; files (for PDFs) still offered', await page.$$eval('#src-kinds input', (xs) => xs.filter((x) => x.disabled).map((x) => x.value).join()) === 'url');
 await page.screenshot({ path: `${OUT}/o-source-offline.png` });
@@ -174,6 +174,7 @@ check('…with a temporary id', (await page.evaluate(() => location.hash)).start
 await page.goto(BASE + '#/');
 await page.waitForSelector('#library-view:not([hidden])');
 await page.click(`#shelf [data-del-book="${b.id}"]`);
+await accept(page);
 await page.waitForTimeout(200);
 const titles = await page.$$eval('#shelf .book', (els) => els.map((e) => e.textContent));
 check('offline shelf: new text in, deleted text out', titles.some((x) => x.includes('Written Offline')) && !titles.some((x) => x.includes('Second Book')), titles.length + '');
@@ -204,8 +205,8 @@ const serverA = books.find((x) => x.id === a.id);
 check('offline reading progress synced', serverA.progress > 0.3, `${serverA.progress} (bar ${progressOffline})`);
 const textA = (await get(page, `/api/books/${a.id}`)).content;
 check('offline addition on the server, once, after a line', textA === `${BOOK_A}\n\n---\n\n${ADDED}`, JSON.stringify(textA.slice(-90)));
-const wb = await get(page, '/api/wordbook');
-check('word saved offline is in the wordbook', wb.some((w) => w.key === 'dinner'), wb.map((w) => w.key).join());
+const known = await get(page, '/api/known');
+check('word marked known offline is known on the server', known.includes('dinner'), known.join());
 const me = await get(page, '/api/me');
 check('setting changed offline synced', me.user.prefs.theme === 'dark');
 await page.waitForFunction(() => document.querySelector('#net-status').hidden, null, { timeout: 5000 });
@@ -267,6 +268,7 @@ await ctx.setOffline(true);
 await page.goto(BASE + '#/settings');
 await page.waitForSelector('#settings-view:not([hidden])');
 await page.click('#btn-logout');
+await accept(page, 1500); // changes still waiting to be sent: it asks first
 await page.waitForSelector('#login-view:not([hidden])');
 check('signed out offline', true);
 check('device copy removed', await page.evaluate(() => localStorage.getItem('lingolens.user') === null));
