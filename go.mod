@@ -3,14 +3,15 @@ module github.com/xavier-niu/lingolens
 go 1.27.3
 
 require (
+	codeberg.org/readeck/go-readability/v2 v2.1.3
 	github.com/anthropics/anthropic-sdk-go/v2 v2.4.0
 	golang.org/x/crypto v0.58.0
+	golang.org/x/net v0.62.0
 	golang.org/x/term v0.47.0
 	modernc.org/sqlite v1.61.1
 )
 
 require (
-	codeberg.org/readeck/go-readability/v2 v2.1.3 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
@@ -36,7 +37,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.33.0 // indirect
 	go.opentelemetry.io/otel/trace v1.33.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
-	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect

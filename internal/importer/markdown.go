@@ -38,8 +38,9 @@ type converter struct {
 }
 
 type picture struct {
-	line  string // the <img> line
-	sized bool   // the page says how large it is
+	line      string // the <img> line
+	sized     bool   // the page says how large it is
+	described bool   // its alt text describes it, in a few words at least
 }
 
 // Elements whose content never belongs in the text.
@@ -74,6 +75,18 @@ func hasBlockChild(n *html.Node) bool {
 	return false
 }
 
+// holdsBlock reports whether an element has blocks inside, as a link around a
+// card's <div>s or a <picture> holding its <figcaption> does. Such an element
+// is walked as a container, so its blocks stay apart.
+func holdsBlock(n *html.Node) bool {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode && !skipped[c.DataAtom] && (isBlock(c) || holdsBlock(c)) {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *converter) add(block string) {
 	if strings.TrimSpace(block) != "" {
 		c.out = append(c.out, block)
@@ -96,7 +109,7 @@ func (c *converter) blocks(n *html.Node, depth int) {
 		if ch.Type == html.ElementNode && skipped[ch.DataAtom] {
 			continue
 		}
-		if !isBlock(ch) {
+		if !isBlock(ch) && (ch.Type != html.ElementNode || !holdsBlock(ch)) {
 			if ch.Type == html.TextNode || ch.Type == html.ElementNode {
 				run = append(run, ch)
 			}
@@ -353,10 +366,10 @@ func (c *converter) para(s string) {
 }
 
 // keep reports whether a picture stays. One beside text (in a paragraph, list
-// item or table row) stays only when the page gives its size: icons and
-// checkmarks in text rarely do, while photos and charts on their own show
-// whatever their size.
-func (p picture) keep(besideText bool) bool { return !besideText || p.sized }
+// item or table row, or with a credit beside it) stays only when the page gives
+// its size or describes it: icons and checkmarks in text rarely have either,
+// while photos and charts on their own stay whatever they have.
+func (p picture) keep(besideText bool) bool { return !besideText || p.sized || p.described }
 
 // picsIn lists the pictures marked in inline output s, in order.
 func (c *converter) picsIn(s string) []picture {
@@ -374,7 +387,7 @@ func hasText(s string) bool {
 
 // minPicture is the least width and height, in CSS pixels, of a picture worth
 // keeping: smaller images are icons, avatars, spacers and tracking pixels.
-const minPicture = 64
+const minPicture = 100
 
 // image is what an <img> leaves in inline output: an emoji's text, a picture's
 // mark, or nothing.
@@ -396,7 +409,7 @@ func (c *converter) image(n *html.Node) string {
 	if sized {
 		line += ` width="` + strconv.Itoa(w) + `" height="` + strconv.Itoa(h) + `"`
 	}
-	c.pics = append(c.pics, picture{line: line + ">", sized: sized})
+	c.pics = append(c.pics, picture{line: line + ">", sized: sized, described: len(strings.Fields(alt)) >= 3})
 	return picMark + strconv.Itoa(len(c.pics)-1) + "\x00"
 }
 

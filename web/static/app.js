@@ -1961,12 +1961,12 @@ function bookmarkletCode() {
   // Plain ES2017, no comments: it runs inside other people's pages. Scripts,
   // styles and frames are dropped to keep the message small. F gives the
   // pictures copied into k what their originals (o, in the same order) show: the
-  // address the browser chose (from a srcset, or after lazy loading) and, once
-  // loaded, the size they're shown at, so the server can tell photos and charts
-  // from icons and avatars.
+  // address the browser chose (from a srcset, or after lazy loading) and the
+  // size they're shown at, also before they load when the page sets it, so the
+  // server can tell photos and charts from icons and avatars.
   const js = `(()=>{const A=${JSON.stringify(app)},O=new URL(A).origin,d=document,I=[...d.querySelectorAll('img')],`
     + `F=(k,o)=>{const q=k.querySelectorAll('img');if(q.length===o.length)q.forEach((m,i)=>{const x=o[i],u=x.currentSrc||x.src;`
-    + `if(/^https?:/.test(u))m.setAttribute('src',u);if(x.complete&&x.naturalWidth){m.setAttribute('width',x.width);m.setAttribute('height',x.height)}})},`
+    + `if(/^https?:/.test(u))m.setAttribute('src',u);if(x.width&&x.height){m.setAttribute('width',x.width);m.setAttribute('height',x.height)}})},`
     + `c=d.documentElement.cloneNode(true);F(c,I);`
     + `c.querySelectorAll('script,style,noscript,template,iframe,svg,canvas,object,embed,link').forEach(n=>n.remove());`
     + `let s='';const g=getSelection();`

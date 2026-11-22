@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -314,6 +316,77 @@ func TestPageArticle(t *testing.T) {
 	}
 	if _, err := PageArticle("<html><body><nav>Home</nav></body></html>", "https://daily.example/"); err == nil {
 		t.Error("a page without an article was accepted")
+	}
+}
+
+// A news page's pictures, the way sites lay them out: the photo atop the story
+// sits outside its text, the byline has the writer's portrait, a photo's wrapper
+// is named like page furniture ("sharesheet"), and a related story's card has a
+// picture too. The article gets its photos, once each, and nothing else.
+func TestPageArticlePictures(t *testing.T) {
+	para := func(s string) string {
+		return "<p>" + s + " Sleeper trains are coming back across Europe, and the cabins are better than ever, with real beds, clean sheets, and a window onto the night.</p>"
+	}
+	page := `<!doctype html><html><head><title>Night Trains Return | The Rail Journal</title></head><body>
+<header><nav><a href="/"><img src="/logo.png" width="320" height="120" alt="The Rail Journal"></a> <a href="/news">News</a> <a href="/travel">Travel</a></nav></header>
+<main><div class="grid">
+<h1>Night Trains Return</h1>
+<p class="standfirst">Sleeper services are back on many routes, and booking one is easier than it was.</p>
+<figure class="main-media"><img src="/img/hero.jpg" width="1200" height="800" alt="A sleeper train at dawn in the Alps"></figure>
+<div class="meta"><img src="/img/writer.jpg" width="120" height="120" class="author-image" alt="A. Writer"><a href="/a-writer">A. Writer</a> · Fri 20 Nov 2026</div>
+<div class="article-body">` + para("First,") + para("Second,") + `
+<div class="image-sharesheet"><picture><img src="/img/cabin.jpg" width="800" height="500" alt="Inside a two-berth cabin"></picture><div class="sharesheet-options"><a href="#share">Share</a></div></div>
+` + para("Third,") + `
+<div class="related-story"><a href="/other"><img src="/img/other.jpg" width="300" height="200" alt=""><span>Another story about trains that you might like to read next</span></a></div>
+` + para("Fourth,") + para("Fifth,") + `
+<div class="author-bio"><div class="author-bio__avatar"><img src="/img/writer-big.jpg" width="160" height="160" alt="A. Writer"></div><p>A. Writer covers rail travel for the journal, from sleeper cabins to station cafés.</p></div></div>
+</div></main><footer><p>© 2026 The Rail Journal</p></footer></body></html>`
+	doc, err := PageArticle(page, "https://rail.example/news/night-trains")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pics := regexp.MustCompile(`<img src="([^"]+)"`).FindAllStringSubmatch(doc.Content, -1)
+	var got []string
+	for _, p := range pics {
+		got = append(got, p[1])
+	}
+	want := []string{"https://rail.example/img/hero.jpg", "https://rail.example/img/cabin.jpg"}
+	if !slices.Equal(got, want) || !strings.HasPrefix(doc.Content, `<img src="https://rail.example/img/hero.jpg"`) {
+		t.Fatalf("pictures = %q, want %q, the first leading:\n%s", got, want, doc.Content)
+	}
+	if !strings.Contains(doc.Content, "Fifth,") {
+		t.Errorf("text lost:\n%s", doc.Content)
+	}
+
+	// An article that opens with its own photo gets no other picture before it.
+	opening := strings.Replace(page, `<div class="article-body">`, `<div class="article-body"><figure><img src="/img/first.jpg" width="900" height="600" alt=""></figure>`, 1)
+	doc, err = PageArticle(opening, "https://rail.example/news/night-trains")
+	if err != nil || !strings.HasPrefix(doc.Content, `<img src="https://rail.example/img/first.jpg"`) || strings.Contains(doc.Content, "hero.jpg") {
+		t.Fatalf("doc = %+v, err = %v", doc, err)
+	}
+}
+
+// Pictures the converter keeps beside text, or not, and in wrappers that hold
+// blocks.
+func TestPicturesBesideText(t *testing.T) {
+	page, _ := url.Parse("https://news.example/")
+	doc, _ := html.Parse(strings.NewReader(`<body>
+		<figure><picture><img src="lazy.jpg" alt=""><figcaption>Researchers at work.</figcaption></picture></figure>
+		<div><img src="crowd.jpg" alt="Getty Images A crowd watches the screen"><span>Getty Images</span></div>
+		<div><img src="pdf.png" alt="PDF"> <span>Download the report</span></div>
+		<a href="/card"><div>Card title</div><div>Card text</div></a>
+	</body>`))
+	want := strings.Join([]string{
+		`<img src="https://news.example/lazy.jpg" alt="">`,
+		"Researchers at work.",
+		`<img src="https://news.example/crowd.jpg" alt="Getty Images A crowd watches the screen">`,
+		"Getty Images",
+		"Download the report",
+		"Card title",
+		"Card text",
+	}, "\n\n")
+	if got := pageMarkdown(doc, page); got != want {
+		t.Fatalf("got:\n%s\n\nwant:\n%s", got, want)
 	}
 }
 

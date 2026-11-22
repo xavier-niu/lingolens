@@ -12,9 +12,13 @@ import (
 	"net/http/cookiejar"
 	"net/netip"
 	"net/url"
+	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	readability "codeberg.org/readeck/go-readability/v2"
 	"golang.org/x/net/html"
@@ -257,6 +261,7 @@ func Selection(fragment, pageURL, title string) (*Doc, error) {
 	for _, n := range nodes {
 		box.AppendChild(n)
 	}
+	dropPortraits(box)
 	content := strings.TrimSpace(pageMarkdown(box, u))
 	if textless(content) {
 		return nil, userErr("The selection has no text. Select the part to read, or nothing for the whole article.")
@@ -278,10 +283,14 @@ func pageAddress(page, pageURL string) (*url.URL, error) {
 // extract finds the article in a parsed page and converts it to Markdown, with
 // its pictures.
 func extract(doc *html.Node, u *url.URL) (*Doc, error) {
+	dropPortraits(doc)
+	shieldPictures(doc)
+	idx := indexPage(doc)
 	article, err := readability.FromDocument(doc, u)
 	if err != nil || article.Node == nil {
 		return nil, userErr("Couldn't find the article text on that page.")
 	}
+	addLeadPicture(article.Node, idx, u)
 	content := strings.TrimSpace(pageMarkdown(article.Node, u))
 	if textless(content) {
 		return nil, userErr("Couldn't find the article text on that page.")
@@ -291,6 +300,286 @@ func extract(doc *html.Node, u *url.URL) (*Doc, error) {
 		title = titleFromURL(u)
 	}
 	return &Doc{Title: title, Format: "markdown", Content: content}, nil
+}
+
+// portraitRe matches the address or names of a writer's or user's portrait,
+// which is no part of what they wrote: an avatar, a headshot, a byline photo.
+var portraitRe = regexp.MustCompile(`(?i)avatar|gravatar|profile[_-]?(image|photo|pic)|headshot|byline|author[_-]?(bio|image|photo|pic)`)
+
+// dropPortraits removes portraits: images whose address, alt text, class or id
+// says so, or whose wrappers' class or id does (as in "author-bio__avatar").
+// They can be as large as small photos, so their size doesn't give them away.
+func dropPortraits(doc *html.Node) {
+	var portraits []*html.Node
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.DataAtom == atom.Img {
+			named := attr(n, "src") + " " + attr(n, "alt")
+			for a, up := n, 0; a != nil && a.Type == html.ElementNode && up <= 3; a, up = a.Parent, up+1 {
+				named += " " + attr(a, "class") + " " + attr(a, "id")
+			}
+			if portraitRe.MatchString(named) {
+				portraits = append(portraits, n)
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+	for _, n := range portraits {
+		n.Parent.RemoveChild(n)
+	}
+}
+
+// shieldPictures keeps readability from dropping a page's pictures for their
+// wrappers' names. Readability removes elements whose class or id sounds like
+// page furniture ("share", "media", "extra", "hidden", …), and sites give such
+// names to the wrappers of article pictures: Apple's "image-sharesheet", or
+// CNN's "image_large--eq-extra-small". So each wrapper that holds one picture
+// and little text (a caption, a credit) loses its class and id. One that is
+// mostly a link, like a related story's card, keeps them, and so does the
+// picture itself: readability looks for "lazy" in its class.
+func shieldPictures(doc *html.Node) {
+	var pics []*html.Node
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if mayBePicture(n) {
+			pics = append(pics, n)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+	for _, img := range pics {
+		for a := img.Parent; a != nil && a.Type == html.ElementNode; a = a.Parent {
+			if a.DataAtom == atom.Body || a.DataAtom == atom.Html || a.DataAtom == atom.Main ||
+				a.DataAtom == atom.Article || !wrapsOnePicture(a) {
+				break
+			}
+			a.Attr = slices.DeleteFunc(a.Attr, func(at html.Attribute) bool { return at.Key == "class" || at.Key == "id" })
+		}
+	}
+}
+
+// mayBePicture reports whether n is an <img> that may be a picture worth
+// keeping: it has an address to load, and isn't too small if it says its size.
+func mayBePicture(n *html.Node) bool {
+	if n.Type != html.ElementNode || n.DataAtom != atom.Img {
+		return false
+	}
+	w, h := pixels(attr(n, "width")), pixels(attr(n, "height"))
+	if (w > 0 && w < minPicture) || (h > 0 && h < minPicture) {
+		return false
+	}
+	src := strings.TrimSpace(attr(n, "src"))
+	return (src != "" && !strings.HasPrefix(strings.ToLower(src), "data:")) || attr(n, "srcset") != "" || attr(n, "data-src") != ""
+}
+
+// wrapsOnePicture reports whether n holds one picture and at most 300
+// characters of text, not mostly in links.
+func wrapsOnePicture(n *html.Node) bool {
+	pics, text, linked := 0, 0, 0
+	var walk func(n *html.Node, inLink bool) bool // false: stop, n is more than a wrapper
+	walk = func(n *html.Node, inLink bool) bool {
+		switch {
+		case n.Type == html.TextNode:
+			k := utf8.RuneCountInString(strings.TrimSpace(n.Data))
+			text += k
+			if inLink {
+				linked += k
+			}
+			return text <= 300
+		case n.Type != html.ElementNode || n.DataAtom == atom.Script || n.DataAtom == atom.Style:
+			return true
+		case mayBePicture(n):
+			pics++
+			return pics <= 1
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if !walk(c, inLink || n.DataAtom == atom.A) {
+				return false
+			}
+		}
+		return true
+	}
+	return walk(n, false) && !(text >= 25 && 2*linked > text)
+}
+
+// pageIndex is every element of a page in document order, each marked with
+// its place (atKey), and how much text comes before each one.
+type pageIndex struct {
+	els    []*html.Node
+	before []int // characters of text before each element
+}
+
+const atKey = "data-lingolens-at"
+
+// indexPage numbers a page's elements, so the ones readability keeps (it keeps
+// their attributes) can be found in the page again.
+func indexPage(doc *html.Node) pageIndex {
+	var idx pageIndex
+	text := 0
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		switch n.Type {
+		case html.TextNode:
+			text += utf8.RuneCountInString(strings.TrimSpace(n.Data))
+			return
+		case html.ElementNode:
+			if n.DataAtom == atom.Script || n.DataAtom == atom.Style {
+				return
+			}
+			n.Attr = append(n.Attr, html.Attribute{Key: atKey, Val: strconv.Itoa(len(idx.els))})
+			idx.els = append(idx.els, n)
+			idx.before = append(idx.before, text)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+	return idx
+}
+
+// leadGap is the most text, in characters, between a lead picture and its
+// article: a headline, a standfirst, a caption, a byline and dates.
+const leadGap = 1000
+
+// addLeadPicture puts back the picture an article opens with, between its
+// headline and its text: readability leaves it out as a sibling of the text
+// with no text of its own (the photo atop a Guardian or CNN story, an X
+// article's cover, a blog's featured image). It's the nearest picture before
+// where the article starts in the page, with little text between, large or in
+// a <figure>, and not part of the page's furniture.
+func addLeadPicture(article *html.Node, idx pageIndex, page *url.URL) {
+	start := -1
+	have := map[string]bool{}
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			if i, err := strconv.Atoi(attr(n, atKey)); err == nil && i < len(idx.els) && (start < 0 || i < start) {
+				start = i
+			}
+			if n.DataAtom == atom.Img {
+				have[pictureSource(n, page)] = true
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(article)
+	if start <= 0 || opensWithPicture(article) {
+		return
+	}
+	text := idx.els[start]
+	for i := start - 1; i >= 0 && idx.before[start]-idx.before[i] <= leadGap; i-- {
+		img := idx.els[i]
+		if !mayBePicture(img) || !leadsArticle(img) {
+			continue
+		}
+		if have[pictureSource(img, page)] {
+			return // the article shows it already
+		}
+		// The picture with its caption: its wrappers that hold nothing else.
+		block := img
+		for a := img.Parent; a != nil && a.Type == html.ElementNode && !contains(a, text) && wrapsOnePicture(a); a = a.Parent {
+			block = a
+		}
+		article.InsertBefore(cloneNode(block), article.FirstChild)
+		return
+	}
+}
+
+// opensWithPicture reports whether an article shows a picture before any text:
+// it has its lead picture already.
+func opensWithPicture(n *html.Node) bool {
+	var first func(*html.Node) (found, pic bool)
+	first = func(n *html.Node) (bool, bool) {
+		if n.Type == html.TextNode && strings.TrimSpace(n.Data) != "" {
+			return true, false
+		}
+		if mayBePicture(n) {
+			return true, true
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if n.Type == html.ElementNode && (n.DataAtom == atom.Script || n.DataAtom == atom.Style) {
+				break
+			}
+			if found, pic := first(c); found {
+				return true, pic
+			}
+		}
+		return false, false
+	}
+	_, pic := first(n)
+	return pic
+}
+
+// leadsArticle reports whether a picture before an article may be its lead
+// picture: large (or in a <figure> when the page doesn't say), shown, and not
+// in navigation, a sidebar, a footer, a form or the page's own header.
+func leadsArticle(img *html.Node) bool {
+	inFigure := false
+	for n := img; n != nil; n = n.Parent {
+		if n.Type != html.ElementNode {
+			continue
+		}
+		switch n.DataAtom {
+		case atom.Nav, atom.Aside, atom.Footer, atom.Form, atom.Button:
+			return false
+		case atom.Header:
+			if !within(n, atom.Article, atom.Main) {
+				return false
+			}
+		case atom.Figure, atom.Picture:
+			inFigure = true
+		}
+		switch attr(n, "role") {
+		case "navigation", "banner", "complementary", "contentinfo", "dialog":
+			return false
+		}
+		style := strings.ReplaceAll(strings.ToLower(attr(n, "style")), " ", "")
+		if hasAttr(n, "hidden") || attr(n, "aria-hidden") == "true" ||
+			strings.Contains(style, "display:none") || strings.Contains(style, "visibility:hidden") {
+			return false
+		}
+	}
+	w := pixels(attr(img, "width"))
+	return w >= 300 || (w == 0 && inFigure)
+}
+
+func within(n *html.Node, tags ...atom.Atom) bool {
+	for a := n.Parent; a != nil; a = a.Parent {
+		if a.Type == html.ElementNode && slices.Contains(tags, a.DataAtom) {
+			return true
+		}
+	}
+	return false
+}
+
+func contains(a, n *html.Node) bool {
+	for ; n != nil; n = n.Parent {
+		if n == a {
+			return true
+		}
+	}
+	return false
+}
+
+func hasAttr(n *html.Node, key string) bool {
+	return slices.ContainsFunc(n.Attr, func(a html.Attribute) bool { return a.Key == key })
+}
+
+// cloneNode copies n and everything in it, detached from its page.
+func cloneNode(n *html.Node) *html.Node {
+	c := &html.Node{Type: n.Type, DataAtom: n.DataAtom, Data: n.Data, Namespace: n.Namespace, Attr: slices.Clone(n.Attr)}
+	for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
+		c.AppendChild(cloneNode(ch))
+	}
+	return c
 }
 
 // siteless drops the site name from a page title ("How Habits Form | The Daily
