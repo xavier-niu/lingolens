@@ -46,7 +46,7 @@ Other clients (Codex, Cursor, VS Code and so on) take the same address and heade
 
 Ask the agent things like "explain the present perfect and save it to LingoLens" or "write me a B1 article about coffee for LingoLens". It replies with a link to the new text.
 
-Ask it to add more on the same topic ("add a part about roasting to my coffee text") and it adds to the end of that text, after a separator line, instead of starting a new one.
+Ask it to add more on the same topic ("add a part about roasting to my coffee text") and it adds to the end of that text, after a separator line, instead of starting a new one. Within one conversation, everything you save goes into the same text, and the agent renames it if the first title no longer fits. Ask for a separate text if you want one.
 
 Agents note where a text came from (their session id, for instance) when they save it, so they find their own texts again in a later turn without guessing by title.
 

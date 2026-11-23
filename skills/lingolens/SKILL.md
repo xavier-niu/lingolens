@@ -64,6 +64,28 @@ chat.
   "Sure! Here's…".
 - The limit is 2,000,000 characters.
 
+## New text, or add to one?
+
+**One conversation keeps one text.** Everything saved in the same session
+belongs to the same topic, so it goes into the same text.
+
+Before you save, check whether this conversation already saved a text: you have
+its link, or this finds it by your note (see "A note to find it again" below):
+
+```bash
+scripts/upload.sh --list --note "SESSION_ID"
+```
+
+If it did, **add the new reply to that text** (see "Adding to a text on the
+same topic" below). Do this even when the user only says "save this" or "send it
+to LingoLens" and doesn't name the earlier text, and even when the earlier
+text's title doesn't fit the new reply: a title that covers only the first part
+is a reason to rename the text, not to start a new one. Save a new text only
+when the user asks for a separate one, or names another text to add to.
+
+Either way, tell the user which you did ("Added to *Coffee Notes*" or "Saved as
+a new text"), so they can ask for the other.
+
 ## Uploading
 
 Write the Markdown to a file, then:
@@ -139,12 +161,16 @@ Only texts saved by agents can be read, added to or changed. The user's own text
 
 ## Adding to a text on the same topic
 
-When the user asks to update a topic that is already in LingoLens, or to save
-more on the same topic as a text saved before ("add this to my coffee notes",
-"put the follow-up in the same text", "update the phrasal verbs one"), add it to
-the end of that text instead of saving a new one. LingoLens puts a separator line
-(`---`) before the new part; the text keeps its title, link and the reader's
-place.
+Add to the end of a text saved before, instead of saving a new one:
+
+- when the user asks to ("add this to my coffee notes", "put the follow-up in
+  the same text", "update the phrasal verbs one");
+- when this conversation already saved a text, even if the user doesn't mention
+  it ("send this one too", "push the reply to LingoLens", or just "save this" a
+  few turns after the first save). See "New text, or add to one?" above.
+
+LingoLens puts a separator line (`---`) before the new part; the text keeps its
+title, link and the reader's place.
 
 1. **Find the text's ID** (above).
 2. **Write only the new part.** Start it with a `##` heading saying what it adds
@@ -158,6 +184,17 @@ place.
 
    Give the user the link it prints; it's the same link as before. Adding
    starts the 30 days again (a longer time, or "never", stays as it is).
+4. **Rename it if it grew.** If the text's title now covers only the first part
+   (say, it's about one test and the new part is about another), give it a title
+   that covers both. Adding can't take `--title`, so get the text, change its
+   `#` heading to the new title, and save it with that title:
+
+   ```bash
+   scripts/upload.sh --get ID > text.md
+   scripts/upload.sh text.md --replace ID --title "New Title"
+   ```
+
+   Tell the user the new title along with the link.
 
 If adding fails with 404, the text was deleted or isn't an agent's: save a new
 text and say why. If it fails with 413, the text would grow past the limit: save
