@@ -89,7 +89,6 @@ export interface AppState {
   // reader
   book: Book | null
   toc: TocItem[]
-  tocCurrent: string
   annotating: { shown: boolean; n: number }
   card: { idx: number; rev: number } | null
   fab: { info: SelectionInfo; docked: boolean } | null
@@ -101,7 +100,6 @@ export interface AppState {
 
   // dialogs
   source: SourceOpen | null
-  tocOpen: boolean
 
   // Ask AI sidebar
   drawer: "closed" | "open" | "closing"
@@ -140,7 +138,6 @@ export const useApp = create<AppState>()(() => ({
 
   book: null,
   toc: [],
-  tocCurrent: "",
   annotating: { shown: false, n: 0 },
   card: null,
   fab: null,
@@ -151,7 +148,6 @@ export const useApp = create<AppState>()(() => ({
   deviceReading: {},
 
   source: null,
-  tocOpen: false,
 
   drawer: "closed",
   chatMode: "chat",

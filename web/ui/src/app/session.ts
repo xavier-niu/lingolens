@@ -452,7 +452,7 @@ export function showLogin() {
   leaveBook()
   set({
     me: null, model: null, books: [], booksLoaded: false, known: new Set(),
-    source: null, tocOpen: false, loginError: "", banner: null,
+    source: null, loginError: "", banner: null,
   })
   setView("login")
   renderNet()

@@ -10,7 +10,7 @@ import { Header } from "@/components/header"
 import { Banner } from "@/components/banner"
 import { ChatPanel, useChatDismiss } from "@/components/chat-panel"
 import { SourceDialog } from "@/components/source-dialog"
-import { ContentsDialog } from "@/components/dialogs"
+import { Contents } from "@/components/contents"
 import { ConfirmHost } from "@/components/confirm"
 import { SparkGradient } from "@/components/icons"
 import { Toaster } from "@/components/ui/sonner"
@@ -65,12 +65,12 @@ export function App() {
         <SettingsView />
         <ClipView />
       </main>
+      <Contents />
       <WordCard />
       <AskFab pressedAt={fabPressedAt} />
       <Hint />
       <ChatPanel />
       <SourceDialog />
-      <ContentsDialog />
       <ConfirmHost />
       <Toaster
         position="top-center"

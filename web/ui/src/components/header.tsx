@@ -1,10 +1,9 @@
 import * as React from "react"
-import { Check, CloudOff, FilePlus2, History, ListTree, LogOut, MoreHorizontal, PencilLine, RefreshCw, Settings } from "lucide-react"
+import { Check, CloudOff, FilePlus2, History, LogOut, MoreHorizontal, PencilLine, RefreshCw, Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { net } from "@/lib/api.js"
 import { useApp, get, set, showBanner, type Book } from "@/app/store"
 import { useT } from "@/app/hooks"
-import { openContents } from "@/app/engine"
 import { toggleHistory } from "@/app/chat"
 import { signOut } from "@/app/session"
 import { LogoMark, TextSizeIcon } from "@/components/icons"
@@ -218,7 +217,6 @@ const menuItem = "menu-item h-9 gap-2.5 px-2.5 text-sm [&_svg]:text-muted-foregr
 // account button makes way for the title).
 function ReaderMenu() {
   const t = useT()
-  const toc = useApp((s) => s.toc.length > 0)
   const edit = (append: boolean) => {
     const b = get().book
     if (b) set((s) => ({ source: { book: b, append, seq: (s.source?.seq ?? 0) + 1 } }))
@@ -231,11 +229,6 @@ function ReaderMenu() {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent id="menu-pop" align="end" sideOffset={6} className="w-auto min-w-52 p-1.5">
-        {toc && (
-          <DropdownMenuItem id="btn-toc" className={menuItem} onSelect={() => openContents()}>
-            <ListTree />{t("toc.title")}
-          </DropdownMenuItem>
-        )}
         <DropdownMenuItem id="btn-edit" className={menuItem} onSelect={() => edit(false)}>
           <PencilLine />{t("btn.edit")}
         </DropdownMenuItem>

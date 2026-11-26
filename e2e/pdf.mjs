@@ -97,9 +97,7 @@ check('title not repeated as the first heading', !blocks[0].startsWith('# '), bl
 check('headings kept', (await page.$$eval('#article h2', (h) => h.map((x) => x.textContent).join('|'))) === 'The Spring Floods|Quiet Summers|Winter Ice');
 const art = await articleText(page);
 check('running header and page numbers left out', !/Field Notes|Page \d+ of \d+/.test(art));
-await page.click('#btn-menu');
-check('Contents offered', await page.isVisible('#btn-toc'));
-await page.keyboard.press('Escape');
+check('Contents offered', await page.isVisible('#toc'));
 await page.screenshot({ path: `${OUT}/pdf-reader.png` });
 
 // ---- files that can't be read

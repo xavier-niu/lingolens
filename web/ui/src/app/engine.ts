@@ -88,6 +88,7 @@ export function clearArticle() {
   if (article) article.innerHTML = ""
   engine.segments.clear()
   engine.anns = []
+  set({ toc: [] })
 }
 
 // ------------------------------------------------------------------ segmentation
@@ -427,22 +428,6 @@ function buildContents(article: HTMLElement) {
   set({
     toc: heads.length < 3 ? [] : heads.map((h) => ({ id: h.id, text: (h.textContent || "").trim(), level: +h.tagName[1] - top + 1 })),
   })
-}
-
-export function openContents() {
-  // Mark the section being read: the last heading above the top of the screen.
-  let current = ""
-  for (const item of get().toc) {
-    const h = document.getElementById(item.id)
-    if (h && h.getBoundingClientRect().top < 120) current = item.id
-  }
-  set({ tocOpen: true, tocCurrent: current })
-}
-
-export function goToSection(id: string) {
-  set({ tocOpen: false })
-  // After the dialog has closed and given the page its scroll back.
-  setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: "start" }), 0)
 }
 
 // ------------------------------------------------------------------ click any word to look it up

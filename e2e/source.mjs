@@ -194,23 +194,51 @@ await page.waitForSelector('#reader-view:not([hidden])');
 check('book title from the EPUB', (await page.textContent('#book-title')) === 'The Harbour Stories');
 check('all five chapters', (await page.$$('#article h2')).length === 5);
 
-// ---- Contents
+// ---- Contents: beside the text, marking the chapter being read
+await page.waitForSelector('#toc');
+await page.waitForFunction(() => getComputedStyle(document.querySelector('#toc')).opacity === '1'); // it fades in
+check('Contents shown beside the text for a book with chapters', (await page.getAttribute('#toc', 'data-mode')) === 'beside' && !(await page.$('#btn-toc')));
+const tocBox = () => page.evaluate(() => {
+  const t = document.querySelector('#toc').getBoundingClientRect();
+  const c = document.querySelector('#reader-view').getBoundingClientRect();
+  return { top: Math.round(t.top), beside: t.left >= c.right + 16, inside: t.right <= document.documentElement.clientWidth };
+});
+const box = await tocBox();
+check('…to the right of the text, in the window', box.beside && box.inside, JSON.stringify(box));
 await page.click('#btn-menu');
-check('Contents offered for a book with chapters', await visible('#btn-toc'));
-await page.click('#btn-toc');
-await page.waitForSelector('#toc-dialog[data-state="open"]');
+check('…and not in the ⋯ menu any more', !(await page.$('#menu-pop #btn-toc')) && !(await page.textContent('#menu-pop')).includes('Contents'));
+await page.keyboard.press('Escape');
 const items = await page.$$eval('#toc-list a', (as) => as.map((a) => a.textContent));
 check('Contents lists the chapters', items.join('|') === 'Chapter One|Chapter Two|Chapter Three|Chapter Four|Chapter Five', items.join('|'));
-await page.screenshot({ path: `${OUT}/s-toc.png` });
 await page.click('#toc-list a >> nth=3');
 await page.waitForTimeout(400);
 const top = await page.$eval('#article h2 >> nth=3', (h) => h.getBoundingClientRect().top);
 check('jumps to the chapter, below the header', top > 50 && top < 120, String(top));
 check('route unchanged', (await page.evaluate(() => location.hash)).startsWith('#/read/'));
-await page.click('#btn-menu');
+const marked = () => page.$$eval('#toc-list a[aria-current="location"]', (as) => as.map((a) => a.textContent).join('|'));
+check('current chapter marked', (await marked()) === 'Chapter Four', await marked());
+check('…and the list floats where it was', (await tocBox()).top === box.top, JSON.stringify(await tocBox()));
+await page.$eval('#article h2 >> nth=1', (h) => h.scrollIntoView({ block: 'start' }));
+await page.waitForFunction(() => document.querySelector('#toc-list a[aria-current="location"]')?.textContent === 'Chapter Two', null, { timeout: 2000 }).catch(() => {});
+check('scrolling marks the chapter being read', (await marked()) === 'Chapter Two', await marked());
+await page.screenshot({ path: `${OUT}/s-toc.png` });
+
+// A narrow window: a button at the bottom right opens it over the page.
+await page.setViewportSize({ width: 900, height: 900 });
+await page.waitForSelector('#btn-toc');
+check('narrow window: a Contents button instead', !(await page.$('#toc')) && await visible('#btn-toc'));
 await page.click('#btn-toc');
-check('current chapter marked', (await page.textContent('#toc-list a[aria-current="true"]')) === 'Chapter Four');
-await page.keyboard.press('Escape');
+await page.waitForSelector('#toc-pop');
+check('…which lists the chapters, the one being read marked', (await page.$$('#toc-pop #toc-list a')).length === 5 && (await marked()) === 'Chapter Two', await marked());
+check('…with it in focus', (await page.evaluate(() => document.activeElement?.textContent)) === 'Chapter Two');
+await page.waitForTimeout(200); // the popover's entrance
+await page.screenshot({ path: `${OUT}/s-toc-narrow.png` });
+await page.click('#toc-list a >> nth=2');
+await page.waitForSelector('#toc-pop', { state: 'detached' });
+const top3 = await page.$eval('#article h2 >> nth=2', (h) => h.getBoundingClientRect().top);
+check('…and goes to the chapter, closing', top3 > 50 && top3 < 120, String(top3));
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.waitForSelector('#toc');
 
 // ---- editing a Markdown import keeps it Markdown
 await page.click('#btn-menu');
@@ -330,10 +358,17 @@ const openMs = Date.now() - t0;
 const words = await page.evaluate(() => fetch('/api/books').then((r) => r.json()).then((b) => b.find((x) => x.title === 'A Very Long Novel').words));
 check('long book imported and opened', words > 150000, `${words} words in ${openMs} ms`);
 check('…in reasonable time', openMs < 8000, `${openMs} ms`);
-await page.click('#btn-menu');
-await page.click('#btn-toc');
+await page.waitForSelector('#toc');
 check('60 chapters in Contents', (await page.$$('#toc-list a')).length === 60);
-await page.keyboard.press('Escape');
+await page.$eval('#article h2 >> nth=44', (h) => h.scrollIntoView({ block: 'start' }));
+await page.waitForTimeout(600); // the list scrolls smoothly to the chapter
+const inList = await page.evaluate(() => {
+  const a = document.querySelector('#toc-list a[aria-current="location"]');
+  const l = document.querySelector('#toc-list').getBoundingClientRect();
+  const r = a?.getBoundingClientRect();
+  return { text: a?.textContent, seen: !!r && r.top >= l.top && r.bottom <= l.bottom };
+});
+check('a long list keeps the chapter being read in sight', inList.seen, JSON.stringify(inList));
 
 // ---- jumping to a chapter: its glosses come first, and the header says they're coming
 {
@@ -354,12 +389,7 @@ await page.keyboard.press('Escape');
     for (let i = 0; i < 100 && !ok(); i++) await p.waitForTimeout(50);
     return ok();
   };
-  const jumpTo = async (n) => {
-    await p.click('#btn-menu');
-    await p.click('#btn-toc');
-    await p.waitForSelector('#toc-dialog[data-state="open"]');
-    await p.click(`#toc-list a >> nth=${n}`);
-  };
+  const jumpTo = (n) => p.click(`#toc-list a >> nth=${n}`);
   const onScreen = () => p.$$eval('#article [data-seg]', (els) => els.filter((el) => {
     const r = el.getBoundingClientRect();
     return r.bottom > 56 && r.top < innerHeight;
@@ -631,6 +661,18 @@ await pp.screenshot({ path: `${OUT}/s-phone-menu.png` });
 await pp.click('#menu-append');
 await pp.waitForSelector('#source-dialog[data-state="open"]');
 check('…and opens the text on Append', (await pp.$eval('#src-modes input:checked', (i) => i.value)) === 'append' && await pp.isVisible('#src-more'));
+await pp.keyboard.press('Escape');
+const harbour = await pp.evaluate(() => fetch('/api/books').then((r) => r.json()).then((b) => b.find((x) => x.title === 'The Harbour Stories').id));
+await pp.goto(BASE + '#/read/' + harbour);
+await pp.waitForSelector('#btn-toc');
+const tocBtn = await pp.$eval('#btn-toc', (b) => { const r = b.getBoundingClientRect(); return { right: innerWidth - r.right, bottom: innerHeight - r.bottom, size: r.width }; });
+check('phone: Contents is a round button at the bottom right', tocBtn.right >= 8 && tocBtn.right <= 24 && tocBtn.bottom >= 8 && tocBtn.size >= 44, JSON.stringify(tocBtn));
+await pp.click('#btn-toc');
+await pp.waitForSelector('#toc-pop');
+await pp.waitForTimeout(200); // the popover's entrance
+const popFits = await pp.$eval('#toc-pop', (p) => { const r = p.getBoundingClientRect(); return r.left >= 8 && r.right <= innerWidth - 8 && r.top >= 0; });
+check('…opening the list on screen', popFits);
+await pp.screenshot({ path: `${OUT}/s-phone-toc.png` });
 await phone.close();
 
 check('no page errors', errors.length === 0, errors.join(' | '));
