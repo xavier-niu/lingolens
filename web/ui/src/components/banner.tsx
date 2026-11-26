@@ -18,8 +18,8 @@ export function Banner() {
       id="banner"
       role="status"
       className={cn(
-        "banner anim-rise mx-auto mt-4 flex w-[calc(100%-32px)] max-w-[1040px] items-center gap-3 rounded-xl border py-2.5 pr-2 pl-4 text-sm",
-        info ? "info border-border bg-card shadow-xs" : "border-destructive/30 bg-destructive/[.06] text-foreground",
+        "banner anim-rise mx-auto mt-4 flex w-[calc(100%-32px)] max-w-[1040px] items-center gap-3 rounded-2xl border py-2 pr-2 pl-4 text-sm",
+        info ? "info border-border bg-card shadow-xs" : "border-destructive/25 bg-destructive/[.06] text-foreground",
         "max-sm:w-full max-sm:rounded-none max-sm:border-x-0",
       )}
     >

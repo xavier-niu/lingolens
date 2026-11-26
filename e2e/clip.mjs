@@ -64,7 +64,7 @@ await tab.waitForSelector('#clip-page:not([hidden])', { timeout: 10000 });
 check('new tab shows the page to add, without the site name', (await text(tab, '#clip-title')) === 'Night Trains of Europe');
 check('…and where it is from', (await text(tab, '#clip-from')) === 'From 127.0.0.1');
 check('…and that the article is kept', (await text(tab, '#clip-what')).includes('article'));
-check('breadcrumb: Shelf / Add Page', (await tab.$$eval('#crumbs li', (l) => l.map((x) => x.textContent.trim()).join(' / '))) === 'Shelf / Add Page');
+check('header: the name goes to the shelf', (await tab.getAttribute('#home-link', 'href')) === '#/');
 await tab.screenshot({ path: `${OUT}/c-clip.png` });
 await tab.click('#clip-save');
 await tab.waitForSelector('#reader-view:not([hidden])', { timeout: 10000 });

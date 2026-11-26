@@ -262,10 +262,11 @@ check('conversation deleted from history', (await savedChats()).length === 0);
 await page.click('#chat-close');
 
 // Time spent at the end reads the text to its end.
-const threadWidth = () => page.$eval('#read-thread > div', (d) => parseInt(d.style.width, 10) || 0);
+// Progress as the reader shows it, under the title: "45% read, …", or "Finished".
+const threadWidth = () => page.$eval('#book-stat', (el) => { const s = el.textContent; return s === 'Finished' ? 100 : +(s.match(/(\d+)% read/) || [0, 0])[1]; });
 await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 await page.clock.runFor(90_000);
-check('progress thread full after reading to the end', (await threadWidth()) === 100, `${await threadWidth()}%`);
+check('progress full after reading to the end', (await threadWidth()) === 100, `${await threadWidth()}%`);
 check('reader says finished', (await page.textContent('#book-stat')) === 'Finished');
 
 // Back on the shelf
@@ -315,7 +316,7 @@ const scrollToShare = (share) => page.evaluate((share) => new Promise((done) => 
 // back to stays.
 await scrollToShare(1);
 await page.waitForTimeout(500);
-check('a jump to the end doesn’t fill the progress thread', (await threadWidth()) < 20, `${await threadWidth()}%`);
+check('a jump to the end doesn’t fill the progress', (await threadWidth()) < 20, `${await threadWidth()}%`);
 check('a jump to the end doesn’t finish the text', (await page.textContent('#book-stat')) !== 'Finished', await page.textContent('#book-stat'));
 await backToLong();
 check('a quick look at the end keeps the place', (await page.evaluate(() => window.scrollY)) < 200, String(await page.evaluate(() => window.scrollY)));
@@ -393,7 +394,7 @@ await page.keyboard.press('Escape');
 await page.waitForSelector('#display-pop', { state: 'detached' });
 await page.evaluate(() => window.scrollTo(0, 400));
 await page.waitForTimeout(300);
-check('book title shown in the header breadcrumb', (await page.textContent('#crumbs [aria-current="page"]')) === 'Why Small Habits Matter');
+check('the name in the header goes to the shelf', (await page.getAttribute('#home-link', 'href')) === '#/');
 await page.screenshot({ path: `${OUT}/d-reader-bar.png` });
 await page.click('#btn-display');
 await page.click('#size-seg [data-size="l"]');
@@ -408,18 +409,18 @@ await page.waitForTimeout(600);
 check('text size kept on this device, not sent to the account', (await accountPrefs()).readSize === 'm' && (await onDevice()).readSize === 'sm', JSON.stringify(await onDevice()));
 await page.click('#size-seg [data-size="l"]');
 const articleWidth = () => page.evaluate(() => Math.round(document.querySelector('#article').getBoundingClientRect().width));
-check('standard line width by default', await articleWidth() === 820, String(await articleWidth()));
+check('standard line width by default', await articleWidth() === 700, String(await articleWidth()));
 check('standard width marked', (await page.getAttribute('#width-seg [data-width="m"]', 'aria-pressed')) === 'true');
 await page.screenshot({ path: `${OUT}/d-display-pop.png` });
 await page.click('#width-seg [data-width="w"]');
-check('wide line width applies', await articleWidth() === 1040, String(await articleWidth()));
+check('wide line width applies', await articleWidth() === 860, String(await articleWidth()));
 await page.click('#width-seg [data-width="n"]');
-check('narrow line width applies', await articleWidth() === 680, String(await articleWidth()));
+check('narrow line width applies', await articleWidth() === 600, String(await articleWidth()));
 await page.waitForTimeout(600);
 check('line width kept on this device, not sent to the account', (await accountPrefs()).readWidth === 'm' && (await onDevice()).readWidth === 'n');
 await page.reload();
 await page.waitForSelector('#reader-view:not([hidden])');
-check('line width kept after reload', await articleWidth() === 680, String(await articleWidth()));
+check('line width kept after reload', await articleWidth() === 600, String(await articleWidth()));
 await page.click('#btn-display');
 await page.click('#width-seg [data-width="m"]');
 check('choosing the default again follows the default', !('readWidth' in await onDevice()), JSON.stringify(await onDevice()));
@@ -430,7 +431,7 @@ const fonts = () => page.evaluate(() => ({
   gloss: getComputedStyle(document.querySelector('#article rt') || document.body).fontFamily,
   title: getComputedStyle(document.querySelector('#book-title')).fontFamily,
 }));
-check('Literata and 黑体 by default', (await fonts()).read.startsWith('Literata') && (await page.getAttribute('#font-seg [data-font="literata"]', 'aria-pressed')) === 'true' && (await page.getAttribute('#gloss-seg [data-gloss="sans"]', 'aria-pressed')) === 'true');
+check('Inter and 黑体 by default', (await fonts()).read.startsWith('"Inter Variable"') && (await page.getAttribute('#font-seg [data-font="sans"]', 'aria-pressed')) === 'true' && (await page.getAttribute('#gloss-seg [data-gloss="sans"]', 'aria-pressed')) === 'true');
 await page.click('#font-seg [data-font="legible"]');
 await page.click('#gloss-seg [data-gloss="kai"]');
 const chosen = await fonts();
@@ -440,12 +441,15 @@ check('the chosen font loads', await page.evaluate(() => document.fonts.ready.th
 await page.screenshot({ path: `${OUT}/d-display-fonts.png` });
 await page.waitForTimeout(600);
 const accountFonts = await accountPrefs();
-check('fonts kept on this device, not sent to the account', `${accountFonts.readFont}/${accountFonts.glossFont}` === 'literata/sans' && JSON.stringify(await onDevice()) === '{"readSize":"l","readFont":"legible","glossFont":"kai"}', JSON.stringify(await onDevice()));
+check('fonts kept on this device, not sent to the account', `${accountFonts.readFont}/${accountFonts.glossFont}` === 'sans/sans' && JSON.stringify(await onDevice()) === '{"readSize":"l","readFont":"legible","glossFont":"kai"}', JSON.stringify(await onDevice()));
 await page.reload();
 await page.waitForSelector('#reader-view:not([hidden])');
 check('fonts kept after reload', (await fonts()).read.startsWith('"Atkinson Hyperlegible Next"'));
 await page.click('#btn-display');
-await page.click('#font-seg [data-font="literata"]');
+await page.click('#font-seg [data-font="serif"]');
+check('the serif is Source Serif, and loads', (await fonts()).read.startsWith('"Source Serif 4"')
+  && await page.evaluate(() => document.fonts.ready.then(() => document.fonts.check('16px "Source Serif 4"'))), (await fonts()).read);
+await page.click('#font-seg [data-font="sans"]');
 await page.click('#gloss-seg [data-gloss="sans"]');
 
 // Glosses: the switches hide word or phrase glosses on this device.
@@ -475,23 +479,24 @@ check('Settings says what this device sets for itself', await page.isVisible('#r
   && (await page.textContent('#reading-local-text')) === 'This device has its own Reading Options for: Word glosses, Text size.', await page.textContent('#reading-local-text'));
 await page.screenshot({ path: `${OUT}/d-settings.png`, fullPage: true });
 await page.click('#def-size-seg [data-size="s"]');
-await page.click('#def-font-seg [data-font="sans"]');
+await page.click('#def-font-seg [data-font="lexend"]');
 await page.click('#settings-view label:has(#def-phrases)');
 await page.waitForTimeout(600);
 const defaults = await accountPrefs();
-check('defaults from Settings saved to the account', defaults.readSize === 's' && defaults.readFont === 'sans' && defaults.hidePhrases === true, JSON.stringify(defaults));
+check('defaults from Settings saved to the account', defaults.readSize === 's' && defaults.readFont === 'lexend' && defaults.hidePhrases === true, JSON.stringify(defaults));
 check('…and this device uses the one just chosen', !('readSize' in await onDevice()) && (await page.textContent('#reading-local-text')) === 'This device has its own Reading Options for: Word glosses.');
 await page.click('#reading-reset');
 check('"Use the defaults here" drops this device\'s choices', JSON.stringify(await onDevice()) === '{}' && !(await page.isVisible('#reading-local')));
-check('settings breadcrumb: Shelf / book / Settings', (await page.$$eval('#crumbs .crumb', (els) => els.map((e) => e.textContent))).join(' / ') === 'Shelf / Why Small Habits Matter / Settings');
-await page.click('#crumbs a[href^="#/read/"]');
+check('Settings from a text: a way back to the text above the title', (await page.textContent('#back-to-text')) === 'Why Small Habits Matter'
+  && (await page.getAttribute('#back-to-text', 'href')).startsWith('#/read/') && (await page.getAttribute('.bar-nav a[href="#/settings"]', 'aria-current')) === 'page');
+await page.click('#back-to-text');
 await page.waitForSelector('#reader-view:not([hidden])');
 check('settings back returns to the book', (await page.textContent('#book-title')) === 'Why Small Habits Matter');
 const shown = await page.evaluate(() => {
   const a = document.querySelector('#article');
   return { size: getComputedStyle(a).fontSize, font: getComputedStyle(a).fontFamily, words: !a.classList.contains('hide-words'), phrases: !a.classList.contains('hide-phrases') };
 });
-check('the reader follows the defaults', shown.size === '17px' && !shown.font.startsWith('Literata') && shown.words && !shown.phrases, JSON.stringify(shown));
+check('the reader follows the defaults', shown.size === '17px' && shown.font.startsWith('Lexend') && shown.words && !shown.phrases, JSON.stringify(shown));
 await page.click('#btn-display');
 check('reading options show them', (await page.getAttribute('#size-seg [data-size="s"]', 'aria-pressed')) === 'true' && !(await page.isChecked('#show-phrases')));
 await page.click('#display-defaults');
@@ -499,11 +504,11 @@ await page.waitForSelector('#settings-view:not([hidden])');
 const atReading = await page.$eval('#set-reading-h', (h) => Math.round(h.closest('section').getBoundingClientRect().top));
 check('"Change the defaults" opens Settings at Reading', atReading >= 0 && atReading < 120, String(atReading));
 await page.click('#def-size-seg [data-size="m"]');
-await page.click('#def-font-seg [data-font="literata"]');
+await page.click('#def-font-seg [data-font="sans"]');
 await page.click('#settings-view label:has(#def-phrases)');
 await page.waitForTimeout(600);
 const restored = await accountPrefs();
-check('defaults restored', restored.readSize === 'm' && restored.readFont === 'literata' && restored.hidePhrases === false, JSON.stringify(restored));
+check('defaults restored', restored.readSize === 'm' && restored.readFont === 'sans' && restored.hidePhrases === false, JSON.stringify(restored));
 await page.click('#home-link');
 await page.waitForSelector('#library-view:not([hidden])');
 

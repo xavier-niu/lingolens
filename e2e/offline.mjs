@@ -128,7 +128,7 @@ await page.keyboard.press('Escape');
 // read on: progress kept offline
 await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight * 0.6));
 await page.clock.runFor(60_000);
-const progressOffline = await page.evaluate(() => document.querySelector('#read-thread > div').style.width);
+const progressOffline = await page.$eval('#book-stat', (el) => { const s = el.textContent; return s === 'Finished' ? 100 : +(s.match(/(\d+)% read/) || [0, 0])[1]; });
 
 // add to its end offline: the text grows, and the progress stays (a little
 // less of a longer text)
@@ -139,8 +139,8 @@ await page.fill('#src-more', ADDED);
 await page.click('#src-save');
 await page.waitForSelector('#toast:not([hidden])');
 check('appended offline: at the end, after a line', await waitForArticleText(page, ADDED, 3000).then(() => true, () => false) && (await page.$$('#article hr')).length === 1);
-const barAppended = await page.evaluate(() => document.querySelector('#read-thread > div').style.width);
-check('…and the progress stays', parseInt(barAppended, 10) > 0 && parseInt(barAppended, 10) >= parseInt(progressOffline, 10) - 3, `${progressOffline} → ${barAppended}`);
+const barAppended = await page.$eval('#book-stat', (el) => { const s = el.textContent; return s === 'Finished' ? 100 : +(s.match(/(\d+)% read/) || [0, 0])[1]; });
+check('…and the progress stays', barAppended > 0 && barAppended >= progressOffline - 3, `${progressOffline} → ${barAppended}`);
 await page.clock.runFor(20_000); // read on: saved after the addition, not before it
 
 // other book opens from the device too (the reader is already showing book A,

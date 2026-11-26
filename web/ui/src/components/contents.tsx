@@ -70,7 +70,7 @@ export function Contents() {
           title={t("toc.title")}
           aria-label={t("toc.title")}
           className={cn(
-            "toc-btn fixed right-4 bottom-[calc(20px+env(safe-area-inset-bottom))] z-20 grid size-11 place-items-center rounded-full border bg-card text-ink-2 shadow-(--shadow-float) transition-[color,transform] outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-95 aria-expanded:text-foreground",
+            "toc-btn fixed right-4 bottom-[calc(20px+env(safe-area-inset-bottom))] z-20 grid size-11 place-items-center rounded-full border bg-card text-ink-2 shadow-(--elev-float) transition-[color,transform] outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-95 aria-expanded:text-foreground",
             "sm:[body.chat-open_&]:right-[456px]", // beside the open sidebar
             hint && "max-sm:hidden", // the first-run hint spans the bottom of a phone
           )}
@@ -85,7 +85,7 @@ export function Contents() {
         sideOffset={10}
         collisionPadding={12}
         aria-labelledby="toc-title"
-        className="w-[min(320px,calc(100vw-32px))] gap-0 rounded-2xl p-3 pt-3.5 shadow-(--shadow-float)"
+        className="w-[min(320px,calc(100vw-32px))] gap-0 rounded-2xl p-3 pt-3.5 shadow-(--elev-float)"
         onOpenAutoFocus={(e) => {
           e.preventDefault()
           const ol = list.current

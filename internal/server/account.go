@@ -58,9 +58,8 @@ func (s *Server) handlePrefs(w http.ResponseWriter, r *http.Request) {
 	if req.Theme == "system" || req.Theme == "light" || req.Theme == "dark" {
 		p.Theme = req.Theme
 	}
-	switch req.ReadFont {
-	case "literata", "classic", "sans", "legible":
-		p.ReadFont = req.ReadFont
+	if f := store.ReadFont(req.ReadFont); f != "" {
+		p.ReadFont = f
 	}
 	switch req.GlossFont {
 	case "sans", "song", "kai":

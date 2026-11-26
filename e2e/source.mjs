@@ -73,10 +73,10 @@ const codeSizes = () => page.evaluate(() => [
   getComputedStyle(document.querySelector('#article pre code')).fontSize,
   getComputedStyle(document.querySelector('#article p code')).fontSize,
 ].join());
-check('code is smaller than the text', (await codeSizes()) === '15px,16.4px', await codeSizes());
+check('code is smaller than the text', (await codeSizes()) === '14.8px,16px', await codeSizes());
 await page.click('#btn-display');
 await page.click('#size-seg [data-size="l"]');
-check('…and grows with the text size', (await codeSizes()) === '17.25px,18.86px', await codeSizes());
+check('…and grows with the text size', (await codeSizes()) === '17.02px,18.4px', await codeSizes());
 await page.click('#size-seg [data-size="m"]');
 await page.keyboard.press('Escape');
 
@@ -328,8 +328,8 @@ await page.keyboard.press('Escape');
   await page.evaluate(() => fetch('/api/me/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: 'zh' }) }));
   await page.reload();
   await waitForArticleText(page, 'Noon 30.');
-  const bar = await page.$eval('#read-thread > div', (d) => parseInt(d.style.width, 10));
-  check('after a reload, the progress bar shows what was kept', bar >= Math.round(0.9 * share * 100) && bar < 100, `${bar}%`);
+  const bar = await page.$eval('#book-stat', (el) => +(el.textContent.match(/(\d+)\s*%/) || [0, 0])[1]); // in Chinese: 已读 51%，…
+  check('after a reload, the progress shown is what was kept', bar >= Math.floor(0.9 * share * 100) && bar < 100, `${bar}%`);
   check('zh: the bar button says 追加内容', (await page.getAttribute('#btn-append', 'aria-label')) === '追加内容' && (await page.getAttribute('#btn-append', 'title')) === '追加内容');
   await page.click('#btn-append');
   await page.waitForSelector('#source-dialog[data-state="open"]');

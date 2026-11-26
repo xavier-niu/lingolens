@@ -27,15 +27,15 @@ export function ClipView() {
 
   return (
     <section id="clip-view" hidden={!shown} className="clip mx-auto mt-16 max-w-[560px] max-sm:mt-8">
-      <div className="clip-card rounded-2xl border bg-card p-7 shadow-(--shadow-soft) max-sm:p-5">
-        <p className="clip-kicker m-0 mb-4 inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+      <div className="clip-card rounded-3xl bg-card p-8 shadow-(--elev-float) max-sm:p-5">
+        <p className="clip-kicker m-0 mb-5 inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-1 text-[11px] font-semibold tracking-[.06em] text-brand uppercase">
           <Globe className="size-3.5" />{t("clip.kicker")}
         </p>
         <div id="clip-wait" role="status" hidden={!!clip || waited} className="clip-wait flex items-center gap-2.5 py-2 text-sm text-muted-foreground">
           <Spinner />{t("clip.waiting")}
         </div>
         <div id="clip-none" hidden={!!clip || !waited}>
-          <h1 className="m-0 font-serif text-2xl font-semibold tracking-tight">{t("clip.noneTitle")}</h1>
+          <h1 className="m-0 text-[22px] font-semibold tracking-[-0.02em]">{t("clip.noneTitle")}</h1>
           <p className="clip-from mt-2 mb-0 text-sm text-muted-foreground">{t("clip.none")}</p>
           <div className="mt-6 flex">
             <Button asChild variant="outline">

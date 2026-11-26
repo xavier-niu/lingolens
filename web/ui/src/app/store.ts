@@ -118,7 +118,7 @@ export interface AppState {
 
 export const DEFAULT_PREFS: Prefs = {
   level: "B1", lang: "en", readSize: "m", readWidth: "m", theme: "system",
-  readFont: "literata", glossFont: "sans", hideWords: false, hidePhrases: false,
+  readFont: "sans", glossFont: "sans", hideWords: false, hidePhrases: false,
 }
 
 export const useApp = create<AppState>()(() => ({

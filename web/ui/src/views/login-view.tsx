@@ -50,16 +50,16 @@ export function LoginView() {
       className="login relative flex min-h-dvh flex-col items-center justify-center gap-5 overflow-hidden px-4 py-8"
     >
       {/* A quiet backdrop: the gloss colours, far off. */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60rem_30rem_at_15%_-10%,color-mix(in_srgb,var(--phrase)_9%,transparent),transparent),radial-gradient(50rem_28rem_at_95%_110%,color-mix(in_srgb,var(--gloss)_8%,transparent),transparent)]" />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(56rem_28rem_at_50%_-12%,color-mix(in_srgb,var(--brand)_12%,transparent),transparent),radial-gradient(40rem_24rem_at_100%_110%,color-mix(in_srgb,var(--gloss)_6%,transparent),transparent)]" />
       <form
         id="login-form"
         noValidate
         onSubmit={submit}
-        className="login-card w-full max-w-[400px] rounded-2xl border bg-card px-7 pt-8 pb-6 shadow-(--shadow-soft) max-sm:px-5 max-sm:pt-6 max-sm:pb-5"
+        className="login-card w-full max-w-[400px] rounded-3xl bg-card px-8 pt-9 pb-7 shadow-(--elev-float) max-sm:px-5 max-sm:pt-7 max-sm:pb-5"
       >
-        <LogoMark className="mb-5 size-11" />
-        <h1 id="login-title" className="m-0 font-serif text-2xl leading-tight font-semibold tracking-tight">{k("title")}</h1>
-        <p id="login-sub" className="login-sub mt-1.5 mb-6 text-sm text-muted-foreground">{k("sub")}</p>
+        <LogoMark className="mb-6 size-11 drop-shadow-[0_4px_10px_rgb(29_42_68/.25)]" />
+        <h1 id="login-title" className="m-0 text-[24px] leading-tight font-semibold tracking-[-0.025em]">{k("title")}</h1>
+        <p id="login-sub" className="login-sub mt-2 mb-7 text-[14.5px] leading-relaxed text-muted-foreground">{k("sub")}</p>
 
         <div className="grid gap-4">
           <div className="grid gap-2">
@@ -84,7 +84,7 @@ export function LoginView() {
         </div>
 
         <p id="login-error" role="alert" className="mt-3 mb-0 text-[13px] text-destructive empty:hidden">{error}</p>
-        <Button id="login-submit" type="submit" size="lg" className="mt-6 h-11 w-full text-[15px]" disabled={busy} aria-busy={busy || undefined}>
+        <Button id="login-submit" type="submit" size="lg" className="mt-6 h-11 w-full rounded-xl text-[15px]" disabled={busy} aria-busy={busy || undefined}>
           {busy && <Spinner />}
           {k("submit")}
         </Button>
@@ -92,7 +92,7 @@ export function LoginView() {
       </form>
       <Segmented
         id="login-lang" label={t("menu.language")} attr="lang" value={lang} onChange={chooseLanguage}
-        className="login-lang bg-card/70"
+        className="login-lang bg-card/70 backdrop-blur"
         options={[{ value: "en", content: "English" }, { value: "zh", content: "中文" }]}
       />
     </section>

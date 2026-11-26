@@ -74,7 +74,7 @@ func TestServiceWorkerListsEveryAppFile(t *testing.T) {
 	if !slices.Contains(listed, "./") {
 		t.Error("sw.js should cache the page itself ('./')")
 	}
-	for _, f := range []string{"theme.js", "vendor/fonts/literata-latin.woff2", "vendor/fonts/inter-latin.woff2"} {
+	for _, f := range []string{"theme.js", "vendor/fonts/source-serif-latin.woff2", "vendor/fonts/inter-latin.woff2"} {
 		if !slices.Contains(listed, f) {
 			t.Errorf("sw.js should cache %s", f)
 		}

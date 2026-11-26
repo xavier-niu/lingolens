@@ -39,7 +39,7 @@ type Prefs struct {
 	ReadSize    string `json:"readSize"`    // "s" 17px, "sm" 18.5px, "m" 20px, "l" 23px
 	ReadWidth   string `json:"readWidth"`   // reading column: "n" narrow, "m" standard, "w" wide
 	Theme       string `json:"theme"`       // "system" (follow the device), "light" or "dark"
-	ReadFont    string `json:"readFont"`    // English: "literata", "classic", "sans" or "legible"
+	ReadFont    string `json:"readFont"`    // English: "sans" (Inter), "serif" (Source Serif), "lexend" or "legible" (Atkinson Hyperlegible)
 	GlossFont   string `json:"glossFont"`   // Chinese glosses: "sans" (黑体), "song" (宋体) or "kai" (楷体)
 	HideWords   bool   `json:"hideWords"`   // word glosses off
 	HidePhrases bool   `json:"hidePhrases"` // phrase glosses off
@@ -61,13 +61,29 @@ func (p Prefs) withDefaults() Prefs {
 	if p.Theme == "" {
 		p.Theme = "system"
 	}
+	p.ReadFont = ReadFont(p.ReadFont)
 	if p.ReadFont == "" {
-		p.ReadFont = "literata"
+		p.ReadFont = "sans"
 	}
 	if p.GlossFont == "" {
 		p.GlossFont = "sans"
 	}
 	return p
+}
+
+// ReadFont returns the reading font a stored or sent value stands for, or ""
+// for none. Fonts that were dropped map to their nearest replacement: Literata
+// (the old default) to the default, the device's own serif to Source Serif.
+func ReadFont(v string) string {
+	switch v {
+	case "sans", "serif", "lexend", "legible":
+		return v
+	case "literata":
+		return "sans"
+	case "classic":
+		return "serif"
+	}
+	return ""
 }
 
 // A precomputed hash so failed logins for unknown emails cost the same as wrong passwords.

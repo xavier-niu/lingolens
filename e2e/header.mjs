@@ -42,8 +42,8 @@ for (const [name, opts] of [
     await page.waitForTimeout(300);
     const r = await page.evaluate(() => {
       const box = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); return b.width ? { left: b.left, right: b.right } : null; };
-      const visible = [...document.querySelectorAll('.bar-end > *, .brand')].filter((e) => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width);
-      const title = document.querySelector('#crumbs [aria-current="page"]');
+      const visible = [...document.querySelectorAll('.bar-end [id^="btn-"], .bar-end > #progress, .bar-end > #net-status')].filter((e) => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width);
+      const title = document.querySelector('#home-link');
       const look = (s) => {
         const c = getComputedStyle(document.querySelector(s));
         return [c.width, c.height, c.color, c.backgroundColor, c.borderRadius, c.borderTopWidth, c.fontSize].join();
@@ -52,19 +52,19 @@ for (const [name, opts] of [
         title: box(title), parts: visible.map((e) => ({ id: e.id || e.className, ...box(e) })),
         looks: ['#btn-display', '#btn-history'].map(look),
         vw: document.documentElement.clientWidth, scrollW: document.documentElement.scrollWidth,
-        truncated: title.scrollWidth > title.clientWidth,
+        
       };
     });
     const hits = r.parts.filter((p) => overlap(r.title, p)).map((p) => p.id);
-    check(`${name}/${lang}: title clear of header buttons`, hits.length === 0, hits.join(','));
+    check(`${name}/${lang}: name clear of header buttons`, hits.length === 0, hits.join(','));
     check(`${name}/${lang}: buttons inside the screen`, r.parts.every((p) => p.left >= 0 && p.right <= r.vw + 0.5) && r.scrollW <= r.vw, JSON.stringify(r.parts));
     const buttons = r.parts.map((p) => p.id).filter((id) => id.startsWith('btn-')).join();
     check(`${name}/${lang}: reading options sit next to History, with no level button`, /^btn-display,btn-history,(btn-append,)?btn-menu(,btn-account)?$/.test(buttons), buttons);
     const wide = opts.viewport.width > 640; // a phone keeps the room for the title
     check(`${name}/${lang}: Append Text ${wide ? 'in the bar' : 'left to the ⋯ menu'}`, buttons.includes('btn-append') === wide, buttons);
     check(`${name}/${lang}: reading options look like History`, new Set(r.looks).size === 1, r.looks.join(' | '));
-    if (narrow) check(`${name}/${lang}: title hidden when there is no room`, r.title === null, JSON.stringify(r.title));
-    else check(`${name}/${lang}: long title still readable`, r.title && r.title.right - r.title.left >= 100, JSON.stringify(r.title));
+    check(`${name}/${lang}: the name goes back to the shelf`, (await page.getAttribute('#home-link', 'href')) === '#/');
+    check(`${name}/${lang}: nothing under the header`, !(await page.$('#read-thread')));
     check(`${name}/${lang}: interface language applied`, (await page.getAttribute('html', 'lang'))?.startsWith(lang));
     await page.screenshot({ path: `${OUT}/h-${name}-${lang}.png`, clip: { x: 0, y: 0, width: r.vw, height: 70 } });
     await page.evaluate((l) => fetch('/api/me/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: l }) }), 'en');
@@ -89,7 +89,7 @@ for (const [name, opts] of [
   const r = await page.evaluate(() => {
     const box = (el) => { const b = el?.getBoundingClientRect(); return b?.width ? { left: b.left, right: b.right } : null; };
     return {
-      title: box(document.querySelector('#crumbs [aria-current="page"]')),
+      title: box(document.querySelector('#home-link')),
       badge: box(document.querySelector('#progress')),
       words: box(document.querySelector('#progress-text')),
       vw: document.documentElement.clientWidth, scrollW: document.documentElement.scrollWidth,
@@ -97,7 +97,7 @@ for (const [name, opts] of [
   });
   const phone = opts.viewport.width <= 640;
   check(`${name}: annotating badge inside the screen`, r.badge.left >= 0 && r.badge.right <= r.vw && r.scrollW <= r.vw, JSON.stringify(r));
-  check(`${name}: annotating badge clear of the title`, !overlap(r.title, r.badge), JSON.stringify(r));
+  check(`${name}: annotating badge clear of the name`, !overlap(r.title, r.badge), JSON.stringify(r));
   check(`${name}: ${phone ? 'just the spinner' : 'the badge has words'}`, phone ? r.words.right - r.words.left <= 1 : r.words.right - r.words.left > 40, JSON.stringify(r));
   await page.screenshot({ path: `${OUT}/h-annotating-${name}.png`, clip: { x: 0, y: 0, width: r.vw, height: 70 } });
   await ctx.close();

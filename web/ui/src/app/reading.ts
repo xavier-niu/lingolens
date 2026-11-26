@@ -20,14 +20,18 @@ export const READING: Record<ReadingKey, { values?: string[]; label: string }> =
   hidePhrases: { label: "toggle.phrases" },
   readSize: { values: ["s", "sm", "m", "l"], label: "display.size" },
   readWidth: { values: ["n", "m", "w"], label: "display.width" },
-  readFont: { values: ["literata", "classic", "sans", "legible"], label: "display.font" },
+  readFont: { values: ["sans", "serif", "lexend", "legible"], label: "display.font" },
   glossFont: { values: ["sans", "song", "kai"], label: "display.glossFont" },
   theme: { values: ["system", "light", "dark"], label: "theme.title" },
 }
 export const READING_DEFAULTS: Reading = {
-  hideWords: false, hidePhrases: false, readSize: "m", readWidth: "m", readFont: "literata", glossFont: "sans", theme: "system",
+  hideWords: false, hidePhrases: false, readSize: "m", readWidth: "m", readFont: "sans", glossFont: "sans", theme: "system",
 }
 const KEYS = Object.keys(READING) as ReadingKey[]
+
+// Reading fonts that were dropped, and the one kept for each (as on the server).
+const OLD_FONTS: Record<string, string> = { literata: "sans", classic: "serif" }
+const current = (key: ReadingKey, v: unknown) => (key === "readFont" && typeof v === "string" && OLD_FONTS[v]) || v
 
 const validReading = (key: ReadingKey, v: unknown) =>
   READING[key].values ? READING[key].values!.includes(v as string) : typeof v === "boolean"
@@ -37,7 +41,8 @@ const deviceReadingKey = () => `lingolens.reading.${get().me?.id}`
 export function loadDeviceReading() {
   let saved: Record<string, unknown> = {}
   try { saved = JSON.parse(localStorage.getItem(deviceReadingKey()) || "null") || {} } catch { /* none, or private mode */ }
-  set({ deviceReading: Object.fromEntries(Object.entries(saved).filter(([k, v]) => k in READING && validReading(k as ReadingKey, v))) })
+  const entries = Object.entries(saved).map(([k, v]) => [k, current(k as ReadingKey, v)] as const)
+  set({ deviceReading: Object.fromEntries(entries.filter(([k, v]) => k in READING && validReading(k as ReadingKey, v))) })
 }
 
 function saveDeviceReading(device: Record<string, unknown>) {
@@ -49,7 +54,7 @@ function saveDeviceReading(device: Record<string, unknown>) {
 }
 
 const defaultIn = (s: Pick<AppState, "prefs">, key: ReadingKey) => {
-  const v = (s.prefs as unknown as Record<string, unknown>)[key]
+  const v = current(key, (s.prefs as unknown as Record<string, unknown>)[key])
   return (validReading(key, v) ? v : READING_DEFAULTS[key]) as never
 }
 export const readingDefault = (key: ReadingKey) => defaultIn(get(), key)
@@ -102,8 +107,7 @@ export function resetDeviceReading() {
 
 const READ_SIZES: Record<string, string> = { s: "17px", sm: "18.5px", m: "20px", l: "23px" }
 // Reading column width; it only matters on screens wider than the column.
-const READ_WIDTHS: Record<string, string> = { n: "680px", m: "820px", w: "1040px" }
-const READ_FONTS: Record<string, string> = { literata: "literata", classic: "classic", sans: "plain", legible: "legible" }
+const READ_WIDTHS: Record<string, string> = { n: "600px", m: "700px", w: "860px" }
 
 // Puts this device's reading choices into effect: sizes and fonts through CSS
 // variables (the gloss switches are classes on the text, see ReaderView), and
@@ -112,7 +116,7 @@ export function applyReading(r: Reading = currentReading()) {
   const root = document.documentElement.style
   root.setProperty("--read-size", READ_SIZES[r.readSize] || READ_SIZES.m)
   root.setProperty("--read-width", READ_WIDTHS[r.readWidth] || READ_WIDTHS.m)
-  root.setProperty("--read-font", `var(--font-${READ_FONTS[r.readFont] || "literata"})`)
+  root.setProperty("--read-font", `var(--font-read-${validReading("readFont", r.readFont) ? r.readFont : "sans"})`)
   root.setProperty("--zh", `var(--zh-${validReading("glossFont", r.glossFont) ? r.glossFont : "sans"})`)
   if (r.theme !== appliedTheme()) applyTheme(r.theme)
 }

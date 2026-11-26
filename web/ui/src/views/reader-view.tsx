@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Hash, Languages, Loader2, Search, Sparkles, Volume2 } from "lucide-react"
+import { Hash, Languages, Loader2, Search, Volume2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useApp, get, reduceMotion, showBanner, type Book } from "@/app/store"
 import { useT } from "@/app/hooks"
@@ -22,12 +22,12 @@ export function ReaderView() {
   const stat = book ? [bookStat(book), expiryText(book)].filter(Boolean).join(" · ") : ""
   const article = React.useCallback((el: HTMLElement | null) => { if (el) engine.article = el }, [])
   return (
-    <section id="reader-view" hidden={view !== "reader"} className="reader mx-auto mt-12 max-w-(--read-width) max-sm:mt-7">
-      <header className="reader-head mb-8 border-b pb-6">
-        <h1 id="book-title" className="book-heading m-0 font-reading text-[clamp(28px,4.4vw,40px)] leading-[1.15] font-semibold tracking-[-0.02em]">
+    <section id="reader-view" hidden={view !== "reader"} className="reader mx-auto mt-14 max-w-(--read-width) max-sm:mt-8">
+      <header className="reader-head mb-10 border-b border-border/80 pb-7 max-sm:mb-8 max-sm:pb-6">
+        <h1 id="book-title" className="book-heading m-0 font-reading text-[clamp(28px,4.2vw,38px)] leading-[1.18] font-bold tracking-[-0.025em]">
           {book?.title}
         </h1>
-        <p id="book-stat" className="book-stat mt-3 mb-0 text-sm text-muted-foreground tabular-nums">{stat}</p>
+        <p id="book-stat" className="book-stat mt-3.5 mb-0 text-sm text-muted-foreground tabular-nums">{stat}</p>
         {book && <MarkdownOffer book={book} />}
       </header>
       {/* The text itself is drawn by the reading engine (app/engine.ts), not React. */}
@@ -68,8 +68,8 @@ function MarkdownOffer({ book }: { book: Book }) {
     }
   }
   return (
-    <div id="md-offer" role="status" className="anim-rise mt-5 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border bg-card px-4 py-3 text-sm shadow-xs">
-      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-phrase/10 text-phrase"><Hash className="size-4" /></span>
+    <div id="md-offer" role="status" className="anim-rise mt-6 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl bg-card px-4 py-3 text-sm shadow-xs ring-1 ring-border">
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand"><Hash className="size-4" /></span>
       <span className="min-w-[14rem] flex-1 text-ink-2">{t("reader.mdOffer")}</span>
       <span className="flex shrink-0 gap-2">
         <Button id="md-keep" variant="ghost" size="sm" onClick={keep} disabled={busy}>{t("reader.mdKeep")}</Button>
@@ -159,18 +159,18 @@ export function WordCard() {
       role="dialog"
       aria-label={a.lemma}
       className={cn(
-        "card absolute z-40 max-h-[min(70vh,560px)] w-[min(340px,calc(100vw-32px))] overflow-y-auto overscroll-contain rounded-2xl border bg-popover p-4 text-popover-foreground shadow-(--shadow-float)",
-        "max-sm:fixed max-sm:inset-x-0 max-sm:!top-auto max-sm:bottom-0 max-sm:!left-0 max-sm:max-h-[62vh] max-sm:w-full max-sm:rounded-b-none max-sm:border-x-0 max-sm:pb-[calc(16px+env(safe-area-inset-bottom))]",
+        "card absolute z-40 max-h-[min(70vh,560px)] w-[min(348px,calc(100vw-32px))] overflow-y-auto overscroll-contain rounded-2xl bg-popover p-4 pb-3.5 text-popover-foreground shadow-(--elev-float)",
+        "max-sm:fixed max-sm:inset-x-0 max-sm:!top-auto max-sm:bottom-0 max-sm:!left-0 max-sm:max-h-[62vh] max-sm:w-full max-sm:rounded-b-none max-sm:rounded-t-3xl max-sm:px-5 max-sm:pt-5 max-sm:pb-[calc(16px+env(safe-area-inset-bottom))]",
       )}
     >
       <div className="head flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pr-9">
-        <span className="lemma font-serif text-[22px] font-semibold tracking-tight">{a.lemma}</span>
-        {a.ipa && <span className="ipa text-sm text-muted-foreground">/{a.ipa}/</span>}
-        {a.pos && <span className="pos font-serif text-sm text-muted-foreground italic">{a.pos}</span>}
+        <span className="lemma text-[21px] font-semibold tracking-[-0.02em]">{a.lemma}</span>
+        {a.ipa && <span className="ipa font-mono text-[13px] text-muted-foreground">/{a.ipa}/</span>}
+        {a.pos && <span className="pos rounded-md bg-muted px-1.5 py-px text-xs font-medium text-muted-foreground">{a.pos}</span>}
       </div>
       {canSpeak && (
         <Button
-          variant="ghost" size="icon-sm" className="speak absolute top-3.5 right-3 text-muted-foreground"
+          variant="ghost" size="icon-sm" className="speak absolute top-3 right-3 text-muted-foreground max-sm:top-4 max-sm:right-4"
           data-act="speak" title={t("card.speak")} aria-label={t("card.speak")} onClick={act("speak")}
         >
           <Volume2 />
@@ -178,7 +178,7 @@ export function WordCard() {
       )}
       {a.zh && (
         <div className="zh-row mt-1.5 flex items-center justify-between gap-3">
-          <div className="zh min-w-0 font-zh text-lg text-gloss">{a.zh}</div>
+          <div className="zh min-w-0 font-zh text-[19px] font-medium text-gloss">{a.zh}</div>
           {a.lookup && (
             <Button
               size="xs" variant={a.glossed ? "outline" : "default"} className="gloss-btn shrink-0"
@@ -198,7 +198,7 @@ export function WordCard() {
           <Loader2 className="size-4 animate-spin" />{t("card.loading")}
         </div>
       )}
-      {!a.loading && a.error && <div className="detail error card-detail mt-3 rounded-lg bg-destructive/8 px-3 py-2 text-destructive">{a.error}</div>}
+      {!a.loading && a.error && <div className="detail error card-detail mt-3 rounded-lg bg-destructive/10 px-3 py-2 text-destructive">{a.error}</div>}
       {!a.loading && !a.error && e && (
         <div className="detail card-detail mt-3">
           {e.explanation && <p className="expl">{e.explanation}</p>}
@@ -217,7 +217,7 @@ export function WordCard() {
         </div>
       )}
 
-      <div className="actions mt-3.5 flex flex-wrap gap-1.5 border-t pt-3 [&_[data-slot=button]]:px-2.5">
+      <div className="actions mt-4 flex flex-wrap gap-1.5 border-t border-border/80 pt-3.5 [&_[data-slot=button]]:rounded-full [&_[data-slot=button]]:px-3">
         {!a.entry && !a.loading && (
           a.zh
             ? <Button size="sm" variant="outline" data-act="detail" onClick={act("detail")}>{t(a.error ? "card.retry" : "card.details")}</Button>
@@ -256,7 +256,7 @@ export function AskFab({ pressedAt }: { pressedAt: React.RefObject<number> }) {
       type="button"
       hidden={!fab}
       className={cn(
-        "ask-fab z-[35] inline-flex items-center gap-1.5 rounded-full bg-primary font-semibold text-primary-foreground shadow-(--shadow-float) transition-transform hover:scale-[1.03] active:scale-[.98]",
+        "ask-fab z-[35] inline-flex items-center gap-1.5 rounded-full bg-primary font-semibold text-primary-foreground shadow-(--elev-float) ring-1 ring-white/10 transition-transform hover:scale-[1.03] active:scale-[.98]",
         fab?.docked
           ? "docked fab-docked fixed bottom-[calc(18px+env(safe-area-inset-bottom))] left-1/2 h-11 -translate-x-1/2 px-6 text-[15px]"
           : "absolute h-[34px] px-3.5 text-[13.5px]",
@@ -272,7 +272,7 @@ export function AskFab({ pressedAt }: { pressedAt: React.RefObject<number> }) {
         if (info) openChat(info.text, info.passage)
       }}
     >
-      <Sparkles className="size-4" />
+      <SparkIcon className="spark size-4" />
       {t("ask")}
     </button>
   )
@@ -289,7 +289,7 @@ export function Hint() {
       id="hint"
       role="status"
       className={cn(
-        "hint fixed bottom-[calc(20px+env(safe-area-inset-bottom))] left-1/2 z-[25] flex max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-4 rounded-full bg-primary py-2 pr-2 pl-4 text-[13.5px] whitespace-nowrap text-primary-foreground shadow-(--shadow-float) [body.chat-open_&]:hidden",
+        "hint fixed bottom-[calc(20px+env(safe-area-inset-bottom))] left-1/2 z-[25] flex max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-4 rounded-full bg-primary py-2 pr-2 pl-4.5 text-[13.5px] whitespace-nowrap text-primary-foreground shadow-(--elev-float) [body.chat-open_&]:hidden",
         "max-sm:w-[calc(100vw-32px)] max-sm:gap-3 max-sm:rounded-2xl max-sm:py-2.5 max-sm:pr-2.5 max-sm:pl-3.5 max-sm:whitespace-normal",
         hint.leaving ? "float-out" : "float-in",
       )}

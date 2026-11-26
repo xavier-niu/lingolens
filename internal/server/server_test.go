@@ -209,7 +209,7 @@ func TestPrefs(t *testing.T) {
 	me := decodeJSON[struct {
 		User store.User `json:"user"`
 	}](t, e.do(t, c, "GET", "/api/me", nil))
-	if got := me.User.Prefs; got != (store.Prefs{Level: "B1", Lang: "en", ReadSize: "m", ReadWidth: "m", Theme: "system", ReadFont: "literata", GlossFont: "sans"}) {
+	if got := me.User.Prefs; got != (store.Prefs{Level: "B1", Lang: "en", ReadSize: "m", ReadWidth: "m", Theme: "system", ReadFont: "sans", GlossFont: "sans"}) {
 		t.Fatalf("default prefs = %+v", got)
 	}
 	got := decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]string{"theme": "dark", "level": "C1"}))
@@ -228,6 +228,11 @@ func TestPrefs(t *testing.T) {
 	got = decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]string{"theme": "purple", "lang": "fr", "readWidth": "huge", "readFont": "comic", "glossFont": "x"}))
 	if got.Theme != "dark" || got.Lang != "en" || got.ReadWidth != "w" || got.ReadFont != "legible" || got.GlossFont != "kai" {
 		t.Fatalf("invalid values stored: %+v", got)
+	}
+	// Fonts that were dropped: the nearest one kept.
+	got = decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]string{"readFont": "classic"}))
+	if got.ReadFont != "serif" {
+		t.Fatalf("old font kept as %q, want serif", got.ReadFont)
 	}
 	// The gloss switches: on until turned off, and left alone when not sent.
 	got = decodeJSON[store.Prefs](t, e.do(t, c, "PUT", "/api/me/prefs", map[string]any{"hideWords": true}))

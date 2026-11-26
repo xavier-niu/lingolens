@@ -25,40 +25,40 @@ export function LibraryView() {
   else if (books.length > 1) summary = t("shelf.summary", { n: books.length, m: left, level })
 
   return (
-    <section id="library-view" hidden={view !== "library"} className="library mx-auto mt-12 max-w-[1040px] max-sm:mt-7">
-      <div className="shelf-head mb-8 flex flex-wrap items-end justify-between gap-4" hidden={books.length === 0}>
-        <div>
-          <h1 className="m-0 font-serif text-[clamp(28px,3.6vw,36px)] leading-tight font-semibold tracking-tight">{t("shelf.title")}</h1>
-          <p id="shelf-summary" className="shelf-summary mt-1.5 mb-0 text-muted-foreground tabular-nums">{summary}</p>
+    <section id="library-view" hidden={view !== "library"} className="library mx-auto mt-14 max-w-[1080px] max-sm:mt-8">
+      <div className="shelf-head mb-9 flex flex-wrap items-end justify-between gap-x-6 gap-y-4 max-sm:mb-6" hidden={books.length === 0}>
+        <div className="min-w-0">
+          <h1 className="m-0 text-[clamp(26px,3.4vw,32px)] leading-tight font-semibold tracking-[-0.025em]">{t("shelf.title")}</h1>
+          <p id="shelf-summary" className="shelf-summary mt-1.5 mb-0 text-[15px] text-muted-foreground tabular-nums">{summary}</p>
         </div>
-        <Button id="btn-add" size="lg" className="h-10 px-4" onClick={openSource}>
-          <Plus data-icon="inline-start" />{t("shelf.add")}
+        <Button id="btn-add" className="h-9 rounded-full pr-4 pl-3.5" onClick={openSource}>
+          <Plus data-icon="inline-start" strokeWidth={2.2} />{t("shelf.add")}
         </Button>
       </div>
 
-      <div id="shelf" className="shelf grid grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-x-6 gap-y-9 max-sm:grid-cols-2 max-sm:gap-x-3.5 max-sm:gap-y-7">
+      <div id="shelf" className="shelf grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-5 max-sm:grid-cols-2 max-sm:gap-3">
         {books.map((b) => <BookCard key={b.id} book={b} level={level} />)}
       </div>
 
-      <div id="shelf-empty" hidden={books.length > 0 || !loaded} className="shelf-empty mx-auto max-w-[440px] pt-14 pb-6 text-center">
-        <div className="empty-art relative mx-auto h-[130px] w-[140px]" aria-hidden="true">
-          <span className="absolute top-4 left-0.5 aspect-[4/5] w-[84px] -rotate-9 rounded-xl border bg-[color-mix(in_srgb,var(--phrase)_10%,var(--card))] shadow-xs" />
-          <span className="absolute top-4 right-0.5 aspect-[4/5] w-[84px] rotate-9 rounded-xl border bg-[color-mix(in_srgb,var(--gloss)_10%,var(--card))] shadow-xs" />
-          <span className="absolute top-0 left-7 grid aspect-[4/5] w-[84px] place-items-center rounded-xl border bg-card shadow-(--shadow-soft)">
+      <div id="shelf-empty" hidden={books.length > 0 || !loaded} className="shelf-empty mx-auto max-w-[460px] pt-16 pb-6 text-center">
+        <div className="empty-art relative mx-auto h-[132px] w-[156px]" aria-hidden="true">
+          <span className="cover absolute top-5 left-0 aspect-[4/5] w-[86px] -rotate-8 rounded-2xl shadow-xs ring-1 ring-black/5" data-tint="0" />
+          <span className="cover absolute top-5 right-0 aspect-[4/5] w-[86px] rotate-8 rounded-2xl shadow-xs ring-1 ring-black/5" data-tint="3" />
+          <span className="absolute top-0 left-[35px] grid aspect-[4/5] w-[86px] place-items-center rounded-2xl bg-card shadow-(--elev-soft) ring-1 ring-border">
             <span className="flex w-12 flex-col gap-1.5">
-              <span className="h-1 w-6 rounded-full bg-gloss/70" />
+              <span className="h-1 w-6 rounded-full bg-gloss/80" />
               <span className="h-2 w-12 rounded-full bg-foreground/15" />
               <span className="h-2 w-9 rounded-full bg-foreground/10" />
             </span>
           </span>
         </div>
-        <h2 className="mt-7 mb-1.5 font-serif text-[22px] font-semibold tracking-tight">{t("shelf.emptyTitle")}</h2>
-        <p className="m-0 text-muted-foreground">{t("shelf.emptyBody")}</p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2.5">
-          <Button id="btn-add-empty" size="lg" className="h-10 px-4" onClick={openSource}>
-            <Plus data-icon="inline-start" />{t("shelf.add")}
+        <h2 className="mt-8 mb-2 text-[22px] font-semibold tracking-[-0.02em]">{t("shelf.emptyTitle")}</h2>
+        <p className="m-0 text-[15px] text-muted-foreground">{t("shelf.emptyBody")}</p>
+        <div className="mt-7 flex flex-wrap justify-center gap-2.5">
+          <Button id="btn-add-empty" className="h-10 rounded-full pr-4.5 pl-4" onClick={openSource}>
+            <Plus data-icon="inline-start" strokeWidth={2.2} />{t("shelf.add")}
           </Button>
-          <Button id="btn-sample-empty" size="lg" variant="outline" className="h-10 px-4" onClick={addSampleBook}>
+          <Button id="btn-sample-empty" variant="outline" className="h-10 rounded-full pr-4.5 pl-4" onClick={addSampleBook}>
             <Sparkles data-icon="inline-start" />{t("shelf.sample")}
           </Button>
         </div>
@@ -67,7 +67,8 @@ export function LibraryView() {
   )
 }
 
-// A generated cover: a soft tint and the title in serif type.
+// A card: a generated cover (a soft tint, the title in serif type), then how
+// long is left. The whole card opens the text; the bin deletes it.
 function BookCard({ book: b, level }: { book: Book; level: string }) {
   const t = useT()
   const p = Math.floor((b.progress || 0) * 100)
@@ -76,34 +77,35 @@ function BookCard({ book: b, level }: { book: Book; level: string }) {
     if (await confirmDialog(t("book.confirmDelete", { t: b.title }), { confirm: t("book.delete"), destructive: true })) deleteBook(b.id)
   }
   return (
-    <article className="book group/book relative min-w-0">
-      <a className="book-link block rounded-xl no-underline outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-offset-4 focus-visible:ring-offset-background" href={`#/read/${encodeURIComponent(b.id)}`}>
+    <article className="book group/book relative flex min-w-0 flex-col overflow-hidden rounded-2xl bg-card shadow-xs ring-1 ring-border transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-(--elev-soft) pointer-coarse:hover:translate-y-0 has-[.book-link:focus-visible]:ring-2 has-[.book-link:focus-visible]:ring-ring/60">
+      <a
+        className="book-link block no-underline outline-none after:absolute after:inset-0 after:z-[1] after:content-['']"
+        href={`#/read/${encodeURIComponent(b.id)}`}
+      >
         <div
-          className="cover relative flex aspect-[4/5] flex-col justify-between gap-3 overflow-hidden rounded-xl border border-(--tint-line) bg-(--tint-bg) px-4 pt-4 pb-[18px] text-(--tint-fg) transition-[transform,box-shadow] duration-200 group-hover/book:-translate-y-0.5 group-hover/book:shadow-(--shadow-soft) pointer-coarse:group-hover/book:translate-y-0 pointer-coarse:group-hover/book:shadow-none max-sm:px-3 max-sm:pt-3 max-sm:pb-3.5"
+          className="cover relative flex aspect-[16/11] flex-col justify-between gap-3 px-4 pt-3.5 pb-4 max-sm:aspect-[4/5] max-sm:px-3 max-sm:pt-3 max-sm:pb-3.5"
           data-tint={tintFor(b.id)}
         >
-          {/* The spine: a soft fold down the left edge. */}
-          <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 w-2.5 bg-linear-to-r from-black/[.06] to-transparent dark:from-black/25" />
           <span className="cover-top flex items-center justify-between gap-2">
-            <span className="cover-words text-[11.5px] font-semibold tabular-nums opacity-65" aria-hidden="true">{t("book.words", { n: b.words.toLocaleString() })}</span>
+            <span className="cover-words text-[11.5px] font-semibold tabular-nums opacity-70" aria-hidden="true">{t("book.words", { n: b.words.toLocaleString() })}</span>
             {b.expiresAt && (
-              <span className="cover-ttl inline-flex items-center gap-[3px] text-[11.5px] font-semibold whitespace-nowrap tabular-nums opacity-80" title={expiryText(b)}>
+              <span className="cover-ttl inline-flex items-center gap-[3px] rounded-full bg-white/55 px-1.5 py-px text-[11px] font-semibold whitespace-nowrap tabular-nums dark:bg-black/25" title={expiryText(b)}>
                 <Clock3 className="size-3" strokeWidth={2.2} />
                 {t("book.ttlShort", { n: daysLeft(b) })}
                 <span className="sr-only">, {expiryText(b)}</span>
               </span>
             )}
           </span>
-          <span className="cover-title line-clamp-5 font-serif text-[19px] leading-[1.2] font-semibold tracking-tight [overflow-wrap:anywhere] max-sm:text-base">{b.title}</span>
+          <span className="cover-title line-clamp-3 font-serif text-[20px] leading-[1.2] font-semibold tracking-[-0.01em] [overflow-wrap:anywhere] max-sm:line-clamp-5 max-sm:text-[16.5px]">{b.title}</span>
         </div>
       </a>
-      <div className="book-meta mt-2 flex min-h-7 items-center gap-2">
-        <span className={cn("book-stat min-w-0 flex-1 text-[13px] text-muted-foreground tabular-nums", done && "done text-success before:content-['✓_']")}>
+      <div className="book-meta flex min-h-11 items-center gap-2 border-t border-border/70 py-1.5 pr-1.5 pl-4 max-sm:pl-3">
+        <span className={cn("book-stat min-w-0 flex-1 truncate text-[13px] text-muted-foreground tabular-nums", done && "done font-medium text-success before:content-['✓_']")}>
           {bookStat(b, level)}
         </span>
         <button
           type="button"
-          className="book-del -mr-1.5 inline-grid size-7 place-items-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color] group-focus-within/book:opacity-100 group-hover/book:opacity-100 hover:bg-accent hover:text-destructive focus-visible:opacity-100 pointer-coarse:opacity-100"
+          className="book-del relative z-[2] inline-grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground opacity-0 transition-[opacity,color,background-color] group-focus-within/book:opacity-100 group-hover/book:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/35 focus-visible:outline-none pointer-coarse:opacity-100"
           data-del-book={b.id}
           aria-label={`${t("book.delete")}: ${b.title}`}
           title={t("book.delete")}
@@ -113,8 +115,8 @@ function BookCard({ book: b, level }: { book: Book; level: string }) {
         </button>
       </div>
       {p > 0 && !done && (
-        <div className="book-bar mt-1 h-[3px] overflow-hidden rounded-full bg-border" aria-hidden="true">
-          <div className="h-full rounded-full bg-(--thread)" style={{ width: `${p}%` }} />
+        <div className="book-bar absolute inset-x-0 bottom-0 h-[3px] bg-transparent" aria-hidden="true">
+          <div className="h-full rounded-r-full bg-(--thread)" style={{ width: `${p}%` }} />
         </div>
       )}
     </article>

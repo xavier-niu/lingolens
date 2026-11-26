@@ -52,7 +52,7 @@ web/ui/               the web app (React, TypeScript, shadcn/ui, Tailwind CSS; b
   src/components/     the header, sidebar, dialogs and menus; ui/ holds the shadcn/ui components
   src/views/          the pages: sign-in, shelf, reader, settings, bookmarklet import
   src/lib/            api.js, offline.js (device copy, outbox, sync), library.js (shelf), i18n.js, pdftext.js (PDF → Markdown), Markdown rendering (marked, DOMPurify)
-  public/             theme.js (applied before the page paints), pdf.js (Apache-2.0, loaded on first PDF), Inter, Literata and Atkinson Hyperlegible Next (OFL; the last loaded only when chosen)
+  public/             theme.js (applied before the page paints), pdf.js (Apache-2.0, loaded on first PDF), Inter, Source Serif 4, Lexend and Atkinson Hyperlegible Next (OFL; the last two loaded only when chosen)
   sw.template.js      the service worker; the build fills in the files it keeps
 docs/                 this documentation and the logo
 ```

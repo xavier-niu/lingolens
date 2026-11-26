@@ -5,7 +5,7 @@
 // when the choice changes or arrives from the profile.
 (function () {
   var KEY = 'lingolens.theme';
-  var BAR = { light: '#f7f6f3', dark: '#1c1b19' }; // matches --background
+  var BAR = { light: '#fafaf9', dark: '#141415' }; // matches --background
   var media = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
   var current = 'system';
 

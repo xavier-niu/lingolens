@@ -52,7 +52,7 @@ export function ConfirmHost() {
       <AlertDialogContent id="confirm-dialog" className="sm:max-w-md">
         <form onSubmit={(e) => { e.preventDefault(); finish(a?.prompt ? value : "ok") }} className="contents">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-base">{a?.title}</AlertDialogTitle>
+            <AlertDialogTitle className="text-[17px] font-semibold tracking-[-0.015em]">{a?.title}</AlertDialogTitle>
             {a?.body ? <AlertDialogDescription>{a.body}</AlertDialogDescription> : <AlertDialogDescription className="sr-only">{a?.title}</AlertDialogDescription>}
           </AlertDialogHeader>
           {a?.prompt && (

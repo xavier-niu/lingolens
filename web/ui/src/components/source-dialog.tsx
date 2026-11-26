@@ -237,16 +237,16 @@ function SourceForm({ book, append }: { book: Book | null; append: boolean }) {
         onSubmit={(e) => { e.preventDefault(); submit() }}
       >
         <DialogHeader className="gap-1 pr-8">
-          <DialogTitle id="source-heading" className="font-serif text-xl font-semibold tracking-tight">{heading}</DialogTitle>
+          <DialogTitle id="source-heading" className="text-lg font-semibold tracking-[-0.02em]">{heading}</DialogTitle>
           <DialogDescription className="sr-only">{heading}</DialogDescription>
         </DialogHeader>
 
-        <div id="src-kinds" role="radiogroup" aria-label={t("source.kind")} hidden={editing} className="source-kinds inline-flex w-fit max-w-full gap-0.5 rounded-xl bg-muted p-1 ring-1 ring-border/70 ring-inset">
+        <div id="src-kinds" role="radiogroup" aria-label={t("source.kind")} hidden={editing} className="source-kinds inline-flex w-fit max-w-full gap-0.5 rounded-[11px] bg-muted p-[3px] ring-1 ring-border/60 ring-inset">
           {(["text", "url", "file"] as Kind[]).map((k) => {
             const Icon = KindIcon[k]
             const disabled = k === "url" && !online
             return (
-              <label key={k} className={cn("kind relative inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-[13.5px] font-medium text-muted-foreground transition-[color,background-color,box-shadow] select-none hover:text-foreground has-checked:bg-card has-checked:text-foreground has-checked:shadow-sm has-disabled:cursor-not-allowed has-disabled:opacity-45 has-focus-visible:ring-3 has-focus-visible:ring-ring/50 dark:has-checked:bg-accent max-sm:px-2.5", disabled && "pointer-events-none")}>
+              <label key={k} className={cn("kind relative inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-[8px] px-3 text-[13px] font-medium text-muted-foreground transition-[color,background-color,box-shadow] select-none hover:text-foreground has-checked:bg-card has-checked:text-foreground has-checked:shadow-[0_1px_2px_rgb(0_0_0/.08),0_0_0_.5px_rgb(0_0_0/.06)] has-disabled:cursor-not-allowed has-disabled:opacity-45 has-focus-visible:ring-3 has-focus-visible:ring-ring/35 dark:has-checked:bg-accent max-sm:px-2.5", disabled && "pointer-events-none")}>
                 <input
                   type="radio" name="kind" value={k} className="peer sr-only" checked={kind === k} disabled={disabled}
                   onChange={() => focusFor(k, () => { setKind(k); setError("") })}
@@ -257,11 +257,11 @@ function SourceForm({ book, append }: { book: Book | null; append: boolean }) {
             )
           })}
         </div>
-        <div id="src-modes" role="radiogroup" aria-label={t("source.mode")} hidden={!editing} className="source-kinds inline-flex w-fit gap-0.5 rounded-xl bg-muted p-1 ring-1 ring-border/70 ring-inset">
+        <div id="src-modes" role="radiogroup" aria-label={t("source.mode")} hidden={!editing} className="source-kinds inline-flex w-fit gap-0.5 rounded-[11px] bg-muted p-[3px] ring-1 ring-border/60 ring-inset">
           {(["edit", "append"] as Mode[]).map((m) => {
             const Icon = m === "edit" ? PencilLine : FilePlus2
             return (
-              <label key={m} className="kind inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-[13.5px] font-medium text-muted-foreground transition-[color,background-color,box-shadow] select-none hover:text-foreground has-checked:bg-card has-checked:text-foreground has-checked:shadow-sm has-focus-visible:ring-3 has-focus-visible:ring-ring/50 dark:has-checked:bg-accent">
+              <label key={m} className="kind inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-[8px] px-3 text-[13px] font-medium text-muted-foreground transition-[color,background-color,box-shadow] select-none hover:text-foreground has-checked:bg-card has-checked:text-foreground has-checked:shadow-[0_1px_2px_rgb(0_0_0/.08),0_0_0_.5px_rgb(0_0_0/.06)] has-focus-visible:ring-3 has-focus-visible:ring-ring/35 dark:has-checked:bg-accent">
                 <input
                   type="radio" name="mode" value={m} className="sr-only" checked={mode === m}
                   onChange={() => focusFor(m === "append" ? "append" : "text", () => { setMode(m); setError("") })}
@@ -302,7 +302,7 @@ function SourceForm({ book, append }: { book: Book | null; append: boolean }) {
           <label
             id="src-drop"
             className={cn(
-              "dropzone group/drop flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border-2 border-dashed border-input bg-muted/40 px-6 py-8 text-center transition-colors hover:border-ring/60 hover:bg-accent/50 has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
+              "dropzone group/drop flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl border-[1.5px] border-dashed border-input bg-sunken/70 px-6 py-9 text-center transition-colors hover:border-ring/60 hover:bg-accent/50 has-focus-visible:ring-3 has-focus-visible:ring-ring/35",
               file && "has-file border-solid border-ring/40 bg-card",
             )}
             onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("dragging", "border-ring") }}
@@ -389,7 +389,7 @@ function SourceForm({ book, append }: { book: Book | null; append: boolean }) {
 
         <p id="src-error" role="alert" className="field-error m-0 text-[13px] text-destructive empty:hidden">{error}</p>
 
-        <div className="row -mx-6 -mb-6 mt-1 flex flex-wrap items-center gap-2 border-t bg-muted/50 px-6 py-3.5 max-sm:-mx-4 max-sm:-mb-5 max-sm:px-4">
+        <div className="row -mx-6 -mb-6 mt-1 flex flex-wrap items-center gap-2 border-t border-border/70 bg-sunken/60 px-6 py-3.5 max-sm:-mx-4 max-sm:-mb-5 max-sm:px-4">
           <Button
             type="button" id="src-sample" variant="ghost" size="sm" hidden={editing || kind !== "text" || books.length > 0}
             onClick={() => { setTitle(SAMPLE_TITLE); setText(SAMPLE_TEXT) }}

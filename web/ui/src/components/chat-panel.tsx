@@ -38,9 +38,9 @@ export function ChatPanel() {
       data-state={drawer}
       data-mode={mode}
       aria-label={t("chat.title")}
-      className="drawer fixed right-0 z-30 flex w-[min(440px,100vw)] flex-col overscroll-contain border-l bg-card shadow-(--shadow-float) max-sm:w-screen max-sm:border-l-0"
+      className="drawer fixed right-0 z-30 flex w-[min(440px,100vw)] flex-col overscroll-contain border-l bg-card shadow-(--elev-float) max-sm:w-screen max-sm:border-l-0"
     >
-      <header className={cn("drawer-head flex h-14 shrink-0 items-center gap-1 pr-3 pl-[18px]", history && current && "pl-2")}>
+      <header className={cn("drawer-head mb-2 flex h-14 shrink-0 items-center gap-1 border-b border-border/70 pr-3 pl-[18px]", history && current && "pl-2")}>
         <Button
           id="chat-back" variant="ghost" size="icon-sm" hidden={!(history && current)} className="head-back text-muted-foreground"
           aria-label={t("chat.back")} title={t("chat.back")} onClick={() => current && openConversation(current)}
@@ -111,7 +111,7 @@ function HistoryList({ hidden }: { hidden: boolean }) {
             <li key={c.id} className="hist-item group/hist anim-rise relative" style={{ animationDelay: `${Math.min(i, 3) * 30}ms` }}>
               <button
                 type="button"
-                className="hist-open flex w-full flex-col gap-1 rounded-xl border bg-card py-3 pr-11 pl-3.5 text-left transition-colors outline-none hover:border-input hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
+                className="hist-open flex w-full flex-col gap-1 rounded-xl border bg-card py-3 pr-11 pl-3.5 text-left shadow-xs transition-colors duration-150 outline-none hover:border-input hover:bg-accent/60 focus-visible:ring-3 focus-visible:ring-ring/35"
                 data-id={c.id}
                 onClick={() => resumeChat(c.id)}
               >
@@ -119,7 +119,7 @@ function HistoryList({ hidden }: { hidden: boolean }) {
                 <span className="hist-q truncate text-[13.5px] text-ink-2 empty:hidden">{c.question || ""}</span>
                 <span className="hist-meta truncate text-xs text-muted-foreground">
                   {meta.map((m, j) => <React.Fragment key={j}>{j > 0 && <span aria-hidden="true"> · </span>}{m}</React.Fragment>)}
-                  {c.live && <>{meta.length > 0 && <span aria-hidden="true"> · </span>}<span className="hist-live font-semibold text-gloss">{t("chat.answering")}</span></>}
+                  {c.live && <>{meta.length > 0 && <span aria-hidden="true"> · </span>}<span className="hist-live font-semibold text-brand">{t("chat.answering")}</span></>}
                 </span>
               </button>
               <Button
@@ -213,10 +213,10 @@ function Conversation({ hidden }: { hidden: boolean }) {
           key={c}
           type="button"
           className={cn(
-            "chip outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+            "chip outline-none focus-visible:ring-3 focus-visible:ring-ring/35",
             started
               ? "h-[30px] shrink-0 rounded-full border bg-card px-3 text-[12.5px] whitespace-nowrap text-ink-2 transition-colors hover:bg-accent hover:text-foreground pointer-coarse:h-[34px]"
-              : "group/chip anim-rise flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border bg-card px-3.5 py-2.5 text-left text-sm text-ink-2 transition-colors hover:border-input hover:bg-accent hover:text-foreground",
+              : "group/chip anim-rise flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border bg-card px-3.5 py-2.5 text-left text-sm text-ink-2 shadow-xs transition-colors duration-150 hover:border-input hover:bg-accent/60 hover:text-foreground",
           )}
           onClick={() => sendChat(c)}
         >
@@ -254,7 +254,7 @@ function Conversation({ hidden }: { hidden: boolean }) {
             ref={quote}
             className={cn(
               "quote relative m-0 rounded-xl border-y-[12px] border-transparent bg-sunken pr-3.5 pl-4 font-reading text-[15.5px] leading-[1.6] text-foreground",
-              "before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:rounded-r-[3px] before:bg-gloss before:content-['']",
+              "before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:rounded-r-[3px] before:bg-brand before:content-['']",
               quoteState && "cursor-pointer", quoteState,
             )}
             onClick={() => { if (quoteState) setQuoteState(quoteState === "open" ? "clamped" : "open") }}
@@ -292,7 +292,7 @@ function Conversation({ hidden }: { hidden: boolean }) {
           type="button"
           hidden={!below}
           aria-label={t("chat.jump")}
-          className="chat-jump anim-rise absolute bottom-[calc(100%+10px)] left-1/2 z-[1] grid size-[34px] -translate-x-1/2 place-items-center rounded-full border bg-card text-ink-2 shadow-(--shadow-soft)"
+          className="chat-jump anim-rise absolute bottom-[calc(100%+10px)] left-1/2 z-[1] grid size-[34px] -translate-x-1/2 place-items-center rounded-full border bg-card text-ink-2 shadow-(--elev-soft)"
           onClick={() => {
             const l = log.current
             const last = l?.querySelector("#chat-turns")?.lastElementChild?.lastElementChild
@@ -306,7 +306,7 @@ function Conversation({ hidden }: { hidden: boolean }) {
         {started && chipList}
         <form
           id="chat-form"
-          className="chat-form flex items-end gap-2 rounded-[22px] border border-input bg-card py-1.5 pr-1.5 pl-3.5 shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/20"
+          className="chat-form flex items-end gap-2 rounded-[22px] border border-input bg-card py-1.5 pr-1.5 pl-3.5 shadow-(--elev-soft) transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/15"
           onSubmit={submit}
         >
           <textarea
@@ -333,7 +333,7 @@ function Conversation({ hidden }: { hidden: boolean }) {
             disabled={busy ? false : !text.trim()}
             aria-label={t(busy ? "chat.stop" : "chat.send")}
             className={cn(
-              "send-btn grid size-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-[opacity,transform] outline-none focus-visible:ring-3 focus-visible:ring-ring/50 enabled:hover:scale-105 disabled:opacity-25",
+              "send-btn grid size-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-[opacity,transform] outline-none focus-visible:ring-3 focus-visible:ring-ring/35 enabled:hover:scale-105 disabled:opacity-20",
               busy && "busy",
             )}
           >
@@ -376,7 +376,7 @@ function TurnView({ turn, first, log }: { turn: Turn; first: boolean; log: React
   return (
     <section ref={ref} className="turn flex flex-col gap-3.5 pt-1.5 [&+.turn]:mt-[26px]">
       {turn.question && (
-        <div className="msg user anim-pop max-w-[85%] self-end rounded-[18px_18px_6px_18px] bg-sunken px-3.5 py-[9px] text-[15px] leading-[1.55] whitespace-pre-wrap text-foreground [overflow-wrap:break-word]">
+        <div className="msg user anim-pop max-w-[85%] self-end rounded-[18px_18px_6px_18px] bg-brand-soft px-3.5 py-[9px] text-[15px] leading-[1.55] whitespace-pre-wrap text-foreground [overflow-wrap:break-word]">
           {turn.question}
         </div>
       )}

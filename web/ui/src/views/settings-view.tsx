@@ -1,5 +1,5 @@
 import * as React from "react"
-import { BookOpenText, Bot, Check, Copy, Download, Eye, EyeOff, KeyRound, LogOut, MousePointerClick, Smartphone, Sparkles, UserRound, Users } from "lucide-react"
+import { BookOpenText, Bot, Check, ChevronLeft, Copy, Download, Eye, EyeOff, KeyRound, LogOut, MousePointerClick, Smartphone, Sparkles, UserRound, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api.js"
 import { PRESETS, presetLabel } from "@/lib/presets"
@@ -41,16 +41,17 @@ export function SettingsView() {
   const me = useApp((s) => s.me)
   const shown = view === "settings"
   return (
-    <section id="settings-view" hidden={!shown} className="settings-page mx-auto mt-12 max-w-[1040px] max-sm:mt-7">
-      <h1 className="page-title m-0 mb-8 font-serif text-[clamp(28px,3.6vw,36px)] leading-tight font-semibold tracking-tight">{t("settings.page")}</h1>
-      <div className="grid gap-10 lg:grid-cols-[200px_minmax(0,1fr)]">
+    <section id="settings-view" hidden={!shown} className="settings-page mx-auto mt-14 max-w-[1040px] max-sm:mt-8">
+      <BackToText />
+      <h1 className="page-title m-0 mb-10 text-[clamp(26px,3.4vw,32px)] leading-tight font-semibold tracking-[-0.025em] max-sm:mb-7">{t("settings.page")}</h1>
+      <div className="grid gap-12 lg:grid-cols-[196px_minmax(0,1fr)]">
         <nav aria-label={t("settings.page")} className="sticky top-20 hidden self-start lg:block">
           <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
             {SECTIONS.filter((s) => !s.admin || me?.is_admin).map((s) => (
               <li key={s.id}>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[13.5px] font-medium text-muted-foreground transition-colors duration-150 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/35"
                   onClick={() => document.getElementById(s.id)?.closest("section")?.scrollIntoView({ block: "start", behavior: "smooth" })}
                 >
                   <s.icon className="size-4" strokeWidth={1.8} />{t(s.key)}
@@ -59,7 +60,7 @@ export function SettingsView() {
             ))}
           </ul>
         </nav>
-        <div className="flex min-w-0 flex-col gap-12">
+        <div className="flex min-w-0 flex-col gap-14">
           <ProfileSection />
           <ReadingSection />
           <ModelSection shown={shown} />
@@ -73,6 +74,26 @@ export function SettingsView() {
   )
 }
 
+// Settings opened from a text: the way back to it, above the title.
+function BackToText() {
+  const returnTo = useApp((s) => s.returnTo)
+  const books = useApp((s) => s.books)
+  const m = returnTo.match(/^#\/read\/([^/]+)$/)
+  const id = m && decodeURIComponent(m[1])
+  const from = id && books.find((b) => String(b.id) === id)
+  if (!from) return null
+  return (
+    <a
+      id="back-to-text"
+      href={returnTo}
+      className="back-to-text mb-3 -ml-0.5 inline-flex max-w-full items-center gap-1 text-[13.5px] font-medium text-muted-foreground no-underline transition-colors hover:text-brand"
+    >
+      <ChevronLeft className="size-4 shrink-0" strokeWidth={2} />
+      <span className="truncate">{from.title}</span>
+    </a>
+  )
+}
+
 // A section: its heading and note, then its settings on a card.
 function Section({ id, sectionId, title, note, children, className }: {
   id: string; sectionId?: string; title: string; note?: string; children: React.ReactNode; className?: string
@@ -80,8 +101,8 @@ function Section({ id, sectionId, title, note, children, className }: {
   return (
     <section id={sectionId} className={cn("set-section scroll-mt-[76px]", className)} aria-labelledby={id}>
       <div className="set-head mb-4">
-        <h2 id={id} className="m-0 text-lg font-semibold tracking-tight">{title}</h2>
-        {note && <p className="mt-1 mb-0 max-w-[62ch] text-sm text-muted-foreground">{note}</p>}
+        <h2 id={id} className="m-0 text-[17px] font-semibold tracking-[-0.015em]">{title}</h2>
+        {note && <p className="mt-1 mb-0 max-w-[62ch] text-sm leading-relaxed text-muted-foreground">{note}</p>}
       </div>
       <div className="set-body flex flex-col gap-4">{children}</div>
     </section>
@@ -90,7 +111,7 @@ function Section({ id, sectionId, title, note, children, className }: {
 
 // One card of settings.
 function Block({ children, className, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("set-block rounded-2xl border bg-card p-5 shadow-xs max-sm:p-4", className)} {...rest}>{children}</div>
+  return <div className={cn("set-block rounded-2xl bg-card p-5 shadow-xs ring-1 ring-border max-sm:p-4", className)} {...rest}>{children}</div>
 }
 
 function BlockHead({ title, help }: { title: string; help?: string }) {
@@ -130,12 +151,12 @@ function ProfileSection() {
                 aria-checked={on}
                 onClick={() => setLevel(l.id)}
                 className={cn(
-                  "level-card relative flex flex-col items-start gap-0.5 rounded-xl border bg-card px-3.5 py-3 text-left transition-[border-color,background-color,box-shadow] outline-none hover:border-input hover:bg-accent/60 focus-visible:ring-3 focus-visible:ring-ring/50",
-                  on && "border-primary bg-primary/[.04] shadow-[0_0_0_1px_var(--primary)] hover:border-primary hover:bg-primary/[.06] dark:bg-primary/[.07]",
+                  "level-card relative flex flex-col items-start gap-0.5 rounded-xl border bg-card px-3.5 py-3 text-left transition-[border-color,background-color,box-shadow] duration-150 outline-none hover:border-input hover:bg-accent/50 focus-visible:ring-3 focus-visible:ring-ring/35",
+                  on && "border-brand bg-brand-soft shadow-[0_0_0_1px_var(--brand)] hover:border-brand hover:bg-brand-soft",
                 )}
               >
-                {on && <Check className="absolute top-3 right-3 size-4 text-primary" strokeWidth={2.4} />}
-                <span className="lc-code font-serif text-xl font-semibold tracking-tight">{l.id}</span>
+                {on && <span className="absolute top-3 right-3 grid size-[18px] place-items-center rounded-full bg-brand text-white dark:text-[#141415]"><Check className="size-3" strokeWidth={3} /></span>}
+                <span className="lc-code text-lg font-semibold tracking-tight">{l.id}</span>
                 <span className="lc-name text-[13.5px] font-medium">{levelName(l)}</span>
                 <span className="lc-hint text-xs text-muted-foreground">{l.hint}</span>
                 <span className="lc-hint text-xs text-muted-foreground">{t("level.words", { n: l.vocab.toLocaleString() })}</span>
@@ -172,7 +193,7 @@ function ReadingSection() {
   const set = (key: ReadingKey) => (v: string) => setReadingDefault(key, v)
   return (
     <Section id="set-reading-h" title={t("reading.title")} note={t("reading.note")}>
-      <p id="reading-local" hidden={!own.length} className="set-local m-0 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-dashed px-4 py-3 text-[13.5px] text-ink-2">
+      <p id="reading-local" hidden={!own.length} className="set-local m-0 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-brand-soft px-4 py-3 text-[13.5px] text-ink-2">
         <Smartphone className="size-4 shrink-0 text-muted-foreground" />
         <span id="reading-local-text">{t("reading.local", { list: own.map((k) => t(READING[k].label)).join(t("list.sep")) })}</span>
         <button type="button" id="reading-reset" className="link-btn font-medium text-foreground underline underline-offset-3" onClick={resetDeviceReading}>
@@ -198,7 +219,7 @@ function ReadingSection() {
         </div>
         <div className={row}>
           <span className="set-label text-sm font-medium">{t("display.font")}</span>
-          <FontChoice id="def-font-seg" value={d.readFont} onChange={set("readFont")} className="w-[340px] grid-cols-4 max-sm:w-full max-sm:grid-cols-2" />
+          <FontChoice id="def-font-seg" value={d.readFont} onChange={set("readFont")} className="w-[400px] grid-cols-4 max-sm:w-full max-sm:grid-cols-2" />
         </div>
         <div className={row}>
           <span className="set-label text-sm font-medium">{t("display.glossFont")}</span>
@@ -407,7 +428,7 @@ function ClipSection({ shown }: { shown: boolean }) {
 }
 
 function CodeBox({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <div className={cn("token-box flex items-start gap-3 rounded-xl border bg-muted/60 p-3", className)}>{children}</div>
+  return <div className={cn("token-box flex items-start gap-3 rounded-lg border bg-sunken py-2 pr-2 pl-3.5", className)}>{children}</div>
 }
 
 function CopyButton({ id, copied, onClick }: { id: string; copied: boolean; onClick: () => void }) {
@@ -491,7 +512,7 @@ function AgentSection() {
       </Block>
       <Block>
         <BlockHead title={t("agent.install")} help={t("agent.installCli")} />
-        <div className="token-box skill-box mt-3 flex items-center gap-3 rounded-xl border bg-muted/60 p-3">
+        <div className="token-box skill-box mt-3 flex items-center gap-3 rounded-lg border bg-sunken py-2 pr-2 pl-3.5">
           <code id="skill-cmd" ref={skillBox} translate="no" className="min-w-0 flex-1 font-mono text-[13px]">{SKILL}</code>
           <CopyButton id="skill-copy" copied={copied === "skill"} onClick={() => copy("skill", SKILL, skillBox.current)} />
         </div>
@@ -504,12 +525,12 @@ function AgentSection() {
       </Block>
       <Block>
         <BlockHead title={t("agent.mcp")} help={t("agent.mcpNote")} />
-        <div className="token-box mt-3 flex items-center gap-3 rounded-xl border bg-muted/60 p-3">
+        <div className="token-box mt-3 flex items-center gap-3 rounded-lg border bg-sunken py-2 pr-2 pl-3.5">
           <code id="mcp-url" ref={mcpBox} translate="no" className="min-w-0 flex-1 font-mono text-[13px] break-all">{MCP}</code>
           <CopyButton id="mcp-copy" copied={copied === "mcp"} onClick={() => copy("mcp", MCP, mcpBox.current)} />
         </div>
         <p className="set-help mt-3 mb-0 text-[13px] text-muted-foreground">{t("agent.mcpClaude")}</p>
-        <div className="token-box mt-2 flex items-start gap-3 rounded-xl border bg-muted/60 p-3">
+        <div className="token-box mt-2 flex items-start gap-3 rounded-lg border bg-sunken py-2 pr-2 pl-3.5">
           <code id="mcp-cmd" ref={mcpCmdBox} translate="no" className="min-w-0 flex-1 font-mono text-xs leading-relaxed break-all">{MCP_CMD}</code>
           <CopyButton id="mcp-cmd-copy" copied={copied === "mcp-cmd"} onClick={() => copy("mcp-cmd", MCP_CMD, mcpCmdBox.current)} />
         </div>
@@ -566,7 +587,7 @@ function AccountSection({ shown }: { shown: boolean }) {
           <h3 id="acct-name" className="m-0 truncate text-[15px] font-semibold">{me.name || me.email}</h3>
           <p className="set-help m-0 mt-0.5 flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
             <span id="acct-email">{me.name ? me.email : ""}</span>
-            <span id="acct-role" className="role-tag rounded-full border bg-muted px-2 py-px text-[11px] font-semibold">{t(me.is_admin ? "members.admin" : "members.member")}</span>
+            <span id="acct-role" className="role-tag rounded-full bg-brand-soft px-2 py-px text-[11px] font-semibold text-brand">{t(me.is_admin ? "members.admin" : "members.member")}</span>
           </p>
         </div>
         <Button type="button" id="btn-logout" variant="outline" onClick={() => signOut(confirmLoss)}>

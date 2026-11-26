@@ -7,8 +7,8 @@ const { check } = checker();
 const browser = await chromium.launch();
 const errors = [];
 const user = await freshUser(browser);
-const LIGHT = 'rgb(247, 246, 243)'; // #f7f6f3, warm paper
-const DARK = 'rgb(28, 27, 25)';
+const LIGHT = 'rgb(250, 250, 249)'; // #fafaf9, soft white
+const DARK = 'rgb(20, 20, 21)'; // #141415
 const bg = (p) => p.evaluate(() => getComputedStyle(document.body).backgroundColor);
 const barColors = (p) => p.$$eval('meta[name="theme-color"]', (ms) => ms.map((m) => m.content));
 const pressed = (p, sel) => p.$eval(`${sel} [aria-pressed="true"]`, (b) => b.dataset.mode);
@@ -31,7 +31,7 @@ await page.waitForSelector('#settings-view:not([hidden])');
 check('Settings shows System selected', (await pressed(page, '#theme-seg')) === 'system');
 await page.click('#theme-seg [data-mode="light"]');
 check('Light overrides a dark device', (await bg(page)) === LIGHT);
-check('browser bar colour follows the pick', (await barColors(page)).every((c) => c === '#f7f6f3'));
+check('browser bar colour follows the pick', (await barColors(page)).every((c) => c === '#fafaf9'));
 await page.waitForTimeout(300);
 check('choice saved to the profile', (await prefs(page)) === 'light');
 await page.reload();
@@ -91,7 +91,7 @@ await pp.goto(BASE + '#/settings');
 await pp.waitForSelector('#settings-view:not([hidden])');
 await pp.click('#theme-seg [data-mode="system"]');
 check('back to System follows the light device', (await bg(pp)) === LIGHT);
-check('browser bar colours restored per scheme', JSON.stringify(await barColors(pp)) === JSON.stringify(['#f7f6f3', '#1c1b19']));
+check('browser bar colours restored per scheme', JSON.stringify(await barColors(pp)) === JSON.stringify(['#fafaf9', '#141415']));
 await pp.screenshot({ path: `${OUT}/t-phone-settings.png`, fullPage: true });
 await phone.close();
 

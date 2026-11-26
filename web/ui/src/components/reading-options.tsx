@@ -17,7 +17,7 @@ export function SizeChoice({ id, value, onChange }: { id: string; value: string;
   return (
     <Segmented
       id={id} label={t("display.size")} attr="size" value={value} onChange={onChange} data-reading="readSize"
-      options={sizes.map(([v, key, px]) => ({ value: v, label: t(key), content: <span style={{ fontSize: px }} className="font-serif">A</span> }))}
+      options={sizes.map(([v, key, px]) => ({ value: v, label: t(key), content: <span style={{ fontSize: px }} className="font-reading">A</span> }))}
     />
   )
 }
@@ -29,9 +29,9 @@ export function FontChoice({ id, value, onChange, className }: { id: string; val
       id={id} label={t("display.font")} attr="font" value={value} onChange={onChange} data-reading="readFont"
       className={cn("font-seg grid grid-cols-2", className)} buttonClassName="h-[34px] px-2 text-[15px] font-normal text-ink-2"
       options={[
-        { value: "literata", content: "Literata" },
-        { value: "classic", content: t("font.classic") },
         { value: "sans", content: t("font.sans") },
+        { value: "serif", content: t("font.serif") },
+        { value: "lexend", content: "Lexend" },
         { value: "legible", content: t("font.legible") },
       ]}
     />
@@ -83,7 +83,7 @@ export function ThemeChoice({ id, value, onChange, labels = false, className }: 
   )
 }
 
-const row = "pop-row flex min-h-10 items-center justify-between gap-4 rounded-md px-2.5 py-1 text-sm"
+const row = "pop-row flex min-h-10 items-center justify-between gap-4 rounded-lg px-2.5 py-1 text-sm"
 
 // Reading Options, under the "Aa" button in the reader: kept on this device.
 export function ReadingOptions({ onClose }: { onClose: () => void }) {
@@ -95,10 +95,10 @@ export function ReadingOptions({ onClose }: { onClose: () => void }) {
       align="end"
       sideOffset={6}
       collisionPadding={8}
-      className="w-[min(336px,calc(100vw-16px))] max-h-[calc(100dvh-80px)] gap-0 overflow-y-auto overscroll-contain rounded-xl p-1.5 shadow-(--shadow-float)"
+      className="w-[min(344px,calc(100vw-16px))] max-h-[calc(100dvh-80px)] gap-0 overflow-y-auto overscroll-contain rounded-2xl p-2 shadow-(--elev-float)"
       onOpenAutoFocus={(e) => e.preventDefault()}
     >
-      <p className="pop-head mx-2.5 mt-2 mb-1 text-sm font-semibold">{t("display.title")}</p>
+      <p className="pop-head mx-2.5 mt-1.5 mb-1.5 text-[11px] font-semibold tracking-[.07em] text-muted-foreground uppercase">{t("display.title")}</p>
       <label className={cn(row, "cursor-pointer hover:bg-accent")}>
         <span>{t("toggle.words")}</span>
         <Switch id="show-words" checked={!r.hideWords} onCheckedChange={(on) => setDeviceReading("hideWords", !on)} />

@@ -30,7 +30,7 @@ export function Segmented({
       role="group"
       aria-label={label}
       hidden={hidden}
-      className={cn("inline-flex gap-0.5 rounded-lg bg-muted p-[3px] ring-1 ring-border/70 ring-inset", className)}
+      className={cn("inline-flex gap-0.5 rounded-[10px] bg-muted p-[3px] ring-1 ring-border/60 ring-inset", className)}
       {...rest}
     >
       {options.map((o) => (
@@ -44,7 +44,7 @@ export function Segmented({
           lang={o.lang}
           onClick={() => onChange(o.value)}
           className={cn(
-            "inline-flex h-7 min-w-8 flex-1 items-center justify-center gap-1.5 rounded-md px-3 text-[13.5px] font-medium whitespace-nowrap text-muted-foreground transition-[color,background-color,box-shadow] outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:shadow-sm dark:aria-pressed:bg-accent [&_svg]:size-[15px] [&_svg]:shrink-0",
+            "inline-flex h-7 min-w-8 flex-1 items-center justify-center gap-1.5 rounded-[7px] px-3 text-[13px] font-medium whitespace-nowrap text-muted-foreground transition-[color,background-color,box-shadow] duration-150 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/35 aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:shadow-[0_1px_2px_rgb(0_0_0/.08),0_0_0_.5px_rgb(0_0_0/.06)] dark:aria-pressed:bg-accent dark:aria-pressed:shadow-none [&_svg]:size-[15px] [&_svg]:shrink-0",
             buttonClassName,
           )}
         >

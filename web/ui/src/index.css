@@ -2,9 +2,11 @@
 @import "tw-animate-css";
 @import "./styles/shadcn.css";
 
-/* LingoLens: calm chrome on warm paper; colour is kept for the glosses. */
+/* LingoLens: quiet, crisp chrome on a soft white page; colour is kept for the
+   glosses (red words, blue phrases) and one indigo accent. */
 
 /* ------------------------------------------------------------ fonts (all local, for offline use) */
+/* Inter: the interface, and the default reading font. */
 @font-face {
   font-family: "Inter Variable";
   src: url("/vendor/fonts/inter-latin.woff2") format("woff2-variations");
@@ -22,21 +24,40 @@
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 @font-face {
-  font-family: "Literata";
-  src: url("/vendor/fonts/literata-latin.woff2") format("woff2");
-  font-weight: 300 800;
+  font-family: "Inter Variable";
+  src: url("/vendor/fonts/inter-latin-italic.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* Source Serif 4 (Adobe): a newspaper serif made for screens, with optical
+   sizes. Reading font, and the serif of book titles. */
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("/vendor/fonts/source-serif-latin.woff2") format("woff2-variations");
+  font-weight: 200 900;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Literata";
-  src: url("/vendor/fonts/literata-latin-italic.woff2") format("woff2");
-  font-weight: 300 800;
+  font-family: "Source Serif 4";
+  src: url("/vendor/fonts/source-serif-latin-italic.woff2") format("woff2-variations");
+  font-weight: 200 900;
   font-style: italic;
   font-display: swap;
 }
-/* Atkinson Hyperlegible Next (Braille Institute): an optional reading font,
-   loaded only when chosen. */
+/* Lexend (Bonnie Shaver-Troup, Thomas Jockin): shaped and spaced to make
+   reading easier. Loaded only when chosen. */
+@font-face {
+  font-family: "Lexend";
+  src: url("/vendor/fonts/lexend-latin.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+/* Atkinson Hyperlegible Next (Braille Institute): every letter easy to tell
+   apart. Loaded only when chosen. */
 @font-face {
   font-family: "Atkinson Hyperlegible Next";
   src: url("/vendor/fonts/atkinson-next-latin.woff2") format("woff2");
@@ -64,7 +85,8 @@
 
 @theme inline {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-  --font-serif: "Literata", Georgia, "Noto Serif CJK SC", "Songti SC", serif;
+  --font-serif: var(--font-read-serif);
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
   --font-reading: var(--read-font);
   --font-zh: var(--zh);
 
@@ -86,6 +108,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
   --color-gloss: var(--gloss);
   --color-phrase: var(--phrase);
   --color-success: var(--success);
@@ -97,95 +121,110 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
   --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-3xl: calc(var(--radius) * 2.4);
+  --radius-4xl: calc(var(--radius) * 3);
 
-  --shadow-soft: 0 1px 2px rgb(28 25 20 / .04), 0 8px 24px rgb(28 25 20 / .07);
-  --shadow-float: 0 2px 4px rgb(28 25 20 / .04), 0 18px 48px rgb(28 25 20 / .14);
+  --shadow-xs: var(--elev-xs);
+  --shadow-soft: var(--elev-soft);
+  --shadow-float: var(--elev-float);
 }
 
 :root {
-  --radius: 0.75rem;
+  --radius: 0.625rem;
 
-  /* Warm paper, navy ink (the logo's tile), white cards. */
-  --background: #f7f6f3;
-  --foreground: #1b1f29;
-  --ink-2: #3d4250;
+  /* Soft white page, white surfaces, near-black ink. */
+  --background: #fafaf9;
+  --foreground: #18181b;
+  --ink-2: #3f3f46;
   --card: #ffffff;
-  --card-foreground: #1b1f29;
+  --card-foreground: #18181b;
   --popover: #ffffff;
-  --popover-foreground: #1b1f29;
-  --primary: #1e3352;
-  --primary-foreground: #f8f7f4;
-  --secondary: #eeede8;
-  --secondary-foreground: #1b1f29;
-  --muted: #eeede8;
-  --muted-foreground: #6a6e78;
-  --sunken: #f0efea;
-  --accent: #ecebe5;
-  --accent-foreground: #1b1f29;
-  --destructive: #c9333b;
-  --border: #e4e2db;
-  --input: #d9d6cd;
-  --ring: #5f82ba;
+  --popover-foreground: #18181b;
+  --primary: #18181b;
+  --primary-foreground: #fafaf9;
+  --secondary: #f2f2f1;
+  --secondary-foreground: #18181b;
+  --muted: #f2f2f1;
+  --muted-foreground: #6b6b73;
+  --sunken: #f4f4f3;
+  --accent: #efefee;
+  --accent-foreground: #18181b;
+  --destructive: #d92d3a;
+  --border: #e7e7e4;
+  --input: #dadad6;
+  --brand: #4f5bd5;          /* the one accent: focus, progress, the marked section */
+  --brand-soft: #eef0fd;
+  --ring: #4f5bd5;
 
-  --gloss: #d1343d;        /* word glosses and reading progress */
-  --phrase: #2f6feb;       /* phrase glosses */
-  --phrase-line: #a9c3f5;
-  --success: #15803d;
-  --thread: #4f7fd1;       /* reading progress: a calm blue, apart from the glosses' red */
-  --mark-tile: #1e3352;
-  --mark-gloss: #e0503f;
-  --mark-word: #f4f1e8;
+  --gloss: #d6333f;          /* word glosses */
+  --phrase: #2563eb;         /* phrase glosses */
+  --phrase-line: #a8c1f7;
+  --link: #4f5bd5;
+  --success: #16803c;
+  --thread: #4f5bd5;         /* reading progress */
+  --mark-tile: #1d2a44;
+  --mark-gloss: #f05a46;
+  --mark-word: #f5f3ee;
 
-  /* Reading fonts the reader can choose (Reading Options); Literata is the default.
+  --elev-xs: 0 1px 2px rgb(24 24 27 / .05);
+  --elev-soft: 0 1px 2px rgb(24 24 27 / .04), 0 6px 20px -6px rgb(24 24 27 / .10);
+  --elev-float: 0 0 0 1px rgb(24 24 27 / .05), 0 4px 10px -2px rgb(24 24 27 / .06), 0 24px 48px -12px rgb(24 24 27 / .20);
+
+  /* Reading fonts the reader can choose (Reading Options); Inter is the default.
      Each ends in Chinese fonts for any Chinese inside the English text. */
-  --font-literata: "Literata", Georgia, "Noto Serif CJK SC", "Songti SC", serif;
-  --font-classic: Charter, "Bitstream Charter", "Iowan Old Style", "Sitka Text", Cambria, Georgia, "Noto Serif CJK SC", "Songti SC", serif;
-  --font-plain: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-  --font-legible: "Atkinson Hyperlegible Next", -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-  --read-font: var(--font-literata);
+  --font-read-sans: "Inter Variable", -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-read-serif: "Source Serif 4", Charter, Georgia, "Noto Serif CJK SC", "Songti SC", serif;
+  --font-read-lexend: "Lexend", -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-read-legible: "Atkinson Hyperlegible Next", -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --read-font: var(--font-read-sans);
   /* Chinese gloss fonts: 黑体 (the default: crisp at gloss size), 宋体, 楷体. */
   --zh-sans: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", sans-serif;
   --zh-song: "Songti SC", STSong, SimSun, "Noto Serif CJK SC", "Noto Serif SC", "Source Han Serif SC", serif;
   --zh-kai: "LXGW WenKai", "Kaiti SC", STKaiti, KaiTi, "AR PL UKai CN", "Noto Serif CJK SC", serif;
   --zh: var(--zh-sans);
   --read-size: 20px;
-  --read-width: 820px;
+  --read-width: 700px;
   color-scheme: light;
 }
 
-/* Night reading: warm charcoal, not black; soft off-white text (~12.7:1, not 17:1)
-   and muted gloss colours, to cut glare and halo around letters. */
+/* Night reading: soft charcoal, not black; off-white text (~13:1, not 18:1) and
+   muted gloss colours, to cut glare and halo around letters. */
 :root { @variant dark {
-  --background: #1c1b19;
-  --foreground: #e3ddd2;
-  --ink-2: #c8c1b5;
-  --card: #242320;
-  --card-foreground: #e3ddd2;
-  --popover: #272623;
-  --popover-foreground: #e3ddd2;
-  --primary: #e3ddd2;
-  --primary-foreground: #1c1b19;
-  --secondary: #2e2c29;
-  --secondary-foreground: #e3ddd2;
-  --muted: #2a2825;
-  --muted-foreground: #9b9488;
-  --sunken: #2a2825;
-  --accent: #302e2a;
-  --accent-foreground: #e3ddd2;
-  --destructive: #ec9a85;
-  --border: #35332f;
-  --input: #45423d;
-  --ring: #93b4dc;
+  --background: #141415;
+  --foreground: #e7e5e1;
+  --ink-2: #c9c7c2;
+  --card: #1b1b1d;
+  --card-foreground: #e7e5e1;
+  --popover: #202023;
+  --popover-foreground: #e7e5e1;
+  --primary: #ecebe7;
+  --primary-foreground: #141415;
+  --secondary: #242427;
+  --secondary-foreground: #e7e5e1;
+  --muted: #222225;
+  --muted-foreground: #95938e;
+  --sunken: #1f1f22;
+  --accent: #2a2a2e;
+  --accent-foreground: #e7e5e1;
+  --destructive: #f08a86;
+  --border: #2b2b2f;
+  --input: #3a3a3f;
+  --brand: #9aa5f5;
+  --brand-soft: #25273a;
+  --ring: #9aa5f5;
 
-  --gloss: #ec9a85;
-  --phrase: #93b4dc;
-  --phrase-line: #4a5d78;
-  --success: #93c9a0;
-  --thread: #7f9fcf;
-  --mark-tile: #2c3a50;
-  --mark-word: #e3ddd2;
+  --gloss: #ef9a8b;
+  --phrase: #8fb1f1;
+  --phrase-line: #43577a;
+  --link: #a9b2f7;
+  --success: #8fcc9e;
+  --thread: #9aa5f5;
+  --mark-tile: #2c3a55;
+  --mark-word: #e7e5e1;
+
+  --elev-xs: 0 1px 2px rgb(0 0 0 / .3);
+  --elev-soft: 0 1px 2px rgb(0 0 0 / .3), 0 8px 24px -6px rgb(0 0 0 / .45);
+  --elev-float: 0 0 0 1px rgb(255 255 255 / .06), 0 4px 10px -2px rgb(0 0 0 / .35), 0 24px 48px -12px rgb(0 0 0 / .6);
   color-scheme: dark;
 } }
 
@@ -206,6 +245,7 @@
     line-height: 1.5;
     text-rendering: optimizeLegibility;
   }
+  ::selection { background: color-mix(in srgb, var(--brand) 22%, transparent); }
   [hidden] { display: none !important; }
   button, a, input, select, label, summary { touch-action: manipulation; }
   h1, h2, h3 { text-wrap: balance; }
@@ -224,30 +264,40 @@
 .mark .m-line { fill: var(--mark-word); opacity: .35; }
 
 /* ------------------------------------------------------------ the text */
-/* No card, just a well-set column. */
+/* No card, just a well-set column. Line height leaves room for the glosses. */
 .article {
   font-family: var(--read-font); font-size: var(--read-size, 20px); line-height: 2.3; font-optical-sizing: auto;
+  font-feature-settings: "cv05", "cv08"; /* Inter: l with a tail, I with serifs, so l, I and 1 differ */
   color: var(--foreground); overflow-wrap: break-word; cursor: text;
 }
 .article > :first-child { margin-top: 0; }
-.article h1, .article h2, .article h3, .article h4 { font-weight: 650; line-height: 1.8; margin: 1.1em 0 .3em; letter-spacing: -0.01em; }
+.article h1, .article h2, .article h3, .article h4 { font-weight: 650; line-height: 1.6; margin: 1.6em 0 .35em; letter-spacing: -0.015em; color: var(--foreground); }
 .article :is(h1, h2, h3) { scroll-margin-top: 76px; }
-.article h1 { font-size: 1.5em; } .article h2 { font-size: 1.3em; } .article h3 { font-size: 1.12em; }
-.article p, .article ul, .article ol, .article blockquote { margin: 0 0 1.1em; }
-.article ul { list-style: disc; padding-left: 1.4em; }
+.article h1 { font-size: 1.5em; } .article h2 { font-size: 1.3em; } .article h3 { font-size: 1.1em; } .article h4 { font-size: 1em; }
+.article p, .article ul, .article ol, .article blockquote, .article figure { margin: 0 0 1.1em; }
+.article ul { list-style: disc; padding-left: 1.3em; }
 .article ol { list-style: decimal; padding-left: 1.4em; }
-.article blockquote { border-left: 3px solid var(--border); padding-left: 18px; color: var(--muted-foreground); }
-.article pre { background: var(--sunken); padding: 12px 14px; border-radius: var(--radius-md); overflow-x: auto; line-height: 1.5; font-size: .75em; margin: 0 0 1.1em; }
-.article code { font-size: .82em; background: var(--sunken); padding: 1px 5px; border-radius: 4px; }
-.article pre code { font-size: 1em; background: none; padding: 0; border-radius: 0; } /* the block sets the size, with the text */
-.article a { color: var(--phrase); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
-.article table { border-collapse: collapse; display: block; overflow-x: auto; margin: 0 0 1.1em; }
-.article td, .article th { border: 1px solid var(--border); padding: 4px 10px; }
+.article li::marker { color: var(--muted-foreground); }
+.article blockquote { border-left: 3px solid color-mix(in srgb, var(--brand) 35%, var(--border)); padding-left: 1em; color: var(--ink-2); }
+/* Code, for technical articles: a quiet block in the reading column. */
+.article pre {
+  font-family: var(--font-mono); font-size: .74em; line-height: 1.65; tab-size: 4;
+  background: var(--sunken); border: 1px solid var(--border); padding: 14px 16px; border-radius: var(--radius-lg);
+  overflow-x: auto; margin: 0 0 1.3em; cursor: auto;
+}
+.article code { font-family: var(--font-mono); font-size: .8em; background: var(--sunken); border: 1px solid var(--border); padding: .08em .35em; border-radius: 5px; }
+.article pre code { font-size: 1em; background: none; border: 0; padding: 0; border-radius: 0; } /* the block sets the size, with the text */
+.article a { color: var(--link); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--link) 40%, transparent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.article a:hover { text-decoration-color: currentColor; }
+.article table { border-collapse: collapse; display: block; overflow-x: auto; margin: 0 0 1.3em; font-size: .85em; line-height: 1.9; }
+.article td, .article th { border: 1px solid var(--border); padding: 4px 12px; text-align: left; vertical-align: top; }
+.article th { background: var(--sunken); font-weight: 600; }
 .article img { max-width: 100%; height: auto; }
 /* A page's pictures (photos, charts) stand on their own line, as on the page. */
-.article > img { display: block; margin: 0 auto 1.1em; border-radius: var(--radius-md); }
-.article li > img { display: block; margin: .4em 0 .8em; border-radius: var(--radius-md); }
-.article hr { margin: 2em auto; width: 40%; border: 0; border-top: 1px solid var(--border); }
+.article > img { display: block; margin: .4em auto 1.3em; border-radius: var(--radius-lg); }
+.article li > img { display: block; margin: .4em 0 .8em; border-radius: var(--radius-lg); }
+.article figcaption { font-size: .78em; line-height: 1.7; color: var(--muted-foreground); }
+.article hr { margin: 2.2em auto; width: 100%; border: 0; border-top: 1px solid var(--border); }
 .article strong { font-weight: 650; }
 .seg-failed { text-decoration: underline wavy color-mix(in srgb, var(--destructive) 45%, transparent); text-decoration-skip-ink: none; text-underline-offset: 7px; }
 
@@ -256,7 +306,7 @@ ruby.ann {
   ruby-position: over; ruby-align: center; white-space: nowrap; overflow-wrap: normal;
   cursor: pointer; border-radius: 4px; transition: background-color .12s;
 }
-ruby.ann:hover, ruby.ann.active { background: var(--accent); }
+ruby.ann:hover, ruby.ann.active { background: color-mix(in srgb, var(--brand) 10%, transparent); }
 ruby.ann rt {
   font-family: var(--zh); font-size: .52em; font-weight: 500; line-height: 1.15; letter-spacing: 0;
   user-select: none; -webkit-user-select: none; white-space: nowrap;
@@ -269,7 +319,7 @@ ruby.ann.known rt { display: none; }
 .hide-phrases ruby.ann-phrase { text-decoration: none; }
 @media (pointer: coarse) {
   ruby.ann:hover { background: transparent; }
-  ruby.ann.active { background: var(--accent); }
+  ruby.ann.active { background: color-mix(in srgb, var(--brand) 10%, transparent); }
 }
 
 /* The part just added to a text, lit up for a moment after "Show". */
@@ -281,7 +331,7 @@ ruby.ann.known rt { display: none; }
 
 /* ------------------------------------------------------------ word card details */
 .card-detail { font-size: 14px; line-height: 1.6; color: var(--ink-2); }
-.card-detail h4 { margin: 14px 0 4px; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+.card-detail h4 { margin: 14px 0 4px; font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted-foreground); }
 .card-detail ul { margin: 0; padding-left: 1.1em; list-style: disc; }
 .card-detail li { margin: 3px 0; }
 .card-detail li::marker { color: var(--muted-foreground); }
@@ -305,18 +355,18 @@ ruby.ann.known rt { display: none; }
 .msg-body li::marker { color: var(--muted-foreground); }
 .msg-body li > p { margin: 0; }
 .msg-body blockquote {
-  margin: 0 0 .75em; padding: 2px 0 2px 14px; border-left: 2px solid var(--phrase-line);
+  margin: 0 0 .75em; padding: 2px 0 2px 14px; border-left: 2px solid color-mix(in srgb, var(--brand) 35%, var(--border));
   font-family: var(--read-font); font-size: 15.5px; color: var(--foreground);
 }
 .msg-body blockquote p { margin: .25em 0; }
-.msg-body code { padding: .1em .35em; border-radius: 4px; background: var(--sunken); font-size: .88em; }
-.msg-body pre { margin: 0 0 .75em; padding: 10px 12px; border-radius: var(--radius-md); background: var(--sunken); overflow-x: auto; }
-.msg-body pre code { padding: 0; background: none; }
+.msg-body code { padding: .1em .35em; border-radius: 5px; background: var(--sunken); border: 1px solid var(--border); font-family: var(--font-mono); font-size: .85em; }
+.msg-body pre { margin: 0 0 .75em; padding: 10px 12px; border-radius: var(--radius-lg); background: var(--sunken); border: 1px solid var(--border); overflow-x: auto; font-size: 13px; line-height: 1.6; }
+.msg-body pre code { padding: 0; background: none; border: 0; font-size: 1em; }
 .msg-body hr { margin: 1.1em 0; border: 0; border-top: 1px solid var(--border); }
 .msg-body table { width: 100%; margin: 0 0 .75em; border-collapse: collapse; font-size: 14px; display: block; overflow-x: auto; }
 .msg-body th, .msg-body td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
 .msg-body th { color: var(--foreground); font-weight: 600; }
-.msg-body a { color: var(--phrase); text-decoration: underline; text-underline-offset: 3px; }
+.msg-body a { color: var(--link); text-decoration: underline; text-underline-offset: 3px; }
 
 /* The end of the text being written: shown only when the stream pauses. */
 .caret {
@@ -363,7 +413,7 @@ ruby.ann.known rt { display: none; }
 /* An Ask AI answer arriving while the sidebar is hidden. */
 #btn-history.live::after {
   content: ""; position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%;
-  background: var(--gloss); box-shadow: 0 0 0 2px var(--background);
+  background: var(--brand); box-shadow: 0 0 0 2px var(--background);
   animation: live-dot 1.4s ease-in-out infinite;
 }
 @keyframes live-dot { 50% { opacity: .35; } }
@@ -378,25 +428,26 @@ ruby.ann.known rt { display: none; }
 @keyframes net-in { from { opacity: 0; transform: translateY(-3px); } }
 .net-in { animation: net-in .25s ease-out both; }
 
-/* Shelf covers: a soft tint and the title in serif type. */
-.cover { --tint-bg: #e8eefa; --tint-fg: #1e3a8a; --tint-line: #c8d6f3; }
-.cover[data-tint="1"] { --tint-bg: #e5f3ea; --tint-fg: #14532d; --tint-line: #c2e2cd; }
-.cover[data-tint="2"] { --tint-bg: #faefda; --tint-fg: #713f12; --tint-line: #efd9ae; }
-.cover[data-tint="3"] { --tint-bg: #fae6eb; --tint-fg: #881337; --tint-line: #f0c6d0; }
-.cover[data-tint="4"] { --tint-bg: #eee9fa; --tint-fg: #4c1d95; --tint-line: #d8cdf3; }
-.cover[data-tint="5"] { --tint-bg: #ebedf0; --tint-fg: #1f2937; --tint-line: #d3d7de; }
-.cover { @variant dark { --tint-bg: #232a35; --tint-fg: #c3d0e4; --tint-line: #333d4c; } }
-.cover[data-tint="1"] { @variant dark { --tint-bg: #212a23; --tint-fg: #bfd6c3; --tint-line: #2f3b31; } }
-.cover[data-tint="2"] { @variant dark { --tint-bg: #2e2920; --tint-fg: #e4d1ab; --tint-line: #40392b; } }
-.cover[data-tint="3"] { @variant dark { --tint-bg: #302427; --tint-fg: #e6c2c4; --tint-line: #433236; } }
-.cover[data-tint="4"] { @variant dark { --tint-bg: #2a2633; --tint-fg: #d0c7e4; --tint-line: #3a3446; } }
-.cover[data-tint="5"] { @variant dark { --tint-bg: #2b2a27; --tint-fg: #d5cfc4; --tint-line: #3c3a36; } }
+/* Shelf covers: a soft tint, a glow in its corner, and the title in serif type. */
+.cover { --tint-bg: #e9edfb; --tint-glow: #c9d3f8; --tint-fg: #1e2f6e; }
+.cover[data-tint="1"] { --tint-bg: #e6f4ec; --tint-glow: #bfe5cf; --tint-fg: #14532d; }
+.cover[data-tint="2"] { --tint-bg: #fbf1df; --tint-glow: #f6d9a6; --tint-fg: #6b3d0f; }
+.cover[data-tint="3"] { --tint-bg: #fbe9ed; --tint-glow: #f5c4cf; --tint-fg: #7f1d3a; }
+.cover[data-tint="4"] { --tint-bg: #efebfb; --tint-glow: #d6ccf6; --tint-fg: #46238f; }
+.cover[data-tint="5"] { --tint-bg: #eceef1; --tint-glow: #d2d7de; --tint-fg: #1f2937; }
+.cover { @variant dark { --tint-bg: #1e2333; --tint-glow: #2d3756; --tint-fg: #c6d0ee; } }
+.cover[data-tint="1"] { @variant dark { --tint-bg: #1b2620; --tint-glow: #284234; --tint-fg: #bfdcc8; } }
+.cover[data-tint="2"] { @variant dark { --tint-bg: #2a241b; --tint-glow: #4a3a22; --tint-fg: #e8d3ad; } }
+.cover[data-tint="3"] { @variant dark { --tint-bg: #2b1f23; --tint-glow: #4a2a34; --tint-fg: #ecc5cc; } }
+.cover[data-tint="4"] { @variant dark { --tint-bg: #241f31; --tint-glow: #3a3058; --tint-fg: #d4caef; } }
+.cover[data-tint="5"] { @variant dark { --tint-bg: #222326; --tint-glow: #34363b; --tint-fg: #d8d6d1; } }
+.cover { background: radial-gradient(130% 110% at 100% 0%, var(--tint-glow), transparent 62%), var(--tint-bg); color: var(--tint-fg); }
 
 /* Font choices: each name set in its own font. */
-[data-font="literata"] { font-family: var(--font-literata); }
-[data-font="classic"] { font-family: var(--font-classic); }
-[data-font="sans"] { font-family: var(--font-plain); }
-[data-font="legible"] { font-family: var(--font-legible); }
+[data-font="sans"] { font-family: var(--font-read-sans); }
+[data-font="serif"] { font-family: var(--font-read-serif); }
+[data-font="lexend"] { font-family: var(--font-read-lexend); }
+[data-font="legible"] { font-family: var(--font-read-legible); }
 [data-gloss="sans"] { font-family: var(--zh-sans); }
 [data-gloss="song"] { font-family: var(--zh-song); }
 [data-gloss="kai"] { font-family: var(--zh-kai); }

@@ -17,7 +17,7 @@ export function showToast(text: string, { action = null as null | { label: strin
     <div
       id="toast"
       role="status"
-      className="pointer-events-auto mx-auto flex min-h-10 max-w-[calc(100vw-32px)] items-center gap-2.5 rounded-[20px] bg-primary py-1.5 pr-1.5 pl-3.5 text-[13.5px] leading-snug text-primary-foreground shadow-(--shadow-float) has-[#toast-action]:pr-1.5 not-has-[#toast-action]:pr-4"
+      className="pointer-events-auto mx-auto flex min-h-10 max-w-[calc(100vw-32px)] items-center gap-2.5 rounded-full bg-primary py-1.5 pr-1.5 pl-3.5 text-[13.5px] leading-snug text-primary-foreground shadow-(--elev-float) has-[#toast-action]:pr-1.5 not-has-[#toast-action]:pr-4"
     >
       {icon === "spark"
         ? <SparkIcon className="toast-icon spark size-[15px] fill-current opacity-85" />
