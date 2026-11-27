@@ -10,6 +10,9 @@ on:
 permissions:
   contents: read
 
+env:
+  TGGW_MESSAGES_URL: ${{ vars.TGGW_MESSAGES_URL || 'https://tggw.xavierniu.cc/api/messages' }}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -84,6 +87,8 @@ jobs:
     #   DOCKERHUB_TOKEN     Docker Hub access token, Read & Write scope (required to push)
     #   DOCKERHUB_USERNAME  Docker Hub user or organisation (default: xavierniu)
     #   DOCKERHUB_REPO      repository name (default: lingolens)
+    #   TGGW_API_TOKEN      tggw token, for a Telegram message once the image is pushed
+    #                       (without it the message is skipped)
     env:
       DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USERNAME || 'xavierniu' }}
       IMAGE: ${{ secrets.DOCKERHUB_USERNAME || 'xavierniu' }}/${{ secrets.DOCKERHUB_REPO || 'lingolens' }}
@@ -116,6 +121,7 @@ jobs:
             type=sha,format=short
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -125,3 +131,66 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Notify tggw
+        if: success() && env.PUSH == 'true'
+        env:
+          TGGW_API_TOKEN: ${{ secrets.TGGW_API_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          META_VERSION: ${{ steps.meta.outputs.version }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TGGW_API_TOKEN}" ]; then
+            echo "::warning::TGGW_API_TOKEN is not set; skipping the tggw message"
+            exit 0
+          fi
+          # The tag people pull: the version for a v* tag, latest for the default branch.
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then tag="$META_VERSION"
+          elif [ "$GITHUB_REF_NAME" = "$DEFAULT_BRANCH" ]; then tag="latest"
+          else tag="$GITHUB_REF_NAME"; fi
+          hub_url="https://hub.docker.com/r/${IMAGE}"
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          commit_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+          digest_hex="${IMAGE_DIGEST#sha256:}"
+          message="$(printf '%s\n' \
+            "<b>GitHub Actions</b>" \
+            "Docker image <a href=\"${hub_url}\">${IMAGE}:${tag}</a> has been pushed" \
+            "digest: ${digest_hex:0:8}" \
+            "commit: <a href=\"${commit_url}\">${GITHUB_SHA:0:8}</a>" \
+            "link: <a href=\"${run_url}\">GitHub Workflow</a>")"
+
+          curl -fsS -X POST "$TGGW_MESSAGES_URL" \
+            -H "Authorization: Bearer ${TGGW_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg text "$message" '{text: $text, parse_mode: "HTML"}')"
+
+  # A failed test or build, on a push that would have published an image.
+  notify-failure:
+    needs: [test, e2e, docker]
+    if: failure() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ${{ secrets.DOCKERHUB_USERNAME || 'xavierniu' }}/${{ secrets.DOCKERHUB_REPO || 'lingolens' }}
+    steps:
+      - name: Notify tggw on failure
+        env:
+          TGGW_API_TOKEN: ${{ secrets.TGGW_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TGGW_API_TOKEN}" ]; then
+            echo "::warning::TGGW_API_TOKEN is not set; skipping the tggw message"
+            exit 0
+          fi
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          commit_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+          message="$(printf '%s\n' \
+            "<b>GitHub Actions</b>" \
+            "Docker image ${IMAGE} publish failed" \
+            "commit: <a href=\"${commit_url}\">${GITHUB_SHA:0:8}</a>" \
+            "link: <a href=\"${run_url}\">GitHub Workflow</a>")"
+
+          curl -fsS -X POST "$TGGW_MESSAGES_URL" \
+            -H "Authorization: Bearer ${TGGW_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg text "$message" '{text: $text, parse_mode: "HTML"}')"
