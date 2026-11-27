@@ -109,6 +109,7 @@ func (s *Service) Lookup(ctx context.Context, client llm.Client, cfg llm.Config,
 			Senses:      []Sense{{POS: "v.", ZH: "另一义项", EN: "another sense"}},
 			Examples:    []Pair{{EN: "This is an example with " + term + ".", ZH: "这是一个例句。"}},
 		}
+		llm.Record(ctx, llm.Usage{Input: 300 + llm.EstimateTokens(sentence), Output: 250}) // as if a real model
 	} else {
 		user, _ := json.Marshal(map[string]string{"term": term, "sentence": sentence})
 		raw, err := client.CompleteJSON(ctx, lookupSystemPrompt(lv), string(user), LookupSchema)

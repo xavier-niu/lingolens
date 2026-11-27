@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 type Config struct {
@@ -43,10 +44,38 @@ func errorf(status int, format string, args ...any) *Error {
 	return &Error{Msg: fmt.Sprintf(format, args...), Status: status}
 }
 
+// Usage is what a call to the model cost, in tokens.
+type Usage struct {
+	Input  int `json:"input"`
+	Output int `json:"output"`
+}
+
+type meterKey struct{}
+
+// WithMeter returns a context whose model calls report what they cost to m.
+// Calls may run at once (annotation does), so m must be safe for that.
+func WithMeter(ctx context.Context, m func(Usage)) context.Context {
+	return context.WithValue(ctx, meterKey{}, m)
+}
+
+// Record reports u to the context's meter, if it has one.
+func Record(ctx context.Context, u Usage) {
+	if m, ok := ctx.Value(meterKey{}).(func(Usage)); ok && (u.Input > 0 || u.Output > 0) {
+		m(u)
+	}
+}
+
+// EstimateTokens is a rough count for text (about four characters a token),
+// for the offline fake model, which has no real count.
+func EstimateTokens(s string) int {
+	return (utf8.RuneCountInString(s) + 3) / 4
+}
+
 type Client interface {
 	// CompleteJSON runs a one-shot completion and returns the JSON object it produced.
 	CompleteJSON(ctx context.Context, system, user string, schema map[string]any) ([]byte, error)
 	// StreamChat runs a multi-turn chat, calling onDelta for each text fragment.
+	// Both report what they cost to the context's meter (see WithMeter).
 	StreamChat(ctx context.Context, system string, msgs []Message, onDelta func(string) error) error
 }
 

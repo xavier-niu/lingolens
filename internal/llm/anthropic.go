@@ -90,6 +90,7 @@ func (c *anthropicClient) CompleteJSON(ctx context.Context, system, user string,
 	if err != nil {
 		return nil, anthropicError(ctx, err)
 	}
+	Record(ctx, anthropicUsage(resp.Usage))
 	if resp.StopReason == anthropic.StopReasonRefusal {
 		return nil, errorf(http.StatusUnprocessableEntity, "The model declined to process this text.")
 	}
@@ -135,6 +136,7 @@ func (c *anthropicClient) StreamChat(ctx context.Context, system string, msgs []
 			}
 		}
 	}
+	Record(ctx, anthropicUsage(message.Usage)) // spent even if the stream broke off
 	if err := stream.Err(); err != nil {
 		return anthropicError(ctx, err)
 	}
@@ -145,6 +147,15 @@ func (c *anthropicClient) StreamChat(ctx context.Context, system string, msgs []
 		return onDelta("\n\n_（回答已达到长度上限被截断。）_")
 	}
 	return nil
+}
+
+// anthropicUsage counts prompt-cache reads and writes as input: they are
+// tokens read all the same.
+func anthropicUsage(u anthropic.Usage) Usage {
+	return Usage{
+		Input:  int(u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens),
+		Output: int(u.OutputTokens),
+	}
 }
 
 func anthropicError(ctx context.Context, err error) error {

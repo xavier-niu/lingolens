@@ -124,9 +124,12 @@ func cacheKey(cfg llm.Config, lv levels.Level, text string) string {
 func (s *Service) annotateChunk(ctx context.Context, client llm.Client, cfg llm.Config, lv levels.Level, chunk []Segment) (map[string][]Item, error) {
 	if cfg.Kind == "fake" {
 		out := map[string][]Item{}
+		in := 0
 		for _, seg := range chunk {
 			out[seg.ID] = fakeItems(seg.Text, lv)
+			in += llm.EstimateTokens(seg.Text)
 		}
+		llm.Record(ctx, llm.Usage{Input: 900 + in, Output: 40 * len(chunk)}) // as if a real model
 		return out, nil
 	}
 	raw, err := client.CompleteJSON(ctx, SystemPrompt(lv), UserPrompt(chunk), Schema)

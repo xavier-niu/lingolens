@@ -147,3 +147,72 @@ func TestAnthropicRequestShape(t *testing.T) {
 		t.Errorf("unexpected fallback opt-in on custom base URL: beta=%q fallbacks=%v", beta, got["fallbacks"])
 	}
 }
+
+// meter collects what calls under ctx report they cost.
+func meter() (context.Context, *Usage) {
+	var u Usage
+	return WithMeter(context.Background(), func(x Usage) { u.Input += x.Input; u.Output += x.Output }), &u
+}
+
+func TestUsageIsMetered(t *testing.T) {
+	strictServer := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body["stream"] != true {
+			fmt.Fprint(w, `{"choices":[{"message":{"content":"{}"}}],"usage":{"prompt_tokens":120,"completion_tokens":30}}`)
+			return
+		}
+		// A server without stream_options turns the request down; the retry
+		// goes without it, and without a count.
+		if body["stream_options"] != nil && strictServer {
+			w.WriteHeader(400)
+			fmt.Fprint(w, `{"error":{"message":"Unrecognized request argument: stream_options"}}`)
+			return
+		}
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n")
+		if body["stream_options"] != nil {
+			fmt.Fprint(w, "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":50,\"completion_tokens\":7}}\n\n")
+		}
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+	c, _ := New(Config{Kind: "openai", BaseURL: srv.URL, Model: "m"}, false, srv.Client())
+	ctx, used := meter()
+	if _, err := c.CompleteJSON(ctx, "s", "u", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.StreamChat(ctx, "s", []Message{{Role: "user", Content: "q"}}, func(string) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if *used != (Usage{170, 37}) {
+		t.Errorf("used = %+v, want {170 37}", *used)
+	}
+
+	strictServer = true
+	ctx, used = meter()
+	var got strings.Builder
+	if err := c.StreamChat(ctx, "s", []Message{{Role: "user", Content: "q"}}, func(s string) error { got.WriteString(s); return nil }); err != nil || got.String() != "hi" {
+		t.Fatalf("strict server: %q, %v", got.String(), err)
+	}
+	if *used != (Usage{}) {
+		t.Errorf("strict server used = %+v, want nothing", *used)
+	}
+
+	// Anthropic: prompt-cache reads and writes count as input.
+	ant := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"msg_1","type":"message","role":"assistant","model":"m",
+			"content":[{"type":"text","text":"{}"}],"stop_reason":"end_turn",
+			"usage":{"input_tokens":10,"cache_creation_input_tokens":200,"cache_read_input_tokens":5,"output_tokens":9}}`)
+	}))
+	defer ant.Close()
+	a, _ := New(Config{Kind: "anthropic", BaseURL: ant.URL, APIKey: "k", Model: "m"}, false, nil)
+	ctx, used = meter()
+	if _, err := a.CompleteJSON(ctx, "s", "u", nil); err != nil {
+		t.Fatal(err)
+	}
+	if *used != (Usage{215, 9}) {
+		t.Errorf("anthropic used = %+v, want {215 9}", *used)
+	}
+}

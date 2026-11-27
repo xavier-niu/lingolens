@@ -146,6 +146,10 @@ var migrations = []string{
 	// 7: a note an agent keeps with a text it saved (its session id, say), so it
 	// can find the text again.
 	`ALTER TABLE books ADD COLUMN note TEXT NOT NULL DEFAULT '';`,
+	// 8: what the AI model has spent on a text (glosses, lookups, Ask AI), in
+	// tokens read and written.
+	`ALTER TABLE books ADD COLUMN tokens_in INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE books ADD COLUMN tokens_out INTEGER NOT NULL DEFAULT 0;`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

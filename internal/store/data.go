@@ -31,6 +31,9 @@ type Book struct {
 	// What the agent that saved it noted with it, to find it again (its
 	// session id, say); "" for none and for the user's own texts.
 	Note string `json:"note,omitempty"`
+	// Tokens the AI model has read and written for this text, in all.
+	TokensIn  int `json:"tokensIn"`
+	TokensOut int `json:"tokensOut"`
 }
 
 const MaxBookChars = 2_000_000 // a long novel
@@ -213,11 +216,11 @@ func ValidateBook(title, format, content string) (string, string, error) {
 	return title, format, nil
 }
 
-const bookCols = `id, title, format, words, progress, pos, created_at, updated_at, last_read_at, expires_at, note`
+const bookCols = `id, title, format, words, progress, pos, created_at, updated_at, last_read_at, expires_at, note, tokens_in, tokens_out`
 
 func scanBook(row interface{ Scan(...any) error }, withContent bool) (*Book, error) {
 	var b Book
-	dest := []any{&b.ID, &b.Title, &b.Format, &b.Words, &b.Progress, &b.Pos, &b.CreatedAt, &b.UpdatedAt, &b.LastReadAt, &b.ExpiresAt, &b.Note}
+	dest := []any{&b.ID, &b.Title, &b.Format, &b.Words, &b.Progress, &b.Pos, &b.CreatedAt, &b.UpdatedAt, &b.LastReadAt, &b.ExpiresAt, &b.Note, &b.TokensIn, &b.TokensOut}
 	if withContent {
 		dest = append(dest, &b.Content)
 	}
@@ -251,6 +254,17 @@ func (s *Store) ListBooks(ctx context.Context, userID int64) ([]Book, error) {
 
 func (s *Store) GetBook(ctx context.Context, userID int64, id string) (*Book, error) {
 	return scanBook(s.db.QueryRowContext(ctx, `SELECT `+bookCols+`, content FROM books WHERE user_id = ? AND id = ? AND `+live, userID, id), true)
+}
+
+// AddBookTokens adds what a model call for the book cost and returns the
+// book's new totals. It leaves updated_at alone: the text didn't change.
+func (s *Store) AddBookTokens(ctx context.Context, userID int64, id string, in, out int) (tokensIn, tokensOut int, err error) {
+	err = s.db.QueryRowContext(ctx, `UPDATE books SET tokens_in = tokens_in + ?, tokens_out = tokens_out + ?
+		WHERE user_id = ? AND id = ? RETURNING tokens_in, tokens_out`, in, out, userID, id).Scan(&tokensIn, &tokensOut)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = ErrNotFound
+	}
+	return
 }
 
 func (s *Store) CreateBook(ctx context.Context, userID int64, title, format, content string) (*Book, error) {

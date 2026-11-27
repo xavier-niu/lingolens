@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -160,6 +162,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 type annotateRequest struct {
+	Book     string             `json:"book"` // the text these are from, to count its tokens; "" for none
 	Level    string             `json:"level"`
 	Segments []annotate.Segment `json:"segments"`
 }
@@ -193,7 +196,8 @@ func (s *Server) handleAnnotate(w http.ResponseWriter, r *http.Request) {
 
 	nd := newNDJSON(w)
 	lv := levels.Get(req.Level)
-	err = s.annotator.Stream(r.Context(), client, cfg, lv, req.Segments, func(res annotate.Result) error {
+	ctx, meter := s.bookMeter(r, req.Book)
+	err = s.annotator.Stream(ctx, client, cfg, lv, req.Segments, func(res annotate.Result) error {
 		if res.Error != "" {
 			return nd.send(map[string]any{"type": "error", "ids": res.IDs, "error": res.Error, "status": res.Status})
 		}
@@ -202,10 +206,11 @@ func (s *Server) handleAnnotate(w http.ResponseWriter, r *http.Request) {
 	if err != nil && r.Context().Err() == nil {
 		_ = nd.send(map[string]any{"type": "error", "error": err.Error()})
 	}
-	_ = nd.send(map[string]any{"type": "done"})
+	_ = nd.send(map[string]any{"type": "done", "bookTokens": meter.save()})
 }
 
 type lookupRequest struct {
+	Book     string `json:"book"`
 	Level    string `json:"level"`
 	Term     string `json:"term"`
 	Sentence string `json:"sentence"`
@@ -228,15 +233,21 @@ func (s *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
 		writeLLMError(w, err)
 		return
 	}
-	entry, err := s.annotator.Lookup(r.Context(), client, cfg, levels.Get(req.Level), req.Term, req.Sentence)
+	ctx, meter := s.bookMeter(r, req.Book)
+	entry, err := s.annotator.Lookup(ctx, client, cfg, levels.Get(req.Level), req.Term, req.Sentence)
+	tokens := meter.save()
 	if err != nil {
 		writeLLMError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, entry)
+	writeJSON(w, http.StatusOK, struct {
+		*annotate.Entry
+		BookTokens *bookTokens `json:"bookTokens,omitempty"`
+	}{entry, tokens})
 }
 
 type chatRequest struct {
+	Book      string        `json:"book"`
 	Level     string        `json:"level"`
 	Passage   string        `json:"passage"`
 	Selection string        `json:"selection"`
@@ -259,7 +270,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 	nd := newNDJSON(w)
 	system := ChatSystemPrompt(levels.Get(req.Level), req.Passage, req.Selection)
-	err = client.StreamChat(r.Context(), system, req.Messages, func(delta string) error {
+	ctx, meter := s.bookMeter(r, req.Book)
+	err = client.StreamChat(ctx, system, req.Messages, func(delta string) error {
 		return nd.send(map[string]any{"type": "delta", "text": delta})
 	})
 	if err != nil && r.Context().Err() == nil {
@@ -270,7 +282,58 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = nd.send(map[string]any{"type": "error", "error": err.Error(), "status": status})
 	}
-	_ = nd.send(map[string]any{"type": "done"})
+	_ = nd.send(map[string]any{"type": "done", "bookTokens": meter.save()})
+}
+
+// bookTokens is what the model has spent on a text, in all.
+type bookTokens struct {
+	Input  int `json:"input"`
+	Output int `json:"output"`
+}
+
+// meter adds up what a request's model calls cost, for the text they were for.
+type meter struct {
+	s    *Server
+	r    *http.Request
+	book string
+	mu   sync.Mutex
+	used llm.Usage
+}
+
+// bookMeter returns a context that counts the tokens spent under it towards
+// book ("" counts nothing: a page being clipped, say).
+func (s *Server) bookMeter(r *http.Request, book string) (context.Context, *meter) {
+	m := &meter{s: s, r: r, book: strings.TrimSpace(book)}
+	if m.book == "" || len(m.book) > 100 {
+		return r.Context(), m
+	}
+	return llm.WithMeter(r.Context(), func(u llm.Usage) {
+		m.mu.Lock()
+		m.used.Input += u.Input
+		m.used.Output += u.Output
+		m.mu.Unlock()
+	}), m
+}
+
+// save adds what was spent to the book and returns its new totals; nil if
+// nothing was spent or the book isn't the user's (a text not yet synced).
+func (m *meter) save() *bookTokens {
+	m.mu.Lock()
+	used := m.used
+	m.mu.Unlock()
+	if used.Input == 0 && used.Output == 0 {
+		return nil
+	}
+	// Spent even if the reader left: count it all the same.
+	ctx := context.WithoutCancel(m.r.Context())
+	in, out, err := m.s.opts.Store.AddBookTokens(ctx, currentUser(ctx).ID, m.book, used.Input, used.Output)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			m.s.opts.Logger.Warn("count tokens", "book", m.book, "err", err)
+		}
+		return nil
+	}
+	return &bookTokens{Input: in, Output: out}
 }
 
 func validateChat(req *chatRequest) string {

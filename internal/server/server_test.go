@@ -467,6 +467,79 @@ func TestLookup(t *testing.T) {
 	}
 }
 
+// What the model spends on a text (glosses, lookups, Ask AI) adds up on it.
+func TestTokensCountedPerBook(t *testing.T) {
+	e := newEnv(t)
+	a := e.signIn(t, "a@example.com", false)
+	b := e.signIn(t, "b@example.com", false)
+	book := decodeJSON[store.Book](t, e.do(t, a, "POST", "/api/books", map[string]string{"content": "Notes\n\nBy and large, it worked."}))
+	type tokens struct{ Input, Output int }
+	last := func(events []map[string]any) *tokens {
+		done := events[len(events)-1]
+		if done["type"] != "done" {
+			t.Fatalf("last event %v", done)
+		}
+		bt, ok := done["bookTokens"].(map[string]any)
+		if !ok {
+			return nil
+		}
+		return &tokens{int(bt["input"].(float64)), int(bt["output"].(float64))}
+	}
+	stored := func() tokens {
+		for _, x := range decodeJSON[[]store.Book](t, e.do(t, a, "GET", "/api/books", nil)) {
+			if x.ID == book.ID {
+				if x.UpdatedAt != book.UpdatedAt {
+					t.Errorf("counting tokens changed updatedAt: %s -> %s", book.UpdatedAt, x.UpdatedAt)
+				}
+				return tokens{x.TokensIn, x.TokensOut}
+			}
+		}
+		t.Fatal("book gone")
+		return tokens{}
+	}
+
+	got := last(readEvents(t, e.do(t, a, "POST", "/api/annotate", map[string]any{
+		"book": book.ID, "level": "B1", "segments": []map[string]string{{"id": "s0", "text": "By and large, extraordinary results take time."}},
+	})))
+	if got == nil || got.Input == 0 || got.Output == 0 || *got != stored() {
+		t.Fatalf("after annotating: sent %+v, stored %+v", got, stored())
+	}
+	before := *got
+
+	entry := decodeJSON[struct {
+		Lemma      string
+		BookTokens *tokens `json:"bookTokens"`
+	}](t, e.do(t, a, "POST", "/api/lookup", map[string]string{"book": book.ID, "term": "worked", "sentence": "By and large, it worked."}))
+	if entry.Lemma != "worked" || entry.BookTokens == nil || entry.BookTokens.Input <= before.Input || *entry.BookTokens != stored() {
+		t.Fatalf("after lookup: %+v, stored %+v", entry, stored())
+	}
+	before = *entry.BookTokens
+
+	got = last(readEvents(t, e.do(t, a, "POST", "/api/chat", map[string]any{
+		"book": book.ID, "passage": "By and large, it worked.", "selection": "By and large",
+		"messages": []map[string]string{{"role": "user", "content": "意思？"}},
+	})))
+	if got == nil || got.Output <= before.Output || *got != stored() {
+		t.Fatalf("after chat: sent %+v, stored %+v", got, stored())
+	}
+	before = *got
+
+	// Someone else's text, or none: counted nowhere.
+	if got := last(readEvents(t, e.do(t, b, "POST", "/api/annotate", map[string]any{
+		"book": book.ID, "segments": []map[string]string{{"id": "s0", "text": "Somebody else entirely."}},
+	}))); got != nil {
+		t.Errorf("b's annotation reported a's book: %+v", got)
+	}
+	if got := last(readEvents(t, e.do(t, a, "POST", "/api/annotate", map[string]any{
+		"segments": []map[string]string{{"id": "s0", "text": "Without any book at all."}},
+	}))); got != nil {
+		t.Errorf("no book, yet totals sent: %+v", got)
+	}
+	if stored() != before {
+		t.Errorf("totals moved: %+v -> %+v", before, stored())
+	}
+}
+
 func TestClipAround(t *testing.T) {
 	passage := strings.Repeat("a", 5000) + "TARGET" + strings.Repeat("b", 5000)
 	got := clipAround(passage, "TARGET", 1000)

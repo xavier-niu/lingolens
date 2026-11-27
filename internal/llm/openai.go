@@ -92,25 +92,45 @@ func (c *openAIClient) CompleteJSON(ctx context.Context, system, user string, _ 
 			} `json:"message"`
 			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
+		Usage *openAIUsage `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil || len(out.Choices) == 0 {
 		return nil, errorf(http.StatusBadGateway, "Unexpected response from provider.")
 	}
+	Record(ctx, out.Usage.usage())
 	return ExtractJSON(out.Choices[0].Message.Content)
 }
 
 func (c *openAIClient) StreamChat(ctx context.Context, system string, msgs []Message, onDelta func(string) error) error {
 	messages := []Message{{Role: "system", Content: system}}
 	messages = append(messages, msgs...)
-	resp, err := c.post(ctx, map[string]any{"model": c.cfg.Model, "stream": true, "messages": messages})
+	body := map[string]any{
+		"model": c.cfg.Model, "stream": true, "messages": messages,
+		"stream_options": map[string]bool{"include_usage": true}, // the cost, in a last chunk
+	}
+	resp, err := c.post(ctx, body)
 	if err != nil {
 		return err
+	}
+	if resp.StatusCode == http.StatusBadRequest {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
+		resp.Body.Close()
+		if !bytes.Contains(raw, []byte("stream_options")) {
+			return httpError(resp.StatusCode, raw)
+		}
+		// Some compatible servers lack stream_options: go without the count.
+		delete(body, "stream_options")
+		if resp, err = c.post(ctx, body); err != nil {
+			return err
+		}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 		return httpError(resp.StatusCode, raw)
 	}
+	var usage *openAIUsage
+	defer func() { Record(ctx, usage.usage()) }() // spent even if the stream broke off
 	sc := bufio.NewScanner(resp.Body)
 	sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	for sc.Scan() {
@@ -131,9 +151,13 @@ func (c *openAIClient) StreamChat(ctx context.Context, system string, msgs []Mes
 			Error *struct {
 				Message string `json:"message"`
 			} `json:"error"`
+			Usage *openAIUsage `json:"usage"`
 		}
 		if json.Unmarshal([]byte(data), &chunk) != nil {
 			continue
+		}
+		if chunk.Usage != nil {
+			usage = chunk.Usage
 		}
 		if chunk.Error != nil {
 			return errorf(http.StatusBadGateway, "Provider error: %s", chunk.Error.Message)
@@ -148,4 +172,16 @@ func (c *openAIClient) StreamChat(ctx context.Context, system string, msgs []Mes
 		return errorf(http.StatusBadGateway, "Stream interrupted: %v", err)
 	}
 	return ctx.Err()
+}
+
+type openAIUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+}
+
+func (u *openAIUsage) usage() Usage {
+	if u == nil {
+		return Usage{}
+	}
+	return Usage{Input: u.PromptTokens, Output: u.CompletionTokens}
 }
