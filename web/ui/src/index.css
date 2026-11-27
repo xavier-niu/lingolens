@@ -275,6 +275,10 @@
 .article :is(h1, h2, h3) { scroll-margin-top: 76px; }
 .article h1 { font-size: 1.5em; } .article h2 { font-size: 1.3em; } .article h3 { font-size: 1.1em; } .article h4 { font-size: 1em; }
 .article p, .article ul, .article ol, .article blockquote, .article figure { margin: 0 0 1.1em; }
+/* Fill each line before starting the next. "pretty" (the default for p) lets
+   Safari even out the whole paragraph by moving words down early, which on a
+   phone leaves every line short. */
+.article p { text-wrap: wrap; }
 .article ul { list-style: disc; padding-left: 1.3em; }
 .article ol { list-style: decimal; padding-left: 1.4em; }
 .article li::marker { color: var(--muted-foreground); }
