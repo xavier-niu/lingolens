@@ -223,6 +223,7 @@ await page.screenshot({ path: `${OUT}/s-toc.png` });
 // A narrow window: a button at the bottom right opens it over the page.
 await page.setViewportSize({ width: 900, height: 900 });
 await page.waitForSelector('#btn-toc');
+await page.$eval('#article h2 >> nth=1', (h) => h.scrollIntoView({ block: 'start' })); // the page above it changes with the width
 check('narrow window: a Contents button instead', !(await page.$('#toc')) && await visible('#btn-toc'));
 await page.click('#btn-toc');
 await page.waitForSelector('#toc-pop');
@@ -646,11 +647,9 @@ await pp.screenshot({ path: `${OUT}/s-phone-url.png` });
 await pp.keyboard.press('Escape');
 await pp.locator('.book-link').first().click();
 await pp.waitForSelector('#reader-view:not([hidden])');
-check('phone: no Append Text in the bar, so the title keeps its room', !(await pp.isVisible('#btn-append')));
-await pp.click('#btn-menu');
-check('phone: Append Text is in the ⋯ menu', await pp.isVisible('#menu-append'));
-await pp.screenshot({ path: `${OUT}/s-phone-menu.png` });
-await pp.click('#menu-append');
+check('phone: Append Text floats with the text\'s tools, as on a computer', await pp.isVisible('#reader-tools #btn-append'));
+await pp.screenshot({ path: `${OUT}/s-phone-tools.png` });
+await pp.click('#btn-append');
 await pp.waitForSelector('#source-dialog[data-state="open"]');
 check('…and opens the text on Append', (await pp.$eval('#src-modes input:checked', (i) => i.value)) === 'append' && await pp.isVisible('#src-more'));
 await pp.keyboard.press('Escape');

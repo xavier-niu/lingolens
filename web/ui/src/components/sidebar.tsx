@@ -1,16 +1,17 @@
 import * as React from "react"
-import { ChevronsUpDown, History, Library, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { ChevronsUpDown, History, Library, PanelLeft, PanelLeftClose, PanelLeftOpen, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { isFinished, minutesLeft } from "@/lib/library.js"
 import { useApp, getLevel, type Book } from "@/app/store"
 import { useT } from "@/app/hooks"
 import { isExpired, tokensOf } from "@/app/books"
 import { chats, historyItems, loadHistory, resumeChat, toggleHistory } from "@/app/chat"
-import { toggleRail, useRailMakingRoom, useRailMode } from "@/app/rail"
+import { slideRail, toggleRail, useBare, useRailMakingRoom, useRailMode, useRailSlides } from "@/app/rail"
 import { LogoMark } from "@/components/icons"
 import { Avatar } from "@/components/avatar"
 import { AccountMenuContent, Annotating, NetStatus } from "@/components/header"
 import { fmtWhen } from "@/components/chat-panel"
+import { floating, floatingAway, floatingButton, useAwayWhileReading } from "@/components/reader-tools"
 import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 // The sidebar on wide screens, in place of the header (the text's own tools
@@ -19,18 +20,93 @@ import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu
 // about any text; in a text, about it). At the foot:
 // statistics (of the text being read, or of the shelf), what's happening
 // (glosses on the way, syncing), and the account. Narrowed, it's a
-// strip of icons. See app/rail.ts for when it shows and how wide.
+// strip of icons. On narrower screens it's hidden until the button floating at
+// the top left slides it in over the page. See app/rail.ts for when it shows
+// and how wide.
 
 const CHATS = 8
 
 export function Sidebar() {
   const mode = useRailMode()
+  const slides = useRailSlides()
+  const bare = useBare()
+  const slid = useApp((s) => s.railSlid)
   React.useLayoutEffect(() => {
     if (mode) document.body.dataset.rail = mode
     else delete document.body.dataset.rail
-  }, [mode])
-  if (!mode) return null
-  return mode === "full" ? <FullRail /> : <IconRail />
+    document.body.toggleAttribute("data-bare", bare) // no header (see index.css)
+  }, [mode, bare])
+  React.useEffect(() => { if (!slides) slideRail(false) }, [slides])
+  if (mode) return mode === "full" ? <FullRail /> : <IconRail />
+  if (!slides) return null
+  return (
+    <>
+      <FloatStart />
+      {slid && <SlidRail />}
+    </>
+  )
+}
+
+// Narrower screens: the button that slides the sidebar in, and beside it what's
+// happening (glosses on the way, syncing), floating at the top left.
+function FloatStart() {
+  const t = useT()
+  const slid = useApp((s) => s.railSlid)
+  const away = useAwayWhileReading(!slid)
+  return (
+    <div id="float-start" data-away={away || undefined} className={cn(floating, "float-start left-4 max-sm:top-3 max-sm:left-3", away && floatingAway)}>
+      <button
+        id="btn-rail"
+        type="button"
+        className={floatingButton}
+        title={t("rail.open")}
+        aria-label={t("rail.open")}
+        aria-expanded={slid}
+        aria-controls={slid ? "rail" : undefined}
+        onClick={() => slideRail(true)}
+      >
+        <PanelLeft strokeWidth={1.7} />
+      </button>
+      <Annotating place="float" />
+      <NetStatus place="float" />
+    </div>
+  )
+}
+
+// Slid in over the page, on a phone or tablet. It goes again on its own once
+// used: on going anywhere (a link, the account menu), on Ask AI opening, on a
+// press outside it, and on Escape. Focus moves into it and back to the button.
+function SlidRail() {
+  const view = useApp((s) => s.view)
+  const bookId = useApp((s) => s.book?.id)
+  const first = React.useRef(true)
+  React.useEffect(() => {
+    if (first.current) { first.current = false; return }
+    slideRail(false)
+  }, [view, bookId])
+  React.useEffect(() => {
+    const away = () => slideRail(false)
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector("[data-radix-popper-content-wrapper]")) away()
+    }
+    window.addEventListener("hashchange", away)
+    document.addEventListener("keydown", key)
+    const root = document.documentElement
+    root.style.overflow = "hidden" // the page stays put underneath
+    document.querySelector<HTMLElement>("#rail-close")?.focus({ preventScroll: true })
+    return () => {
+      window.removeEventListener("hashchange", away)
+      document.removeEventListener("keydown", key)
+      root.style.overflow = ""
+      document.querySelector<HTMLElement>("#btn-rail")?.focus({ preventScroll: true })
+    }
+  }, [])
+  return (
+    <>
+      <div id="rail-backdrop" className="rail-backdrop fixed inset-0 z-40 bg-black/25 dark:bg-black/50" aria-hidden="true" onClick={() => slideRail(false)} />
+      <FullRail slid />
+    </>
+  )
 }
 
 // A row: an icon and its name, quiet until hovered or current.
@@ -39,17 +115,25 @@ const row =
 
 const heading = "m-0 px-3 text-[12px] font-medium text-muted-foreground"
 
-function FullRail() {
+function FullRail({ slid = false }: { slid?: boolean }) {
   const t = useT()
   const view = useApp((s) => s.view)
   const book = useApp((s) => s.book)
   useApp((s) => s.rev) // the open text's progress changes in place
   const reading = view === "reader" ? book : null
   return (
-    <aside id="rail" data-mode="full" aria-label={t("rail.label")} className="rail fixed inset-y-0 left-0 z-20 flex w-(--rail) flex-col border-r bg-background">
-      <div className="flex h-16 shrink-0 items-center justify-between pr-2.5 pl-6">
+    <aside
+      id="rail"
+      data-mode={slid ? "slid" : "full"}
+      aria-label={t("rail.label")}
+      className={cn(
+        "rail fixed inset-y-0 left-0 flex flex-col border-r bg-background",
+        slid ? "rail-slid z-50 w-[min(288px,calc(100vw-48px))] pb-[env(safe-area-inset-bottom)] shadow-(--elev-float)" : "z-20 w-(--rail)",
+      )}
+    >
+      <div className={cn("flex shrink-0 items-center justify-between pr-2.5 pl-6", slid ? "h-14" : "h-16")}>
         <a
-          id="home-link"
+          id={slid ? undefined : "home-link"}
           href="#/"
           title={t("reader.back")}
           className="brand inline-flex min-w-0 items-center gap-2.5 rounded-md text-foreground no-underline outline-none focus-visible:ring-3 focus-visible:ring-ring/35"
@@ -57,7 +141,13 @@ function FullRail() {
           <LogoMark className="size-7" />
           <span className="wordmark text-base font-semibold tracking-[-0.02em]" translate="no">LingoLens</span>
         </a>
-        <RailToggle />
+        {slid
+          ? (
+            <button id="rail-close" type="button" className={cn(iconButton, "size-9")} title={t("rail.close")} aria-label={t("rail.close")} onClick={() => slideRail(false)}>
+              <X strokeWidth={1.8} />
+            </button>
+          )
+          : <RailToggle />}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain px-3 pt-2 pb-4">
@@ -70,8 +160,8 @@ function FullRail() {
       <div className="shrink-0 px-3 pb-3">
         <Stats book={reading} />
         <div className="flex flex-col gap-0.5 border-t pt-2">
-          <Annotating place="row" />
-          <NetStatus place="row" />
+          {!slid && <Annotating place="row" />}
+          {!slid && <NetStatus place="row" />}
           <AccountButton />
         </div>
       </div>

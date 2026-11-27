@@ -3,7 +3,7 @@
 // progress, AI tokens spent, questions asked), the status and the account
 // (which holds Settings). Narrowed, it's a strip of icons, as it is below
 // 1440px while Ask AI is open. The text's own tools float at the top right.
-import { chromium } from 'playwright';
+import { chromium, devices } from 'playwright';
 import { BASE, freshUser, signIn, checker, glossesSettled, settled } from './helpers.mjs';
 
 const OUT = process.argv[2];
@@ -257,17 +257,48 @@ await lp.waitForFunction(() => !document.body.classList.contains('chat-open'));
 check('laptop: Ask AI closed, the sidebar is full again', (await layout(lp)).mode === 'full');
 await lap.close();
 
-// ---- narrower screens: the header, no sidebar
-for (const [name, viewport] of [['narrow-desktop', { width: 1000, height: 800 }], ['tablet', { width: 768, height: 1024 }]]) {
-  const nc = await browser.newContext({ viewport });
+// ---- narrower screens: the header; the sidebar hidden until slid in, and
+// gone again once used
+for (const [name, opts] of [
+  ['narrow-desktop', { viewport: { width: 1000, height: 800 } }],
+  ['tablet', { viewport: { width: 768, height: 1024 }, hasTouch: true }],
+  ['phone', { ...devices['iPhone 13'] }],
+]) {
+  const nc = await browser.newContext(opts);
   const np = await nc.newPage();
   np.on('pageerror', (e) => errors.push(String(e)));
   await signIn(np, user);
-  await np.goto(BASE + '#/read/' + a.id);
+  await np.goto(BASE + '#/read/' + b.id);
   await np.waitForSelector('#reader-view:not([hidden])');
   r = await layout(np);
-  check(`${name}: the header, no sidebar`, !r.rail && r.header && r.margin === 0 && r.scrollW <= r.vw, JSON.stringify(r));
-  check(`${name}: the tools are in the header`, !(await inRail(np, '#btn-history')) && await np.isVisible('header #btn-history') && await np.isVisible('header #btn-display') && !(await np.$('#reader-tools')));
+  check(`${name}: no header, the sidebar hidden`, !r.rail && !r.header && r.margin === 0 && r.scrollW <= r.vw, JSON.stringify(r));
+  check(`${name}: the text's tools float at the top right, as on a computer`, await np.isVisible('#reader-tools #btn-display') && await np.isVisible('#reader-tools #btn-append'));
+  check(`${name}: the sidebar's button floats at the top left`, await np.isVisible('#float-start #btn-rail'));
+
+  const slide = async () => { await np.click('#btn-rail'); await np.waitForSelector('#rail[data-mode="slid"]'); await settled(np, '#rail'); };
+  await slide();
+  r = await layout(np);
+  const over = await np.evaluate(() => ({
+    left: document.querySelector('#rail').getBoundingClientRect().left,
+    width: document.querySelector('#rail').getBoundingClientRect().width,
+    focus: document.activeElement?.id,
+    parts: ['#rail-shelf', '#rail-chats', '#btn-history', '#rail-stats', '#btn-account'].every((s) => document.querySelector(`#rail ${s}`)),
+  }));
+  check(`${name}: over the page, which stays put`, r.rail && r.margin === 0 && over.left === 0 && over.width <= r.vw - 48 && await np.isVisible('#rail-backdrop'), JSON.stringify({ r, over }));
+  check(`${name}: the same sidebar: shelf, Ask AI history, statistics, account`, over.parts && (await np.getAttribute('#rail-stats', 'data-scope')) === 'text');
+  check(`${name}: focus moves into it`, over.focus === 'rail-close', over.focus);
+  await np.screenshot({ path: `${OUT}/r-slid-${name}.png` });
+  await np.mouse.click(r.vw - 12, r.vh / 2);
+  await np.waitForSelector('#rail', { state: 'detached' });
+  check(`${name}: a press outside puts it away`, !(await np.$('#rail-backdrop')));
+  await slide();
+  await np.keyboard.press('Escape');
+  await np.waitForSelector('#rail', { state: 'detached' });
+  check(`${name}: so does Escape, back to its button`, await np.evaluate(() => document.activeElement?.id) === 'btn-rail');
+  await slide();
+  await np.click('#rail-shelf');
+  await np.waitForSelector('#library-view:not([hidden])');
+  check(`${name}: going somewhere puts it away`, !(await np.$('#rail')));
   await nc.close();
 }
 

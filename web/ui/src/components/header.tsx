@@ -1,21 +1,19 @@
 import * as React from "react"
-import { Check, CloudOff, FilePlus2, History, LogOut, MoreHorizontal, PencilLine, RefreshCw, Settings } from "lucide-react"
+import { Check, CloudOff, History, LogOut, RefreshCw, Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { net } from "@/lib/api.js"
 import { useApp, get, set, showBanner } from "@/app/store"
 import { useT } from "@/app/hooks"
 import { toggleHistory } from "@/app/chat"
 import { signOut } from "@/app/session"
-import { LogoMark, TextSizeIcon } from "@/components/icons"
-import { ReadingOptions } from "@/components/reading-options"
+import { LogoMark } from "@/components/icons"
 import { confirmDialog } from "@/components/confirm"
 import { Avatar } from "@/components/avatar"
-import { Popover, PopoverTrigger } from "@/components/ui/popover"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Spinner } from "@/components/ui/spinner"
-import { useRailMode } from "@/app/rail"
+import { useBare } from "@/app/rail"
 
 // Header icons: bare, with no box; they darken on hover and take the accent
 // colour while their menu or sidebar is open.
@@ -25,16 +23,17 @@ export const barButton =
 const navLink =
   "nav-link inline-flex h-9 items-center px-3 text-sm font-medium text-ink-2 no-underline transition-colors duration-150 outline-none hover:text-brand focus-visible:rounded-md focus-visible:ring-3 focus-visible:ring-ring/35 aria-[current=page]:text-brand"
 
-// The header on phones and tablets, plain as a documentation site's: the name
-// on the left (it goes to the shelf); on the right the shelf, a thin divider,
-// then this page's tools as bare icons, and the account menu, which holds
-// Settings. Nothing under it: a hairline appears once the page scrolls. On
-// wider screens the sidebar holds all of this instead (see sidebar.tsx).
+// The header, only on pages without the sidebar (a page clipped from the web):
+// plain as a documentation site's, the name on the left (it goes to the
+// shelf); on the right the shelf, a thin divider, Ask AI history, and the
+// account menu, which holds Settings. Nothing under it: a hairline appears
+// once the page scrolls. The shelf, the texts and Settings have the sidebar
+// instead, on every screen (see sidebar.tsx).
 export function Header() {
   const t = useT()
   const view = useApp((s) => s.view)
   const me = useApp((s) => s.me)
-  const rail = useRailMode()
+  const bare = useBare()
   const [scrolled, setScrolled] = React.useState(false)
   React.useEffect(() => {
     const on = () => setScrolled(window.scrollY > 2)
@@ -44,7 +43,7 @@ export function Header() {
   }, [view])
 
   const reader = view === "reader"
-  if (rail) return null
+  if (bare) return null
 
   return (
     <header
@@ -54,15 +53,17 @@ export function Header() {
         scrolled && "border-border",
       )}
     >
-      <a
-        id="home-link"
-        href="#/"
-        title={t("reader.back")}
-        className="brand inline-flex min-w-0 shrink-0 items-center gap-2.5 rounded-md text-foreground no-underline outline-none focus-visible:ring-3 focus-visible:ring-ring/35"
-      >
-        <LogoMark className="size-7" />
-        <span className={cn("wordmark text-base font-semibold tracking-[-0.02em]", reader && "max-sm:sr-only")} translate="no">LingoLens</span>
-      </a>
+      <div className="bar-start flex min-w-0 shrink-0 items-center">
+        <a
+          id="home-link"
+          href="#/"
+          title={t("reader.back")}
+          className="brand inline-flex min-w-0 shrink-0 items-center gap-2.5 rounded-md text-foreground no-underline outline-none focus-visible:ring-3 focus-visible:ring-ring/35"
+        >
+          <LogoMark className="size-7" />
+          <span className={cn("wordmark text-base font-semibold tracking-[-0.02em]", reader && "max-sm:sr-only")} translate="no">LingoLens</span>
+        </a>
+      </div>
 
       <div className="bar-end flex shrink-0 items-center">
         <Annotating />
@@ -74,23 +75,9 @@ export function Header() {
           <span className="bar-divider mx-2 h-6 w-px bg-border" aria-hidden="true" />
         </div>
         <div className="bar-tools flex items-center max-sm:gap-0">
-          {reader && <ReadingOptionsButton />}
           <HistoryButton />
-          {reader && (
-            <button
-              id="btn-append"
-              type="button"
-              className={cn(barButton, "max-sm:hidden")}
-              title={t("btn.append")}
-              aria-label={t("btn.append")}
-              onClick={() => editText(true)}
-            >
-              <FilePlus2 strokeWidth={1.7} />
-            </button>
-          )}
-          {reader && <ReaderMenu />}
         </div>
-        {me && <AccountMenu hideOnPhone={reader} />}
+        {me && <AccountMenu />}
       </div>
     </header>
   )
@@ -104,7 +91,7 @@ export function editText(append: boolean) {
 
 // Where a status sits: in the header, on a row of the sidebar, or in the
 // sidebar's strip of icons (its words left for screen readers and the tooltip).
-export type StatusPlace = "bar" | "row" | "icon"
+export type StatusPlace = "bar" | "row" | "icon" | "float"
 
 // Text on screen waiting for its glosses: a quiet line of text, not a badge.
 export function Annotating({ place = "bar" }: { place?: StatusPlace }) {
@@ -116,16 +103,17 @@ export function Annotating({ place = "bar" }: { place?: StatusPlace }) {
       id="progress"
       role="status"
       hidden={!shown}
-      title={place === "icon" ? text : undefined}
+      title={place === "icon" || place === "float" ? text : undefined}
       className={cn(
         "annotating net-in inline-flex items-center gap-2 text-[13px] whitespace-nowrap text-muted-foreground",
         place === "bar" && "mr-3 h-7 max-sm:mr-1",
         place === "row" && "h-8 w-full gap-2.5 px-3",
         place === "icon" && "size-10 justify-center",
+        place === "float" && "size-8 justify-center",
       )}
     >
       <Spinner className="size-3.5 shrink-0 text-brand" />
-      <span id="progress-text" className={cn(place === "bar" && "max-sm:sr-only", place === "row" && "truncate", place === "icon" && "sr-only")}>{text}</span>
+      <span id="progress-text" className={cn(place === "bar" && "max-sm:sr-only", place === "row" && "truncate", (place === "icon" || place === "float") && "sr-only")}>{text}</span>
     </div>
   )
 }
@@ -149,28 +137,14 @@ export function NetStatus({ place = "bar" }: { place?: StatusPlace }) {
         place === "bar" && "mr-3 h-7 max-sm:mr-0.5 max-sm:w-8 max-sm:justify-center",
         place === "row" && "h-8 w-full gap-2.5 rounded-lg px-3 hover:bg-accent",
         place === "icon" && "size-10 justify-center rounded-lg hover:bg-accent",
+        place === "float" && "size-8 justify-center rounded-full hover:bg-accent",
         mode === "synced" && "text-success hover:text-success",
         mode === "offline" && "text-foreground",
       )}
     >
       <Icon className={cn("size-[15px] shrink-0", mode === "syncing" && "animate-spin [animation-duration:1.1s]")} strokeWidth={1.9} />
-      <span id="net-label" className={cn("net-label", place === "bar" && "max-sm:hidden", place === "icon" && "sr-only")}>{mode ? t(`net.${mode}`) : ""}</span>
+      <span id="net-label" className={cn("net-label", place === "bar" && "max-sm:hidden", (place === "icon" || place === "float") && "sr-only")}>{mode ? t(`net.${mode}`) : ""}</span>
     </button>
-  )
-}
-
-function ReadingOptionsButton() {
-  const t = useT()
-  const [open, setOpen] = React.useState(false)
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button id="btn-display" type="button" className={barButton} title={t("display.title")} aria-label={t("display.title")}>
-          <TextSizeIcon />
-        </button>
-      </PopoverTrigger>
-      <ReadingOptions onClose={() => setOpen(false)} />
-    </Popover>
   )
 }
 
@@ -195,33 +169,7 @@ function HistoryButton() {
 
 const menuItem = "menu-item h-9 gap-2.5 rounded-lg px-2.5 text-sm [&_svg]:text-muted-foreground"
 
-// The reader's ⋯ menu. On a phone it also holds Append Text, and Settings (the
-// account button makes way for the title).
-function ReaderMenu() {
-  const t = useT()
-  return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <button id="btn-menu" type="button" className={barButton} title={t("menu.title")} aria-label={t("menu.title")}>
-          <MoreHorizontal strokeWidth={2} />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent id="menu-pop" align="end" sideOffset={8} className="w-auto min-w-52 p-1.5">
-        <DropdownMenuItem id="btn-edit" className={menuItem} onSelect={() => editText(false)}>
-          <PencilLine />{t("btn.edit")}
-        </DropdownMenuItem>
-        <DropdownMenuItem id="menu-append" className={cn(menuItem, "sm:hidden")} onSelect={() => editText(true)}>
-          <FilePlus2 />{t("btn.append")}
-        </DropdownMenuItem>
-        <DropdownMenuItem id="btn-settings" className={menuItem} asChild>
-          <a href="#/settings"><Settings />{t("settings.page")}</a>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-function AccountMenu({ hideOnPhone }: { hideOnPhone: boolean }) {
+function AccountMenu() {
   const t = useT()
   const me = useApp((s) => s.me)!
   return (
@@ -230,7 +178,7 @@ function AccountMenu({ hideOnPhone }: { hideOnPhone: boolean }) {
         <button
           id="btn-account"
           type="button"
-          className={cn("avatar-btn group ml-2 inline-grid size-9 shrink-0 place-items-center rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/35 max-sm:ml-1", hideOnPhone && "max-sm:hidden")}
+          className={cn("avatar-btn group ml-2 inline-grid size-9 shrink-0 place-items-center rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/35 max-sm:ml-1")}
           aria-label={t("account.menu")}
           title={me.name ? `${me.name} (${me.email})` : me.email}
         >

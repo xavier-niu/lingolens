@@ -31,6 +31,23 @@ export function useRailMode(): RailMode {
   return open && (roomy || !chat) ? "full" : "compact"
 }
 
+// The pages the sidebar serves have no header, on any screen: the sidebar
+// holds what one would, and the page's own controls float in its corners.
+export function useBare() {
+  return useApp((s) => !!s.me && PAGES.has(s.view))
+}
+
+// Narrower screens (phones, tablets) have no room to keep the sidebar beside
+// the page: it slides in over it from the button at the top left, and goes
+// again as soon as it has been used (see Sidebar).
+export function useRailSlides() {
+  const wide = useMedia("(min-width: 1024px)")
+  const page = useApp((s) => !!s.me && PAGES.has(s.view))
+  return !wide && page
+}
+
+export const slideRail = (railSlid: boolean) => { if (useApp.getState().railSlid !== railSlid) set({ railSlid }) }
+
 // Whether the sidebar is narrow only because Ask AI is open beside it.
 export function useRailMakingRoom() {
   return useApp((s) => s.railOpen && s.drawer === "open")

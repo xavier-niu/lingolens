@@ -71,7 +71,7 @@ let hideTimer = 0
 
 function showDrawer(mode: "chat" | "history") {
   clearTimeout(hideTimer)
-  set({ drawer: "open", chatMode: mode })
+  set({ drawer: "open", chatMode: mode, railSlid: false })
   document.body.classList.add("chat-open")
   updateHistoryDot()
 }

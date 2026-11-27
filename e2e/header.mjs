@@ -17,7 +17,6 @@ async function makeBook(page) {
   }).then((r) => r.json()), [LONG, body]);
 }
 
-const overlap = (a, b) => a && b && a.right > b.left + 0.5 && b.right > a.left + 0.5;
 
 let bookId;
 for (const [name, opts] of [
@@ -25,7 +24,7 @@ for (const [name, opts] of [
   ['small-phone', { viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true }],
   ['tablet', { ...devices['iPad Mini'] }],
   ['narrow-desktop', { viewport: { width: 1000, height: 800 } }],
-  // Wider screens have the sidebar instead (rail.mjs).
+  // Wider screens keep the sidebar beside the page (rail.mjs).
 ]) {
   for (const lang of ['en', 'zh']) {
     const ctx = await browser.newContext(opts);
@@ -37,36 +36,46 @@ for (const [name, opts] of [
     await page.goto(BASE + '#/read/' + bookId);
     await page.reload();
     await page.waitForSelector('#reader-view:not([hidden])');
-    await page.evaluate(() => window.scrollTo(0, 900));
-    const narrow = opts.viewport?.width < 360;
     await page.waitForTimeout(300);
+    // No header: the sidebar's button floats at the top left, the text's tools
+    // at the top right, with the title clear below them.
     const r = await page.evaluate(() => {
-      const box = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); return b.width ? { left: b.left, right: b.right } : null; };
-      const visible = [...document.querySelectorAll('.bar-end [id^="btn-"], .bar-end > #progress, .bar-end > #net-status')].filter((e) => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width);
-      const title = document.querySelector('#home-link');
+      const box = (s) => { const b = document.querySelector(s)?.getBoundingClientRect(); return b?.width ? { left: b.left, right: b.right, top: b.top, bottom: b.bottom } : null; };
       const look = (s) => {
         const c = getComputedStyle(document.querySelector(s));
-        return [c.width, c.height, c.color, c.backgroundColor, c.borderRadius, c.borderTopWidth, c.fontSize].join();
+        return [c.width, c.height, c.color, c.backgroundColor, c.borderRadius, c.borderTopWidth].join();
       };
       return {
-        title: box(title), parts: visible.map((e) => ({ id: e.id || e.className, ...box(e) })),
-        looks: ['#btn-display', '#btn-history'].map(look),
+        start: box('#float-start'), tools: box('#reader-tools'), title: box('#book-title'),
+        startIds: [...document.querySelectorAll('#float-start button')].filter((e) => e.getBoundingClientRect().width).map((e) => e.id).join(),
+        toolIds: [...document.querySelectorAll('#reader-tools button')].map((e) => e.id).join(),
+        looks: ['#btn-rail', '#btn-display', '#btn-edit', '#btn-append'].map(look),
+        header: !!document.querySelector('header.topbar'),
         vw: document.documentElement.clientWidth, scrollW: document.documentElement.scrollWidth,
-        
       };
     });
-    const hits = r.parts.filter((p) => overlap(r.title, p)).map((p) => p.id);
-    check(`${name}/${lang}: name clear of header buttons`, hits.length === 0, hits.join(','));
-    check(`${name}/${lang}: buttons inside the screen`, r.parts.every((p) => p.left >= 0 && p.right <= r.vw + 0.5) && r.scrollW <= r.vw, JSON.stringify(r.parts));
-    const buttons = r.parts.map((p) => p.id).filter((id) => id.startsWith('btn-')).join();
-    check(`${name}/${lang}: reading options sit next to History, with no level button`, /^btn-display,btn-history,(btn-append,)?btn-menu(,btn-account)?$/.test(buttons), buttons);
-    const wide = opts.viewport.width > 640; // a phone keeps the room for the title
-    check(`${name}/${lang}: Append Text ${wide ? 'in the bar' : 'left to the ⋯ menu'}`, buttons.includes('btn-append') === wide, buttons);
-    check(`${name}/${lang}: reading options look like History`, new Set(r.looks).size === 1, r.looks.join(' | '));
-    check(`${name}/${lang}: the name goes back to the shelf`, (await page.getAttribute('#home-link', 'href')) === '#/');
-    check(`${name}/${lang}: nothing under the header`, !(await page.$('#read-thread')));
+    const inside = (x) => x && x.left >= 0 && x.right <= r.vw + 0.5 && x.top >= 0;
+    check(`${name}/${lang}: no header`, !r.header);
+    check(`${name}/${lang}: the sidebar's button at the top left, the text's tools at the top right`,
+      inside(r.start) && inside(r.tools) && r.start.left <= 16 && r.vw - r.tools.right <= 16 && Math.abs(r.start.top - r.tools.top) < 1 && r.start.right < r.tools.left && r.scrollW <= r.vw, JSON.stringify(r));
+    check(`${name}/${lang}: Reading Options, Edit and Append, nothing else`, r.startIds === 'btn-rail' && r.toolIds === 'btn-display,btn-edit,btn-append', `${r.startIds} | ${r.toolIds}`);
+    check(`${name}/${lang}: all the same kind of button`, new Set(r.looks).size === 1, r.looks.join(' | '));
+    check(`${name}/${lang}: the title clear below them`, r.title.top >= Math.max(r.start.bottom, r.tools.bottom) + 8, JSON.stringify(r));
     check(`${name}/${lang}: interface language applied`, (await page.getAttribute('html', 'lang'))?.startsWith(lang));
-    await page.screenshot({ path: `${OUT}/h-${name}-${lang}.png`, clip: { x: 0, y: 0, width: r.vw, height: 70 } });
+    await page.screenshot({ path: `${OUT}/h-${name}-${lang}.png`, clip: { x: 0, y: 0, width: r.vw, height: 140 } });
+    // Reading on, they step aside; scrolling back brings them back. (Each move
+    // waits for the next frame, which is when the page hears of it.)
+    const scrollBy = (dy) => page.evaluate((dy) => new Promise((done) => {
+      window.scrollBy(0, dy);
+      requestAnimationFrame(() => requestAnimationFrame(done));
+    }), dy);
+    await scrollBy(600);
+    await scrollBy(300);
+    const gone = await page.waitForFunction(() => document.querySelector('#reader-tools[data-away]') && document.querySelector('#float-start[data-away]'), null, { timeout: 2000 }).then(() => true, () => false);
+    check(`${name}/${lang}: they step aside while reading on`, gone);
+    await scrollBy(-200);
+    const back = await page.waitForFunction(() => !document.querySelector('#reader-tools[data-away], #float-start[data-away]'), null, { timeout: 2000 }).then(() => true, () => false);
+    check(`${name}/${lang}: and come back on scrolling back`, back);
     await page.evaluate((l) => fetch('/api/me/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: l }) }), 'en');
     await ctx.close();
   }
@@ -89,17 +98,15 @@ for (const [name, opts] of [
   const r = await page.evaluate(() => {
     const box = (el) => { const b = el?.getBoundingClientRect(); return b?.width ? { left: b.left, right: b.right } : null; };
     return {
-      title: box(document.querySelector('#home-link')),
       badge: box(document.querySelector('#progress')),
-      inRail: !!document.querySelector('#progress').closest('#rail'),
       words: box(document.querySelector('#progress-text')),
       vw: document.documentElement.clientWidth, scrollW: document.documentElement.scrollWidth,
     };
   });
-  const phone = opts.viewport.width <= 640;
+  const phone = opts.viewport.width < 1024; // the status floats at the top left, as a spinner
   check(`${name}: annotating badge inside the screen`, r.badge.left >= 0 && r.badge.right <= r.vw && r.scrollW <= r.vw, JSON.stringify(r));
   // On a wide screen it's a line at the foot of the sidebar, under the name.
-  check(`${name}: annotating badge clear of the name`, phone || name === 'tablet' ? !overlap(r.title, r.badge) : r.inRail, JSON.stringify(r));
+  check(`${name}: annotating ${phone ? 'beside the sidebar\'s button' : 'at the foot of the sidebar'}`, await page.evaluate((phone) => !!document.querySelector('#progress').closest(phone ? '#float-start' : '#rail'), phone), JSON.stringify(r));
   check(`${name}: ${phone ? 'just the spinner' : 'the badge has words'}`, phone ? r.words.right - r.words.left <= 1 : r.words.right - r.words.left > 40, JSON.stringify(r));
   await page.screenshot({ path: `${OUT}/h-annotating-${name}.png`, clip: { x: 0, y: 0, width: r.vw, height: 70 } });
   await ctx.close();

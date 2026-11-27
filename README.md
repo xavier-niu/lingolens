@@ -33,7 +33,7 @@ It runs on your own server and uses your own AI key. One server can host a whole
 **Read anywhere, your way**
 - Works on phones, tablets and computers. You come back to where you stopped, on any device.
 - Progress counts what you've had time to read, so jumping to the end to see how long a text is doesn't mark it finished.
-- On a computer, a sidebar replaces the top bar: your latest Ask AI conversations (on the shelf, about any text; in a text, about that one), and statistics: how far along you are, the time left, and the AI tokens used, for the text you're reading or the whole shelf. The shelf shows your texts as cards or as a list with their length, progress, and when they were last read and updated.
+- A sidebar replaces the top bar (on a phone or tablet it slides in from the button at the top left, and hides again once used): your latest Ask AI conversations (on the shelf, about any text; in a text, about that one), and statistics: how far along you are, the time left, and the AI tokens used, for the text you're reading or the whole shelf. The shelf shows your texts as cards or as a list with their length, progress, and when they were last read and updated.
 - Works offline: read your whole shelf, save words and add texts without a connection. Everything syncs when you're back online.
 - Choose the English font (Inter, Source Serif, Lexend or Atkinson Hyperlegible, all built in so they look the same on every device) and the Chinese font (黑体, 宋体 or 楷体), plus text size, line width, and a light or dark theme. Set your defaults in Settings for every device, or change them on one device while you read.
 - The interface is in English or Chinese.

@@ -406,13 +406,25 @@ ruby.ann.known rt { display: none; }
    header's height, where there is one. */
 :root { --rail: 0px; --bar: 64px; --float-top: 0px; --drawer: 0px; }
 @media (max-width: 639.98px) { :root { --bar: 56px; } }
-body[data-rail] { --bar: 0px; --float-top: 48px; } /* below the text's tools (reader-tools.tsx) */
+body[data-bare] { --bar: 0px; } /* no header: the sidebar's pages */
+body[data-rail] { --float-top: 48px; } /* below the text's tools (reader-tools.tsx) */
 body[data-rail="full"] { --rail: 256px; }
 body[data-rail="compact"] { --rail: 64px; }
 main { margin-left: var(--rail); }
 body[data-rail] main { padding-top: 16px; }
+/* Narrower screens: room at the top for the pills floating in its corners. */
+@media (max-width: 1023.98px) {
+  body[data-bare] .banner-slot { padding-top: 52px; }
+  body[data-bare] main { padding-top: 12px; }
+}
 .banner-slot { margin-left: var(--rail); }
 body[data-rail] .hint { left: calc(50% + var(--rail) / 2); }
+/* Slid in over the page (phones, tablets). */
+.rail-slid { animation: rail-in .22s cubic-bezier(.2, .8, .2, 1); }
+.rail-backdrop { animation: fade-in .2s ease-out; }
+@keyframes rail-in { from { transform: translateX(-100%); } }
+@keyframes fade-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .rail-slid, .rail-backdrop { animation: none; } }
 #rail #btn-history.live::after { top: 50%; right: -6px; margin-top: -3.5px; }
 #rail[data-mode="compact"] #btn-history.live::after { top: 8px; right: 8px; margin-top: 0; }
 

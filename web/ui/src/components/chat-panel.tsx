@@ -38,9 +38,9 @@ export function ChatPanel() {
       data-state={drawer}
       data-mode={mode}
       aria-label={t("chat.title")}
-      className="drawer fixed right-0 z-30 flex w-[min(440px,100vw)] flex-col overscroll-contain border-l bg-card shadow-(--elev-float) max-sm:w-screen max-sm:border-l-0"
+      className="drawer fixed right-0 z-30 flex w-[min(440px,100vw)] flex-col overscroll-contain border-l bg-background shadow-(--elev-float) max-sm:w-screen max-sm:border-l-0 min-[1180px]:shadow-none"
     >
-      <header className={cn("drawer-head mb-2 flex h-14 shrink-0 items-center gap-1 border-b border-border/70 pr-3 pl-[18px]", history && current && "pl-2")}>
+      <header className={cn("drawer-head mb-2 flex h-16 shrink-0 items-center gap-1 border-b border-border/70 pr-3 pl-[18px] max-sm:h-14", history && current && "pl-2")}>
         <Button
           id="chat-back" variant="ghost" size="icon-sm" hidden={!(history && current)} className="head-back text-muted-foreground"
           aria-label={t("chat.back")} title={t("chat.back")} onClick={() => current && openConversation(current)}
@@ -95,44 +95,61 @@ function HistoryList({ hidden }: { hidden: boolean }) {
   const remove = async (id: string) => {
     if (await confirmDialog(t("chat.confirmDelete"), { confirm: t("chat.delete"), destructive: true })) deleteChat(id)
   }
+  // By day, the latest first, under quiet headings as in the sidebar.
+  const sorted = [...items].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+  const today = new Date().setHours(0, 0, 0, 0)
+  const groups: { key: string; items: HistoryItem[] }[] = []
+  for (const c of sorted) {
+    const at = c.live ? Date.now() : Date.parse(c.updatedAt)
+    const key = at >= today ? "chat.histToday" : at >= today - 6 * 864e5 ? "chat.histWeek" : "chat.histEarlier"
+    if (groups.at(-1)?.key !== key) groups.push({ key, items: [] })
+    groups.at(-1)!.items.push(c)
+  }
+  let n = 0
   return (
-    <div id="chat-history" hidden={hidden} className="chat-history anim-fade min-h-0 flex-1 overflow-y-auto overscroll-contain px-[18px] pt-1 pb-6 max-sm:px-4">
+    <div id="chat-history" hidden={hidden} className="chat-history anim-fade min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-1 pb-6">
       <Segmented
         id="hist-scope" label={t("chat.history")} attr="scope" value={hist.scope} onChange={(v) => setHistScope(v as "book" | "all")}
-        className="hist-scope mb-3 w-fit" hidden={!inBook || !hist.items}
+        className="hist-scope mx-3 mb-4 w-fit" hidden={!inBook || !hist.items}
         options={[{ value: "book", content: t("chat.histBook") }, { value: "all", content: t("chat.histAll") }]}
       />
-      <p id="hist-status" role="status" className="hist-status mx-1 my-6 text-center text-sm leading-relaxed text-muted-foreground empty:hidden">{status}</p>
-      <ul id="hist-list" className="hist-list m-0 flex list-none flex-col gap-2 p-0">
-        {!hidden && items.map((c, i) => {
-          const showBook = c.bookTitle && !(inBook && c.bookId === String(inBook.id))
-          const meta = [showBook ? c.bookTitle : "", c.questions === 1 ? t("chat.question1") : t("chat.questions", { n: c.questions }), c.live ? "" : fmtWhen(c.updatedAt)].filter(Boolean)
-          return (
-            <li key={c.id} className="hist-item group/hist anim-rise relative" style={{ animationDelay: `${Math.min(i, 3) * 30}ms` }}>
-              <button
-                type="button"
-                className="hist-open flex w-full flex-col gap-1 rounded-xl border bg-card py-3 pr-11 pl-3.5 text-left shadow-xs transition-colors duration-150 outline-none hover:border-input hover:bg-accent/60 focus-visible:ring-3 focus-visible:ring-ring/35"
-                data-id={c.id}
-                onClick={() => resumeChat(c.id)}
-              >
-                <span className="hist-quote line-clamp-2 font-reading text-[15px] leading-normal text-foreground">{c.selection}</span>
-                <span className="hist-q truncate text-[13.5px] text-ink-2 empty:hidden">{c.question || ""}</span>
-                <span className="hist-meta truncate text-xs text-muted-foreground">
-                  {meta.map((m, j) => <React.Fragment key={j}>{j > 0 && <span aria-hidden="true"> · </span>}{m}</React.Fragment>)}
-                  {c.live && <>{meta.length > 0 && <span aria-hidden="true"> · </span>}<span className="hist-live font-semibold text-brand">{t("chat.answering")}</span></>}
-                </span>
-              </button>
-              <Button
-                variant="ghost" size="icon-sm"
-                className="hist-del absolute top-2 right-2 text-muted-foreground opacity-0 transition-opacity group-hover/hist:opacity-100 hover:text-destructive focus-visible:opacity-100 pointer-coarse:opacity-100"
-                data-del={c.id} aria-label={t("chat.delete")} title={t("chat.delete")} onClick={() => remove(c.id)}
-              >
-                <Trash2 />
-              </Button>
-            </li>
-          )
-        })}
-      </ul>
+      <p id="hist-status" role="status" className="hist-status mx-4 my-6 text-center text-sm leading-relaxed text-muted-foreground empty:hidden">{status}</p>
+      {!hidden && groups.map((g) => (
+        <section key={g.key} className="hist-group mb-4" aria-label={t(g.key)}>
+          <h3 className="m-0 mb-1 px-3 text-[12px] font-medium text-muted-foreground">{t(g.key)}</h3>
+          <ul className="hist-list m-0 flex list-none flex-col gap-px p-0">
+            {g.items.map((c) => {
+              const showBook = c.bookTitle && !(inBook && c.bookId === String(inBook.id))
+              const meta = [showBook ? c.bookTitle : "", c.questions === 1 ? t("chat.question1") : t("chat.questions", { n: c.questions }), c.live ? "" : fmtWhen(c.updatedAt)].filter(Boolean)
+              const i = n++
+              return (
+                <li key={c.id} className="hist-item group/hist anim-rise relative" style={{ animationDelay: `${Math.min(i, 3) * 30}ms` }}>
+                  <button
+                    type="button"
+                    className="hist-open flex w-full flex-col gap-0.5 rounded-lg py-2 pr-11 pl-3 text-left transition-colors duration-150 outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/35"
+                    data-id={c.id}
+                    onClick={() => resumeChat(c.id)}
+                  >
+                    <span className="hist-q w-full truncate text-[14px] text-foreground empty:hidden">{c.question || ""}</span>
+                    <span className="hist-quote line-clamp-2 border-l-2 border-(--thread)/50 pl-2 text-[13px] leading-snug text-ink-2">{c.selection}</span>
+                    <span className="hist-meta mt-0.5 w-full truncate text-[12px] text-muted-foreground">
+                      {meta.map((m, j) => <React.Fragment key={j}>{j > 0 && <span aria-hidden="true"> · </span>}{m}</React.Fragment>)}
+                      {c.live && <>{meta.length > 0 && <span aria-hidden="true"> · </span>}<span className="hist-live font-medium text-brand">{t("chat.answering")}</span></>}
+                    </span>
+                  </button>
+                  <Button
+                    variant="ghost" size="icon-sm"
+                    className="hist-del absolute top-1.5 right-1.5 text-muted-foreground opacity-0 transition-opacity group-hover/hist:opacity-100 hover:text-destructive focus-visible:opacity-100 pointer-coarse:opacity-100"
+                    data-del={c.id} aria-label={t("chat.delete")} title={t("chat.delete")} onClick={() => remove(c.id)}
+                  >
+                    <Trash2 />
+                  </Button>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      ))}
     </div>
   )
 }
@@ -283,7 +300,7 @@ function Conversation({ hidden }: { hidden: boolean }) {
         id="chat-dock"
         hidden={hidden}
         className={cn(
-          "chat-dock relative shrink-0 bg-card px-4 pt-2.5 pb-3 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-5 before:bg-linear-to-b before:from-transparent before:to-card before:content-[''] max-sm:pb-[calc(12px+env(safe-area-inset-bottom))]",
+          "chat-dock relative shrink-0 bg-background px-4 pt-2.5 pb-3 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-5 before:bg-linear-to-b before:from-transparent before:to-background before:content-[''] max-sm:pb-[calc(12px+env(safe-area-inset-bottom))]",
           started && "started",
         )}
       >

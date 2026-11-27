@@ -91,6 +91,7 @@ export interface AppState {
 
   railOpen: boolean // the sidebar on wide screens (this device's choice)
   shelfView: "grid" | "list" // how the shelf shows the texts (this device's choice)
+  railSlid: boolean // narrower screens: the sidebar slid in over the page
 
   // reader
   book: Book | null
@@ -143,6 +144,7 @@ export const useApp = create<AppState>()(() => ({
   rev: 0,
 
   railOpen: (() => { try { return localStorage.getItem("lingolens.rail") !== "off" } catch { return true } })(),
+  railSlid: false,
   shelfView: (() => { try { return localStorage.getItem("lingolens.shelfView") === "list" ? "list" : "grid" } catch { return "grid" } })(),
 
   book: null,

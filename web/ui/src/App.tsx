@@ -13,7 +13,7 @@ import { SourceDialog } from "@/components/source-dialog"
 import { Contents } from "@/components/contents"
 import { ReaderTools } from "@/components/reader-tools"
 import { Sidebar } from "@/components/sidebar"
-import { useRailMode } from "@/app/rail"
+import { useBare } from "@/app/rail"
 import { ConfirmHost } from "@/components/confirm"
 import { SparkGradient } from "@/components/icons"
 import { Toaster } from "@/components/ui/sonner"
@@ -28,7 +28,7 @@ let started = false
 export function App() {
   const t = useT()
   const fabPressedAt = React.useRef(0)
-  const rail = useRailMode()
+  const bare = useBare()
   useCardDismiss()
   useChatDismiss()
   useSelectionWatch(fabPressedAt)
@@ -82,7 +82,7 @@ export function App() {
       <ConfirmHost />
       <Toaster
         position="top-center"
-        offset={{ top: rail ? 16 : 68 }}
+        offset={{ top: bare ? 16 : 68 }}
         mobileOffset={{ top: 60, left: 16, right: 16 }}
         visibleToasts={1}
         className="lingolens-toaster"
