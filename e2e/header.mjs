@@ -25,7 +25,7 @@ for (const [name, opts] of [
   ['small-phone', { viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true }],
   ['tablet', { ...devices['iPad Mini'] }],
   ['narrow-desktop', { viewport: { width: 1000, height: 800 } }],
-  ['desktop', { viewport: { width: 1440, height: 900 } }],
+  // Wider screens have the sidebar instead (rail.mjs).
 ]) {
   for (const lang of ['en', 'zh']) {
     const ctx = await browser.newContext(opts);
@@ -91,13 +91,15 @@ for (const [name, opts] of [
     return {
       title: box(document.querySelector('#home-link')),
       badge: box(document.querySelector('#progress')),
+      inRail: !!document.querySelector('#progress').closest('#rail'),
       words: box(document.querySelector('#progress-text')),
       vw: document.documentElement.clientWidth, scrollW: document.documentElement.scrollWidth,
     };
   });
   const phone = opts.viewport.width <= 640;
   check(`${name}: annotating badge inside the screen`, r.badge.left >= 0 && r.badge.right <= r.vw && r.scrollW <= r.vw, JSON.stringify(r));
-  check(`${name}: annotating badge clear of the name`, !overlap(r.title, r.badge), JSON.stringify(r));
+  // On a wide screen it's a line at the foot of the sidebar, under the name.
+  check(`${name}: annotating badge clear of the name`, phone || name === 'tablet' ? !overlap(r.title, r.badge) : r.inRail, JSON.stringify(r));
   check(`${name}: ${phone ? 'just the spinner' : 'the badge has words'}`, phone ? r.words.right - r.words.left <= 1 : r.words.right - r.words.left > 40, JSON.stringify(r));
   await page.screenshot({ path: `${OUT}/h-annotating-${name}.png`, clip: { x: 0, y: 0, width: r.vw, height: 70 } });
   await ctx.close();

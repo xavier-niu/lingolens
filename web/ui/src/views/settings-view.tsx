@@ -45,7 +45,7 @@ export function SettingsView() {
       <BackToText />
       <h1 className="page-title m-0 mb-10 text-[clamp(26px,3.4vw,32px)] leading-tight font-semibold tracking-[-0.025em] max-sm:mb-7">{t("settings.page")}</h1>
       <div className="grid gap-12 lg:grid-cols-[196px_minmax(0,1fr)]">
-        <nav aria-label={t("settings.page")} className="sticky top-20 hidden self-start lg:block">
+        <nav aria-label={t("settings.page")} className="sticky top-[calc(var(--bar)+16px)] hidden self-start lg:block">
           <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
             {SECTIONS.filter((s) => !s.admin || me?.is_admin).map((s) => (
               <li key={s.id}>
@@ -99,7 +99,7 @@ function Section({ id, sectionId, title, note, children, className }: {
   id: string; sectionId?: string; title: string; note?: string; children: React.ReactNode; className?: string
 }) {
   return (
-    <section id={sectionId} className={cn("set-section scroll-mt-[76px]", className)} aria-labelledby={id}>
+    <section id={sectionId} className={cn("set-section scroll-mt-[calc(var(--bar)+12px)]", className)} aria-labelledby={id}>
       <div className="set-head mb-4">
         <h2 id={id} className="m-0 text-[17px] font-semibold tracking-[-0.015em]">{title}</h2>
         {note && <p className="mt-1 mb-0 max-w-[62ch] text-sm leading-relaxed text-muted-foreground">{note}</p>}

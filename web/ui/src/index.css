@@ -401,13 +401,29 @@ ruby.ann.known rt { display: none; }
 @keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } }
 @keyframes drawer-out { to { transform: translateX(24px); opacity: 0; } }
 
+/* The left sidebar (wide screens) takes the header's place, and the page makes
+   room for it: full width, or a strip of icons (app/rail.ts). --bar is the
+   header's height, where there is one. */
+:root { --rail: 0px; --bar: 64px; --float-top: 0px; --drawer: 0px; }
+@media (max-width: 639.98px) { :root { --bar: 56px; } }
+body[data-rail] { --bar: 0px; --float-top: 48px; } /* below the text's tools (reader-tools.tsx) */
+body[data-rail="full"] { --rail: 256px; }
+body[data-rail="compact"] { --rail: 64px; }
+main { margin-left: var(--rail); }
+body[data-rail] main { padding-top: 16px; }
+.banner-slot { margin-left: var(--rail); }
+body[data-rail] .hint { left: calc(50% + var(--rail) / 2); }
+#rail #btn-history.live::after { top: 50%; right: -6px; margin-top: -3.5px; }
+#rail[data-mode="compact"] #btn-history.live::after { top: 8px; right: 8px; margin-top: 0; }
+
 /* Wide screens: keep the text readable beside the open sidebar. */
 @media (min-width: 1180px) {
   body.chat-open main { padding-right: 480px; }
 }
 /* Notices are centred over the text, not under the open sidebar. */
 @media (min-width: 641px) {
-  body.chat-open .lingolens-toaster { left: calc((100vw - min(440px, 100vw)) / 2) !important; }
+  body.chat-open { --drawer: min(440px, 100vw); }
+  .lingolens-toaster { left: calc(var(--rail) + (100vw - var(--rail) - var(--drawer)) / 2) !important; }
 }
 
 /* An Ask AI answer arriving while the sidebar is hidden. */

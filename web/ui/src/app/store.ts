@@ -41,8 +41,11 @@ export interface Book {
   pos?: number
   expiresAt?: string
   updatedAt?: string
+  lastReadAt?: string // "" until opened
   savedPos?: number
   savedProgress?: number
+  tokensIn?: number // what the AI model has read and written for it, in all
+  tokensOut?: number
   [k: string]: unknown
 }
 
@@ -85,6 +88,9 @@ export interface AppState {
   returnTo: string // where "Back" on the settings page goes
   settingsAt: string // a heading to open Settings at
   rev: number
+
+  railOpen: boolean // the sidebar on wide screens (this device's choice)
+  shelfView: "grid" | "list" // how the shelf shows the texts (this device's choice)
 
   // reader
   book: Book | null
@@ -135,6 +141,9 @@ export const useApp = create<AppState>()(() => ({
   returnTo: "#/",
   settingsAt: "",
   rev: 0,
+
+  railOpen: (() => { try { return localStorage.getItem("lingolens.rail") !== "off" } catch { return true } })(),
+  shelfView: (() => { try { return localStorage.getItem("lingolens.shelfView") === "list" ? "list" : "grid" } catch { return "grid" } })(),
 
   book: null,
   toc: [],

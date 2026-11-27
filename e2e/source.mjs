@@ -106,7 +106,6 @@ await page.reload();
 await page.waitForSelector('#reader-view:not([hidden])');
 await waitForArticleText(page, 'a map');
 check('…for good, on this device', !(await visible('#md-offer')));
-await page.click('#btn-menu');
 await page.click('#btn-edit');
 await page.waitForSelector('#source-dialog[data-state="open"]');
 check('Edit Text keeps it plain, and offers Markdown', await visible('#src-md') && (await page.textContent('#src-md-switch')) === 'Use Markdown');
@@ -205,9 +204,7 @@ const tocBox = () => page.evaluate(() => {
 });
 const box = await tocBox();
 check('…to the right of the text, in the window', box.beside && box.inside, JSON.stringify(box));
-await page.click('#btn-menu');
-check('…and not in the ⋯ menu any more', !(await page.$('#menu-pop #btn-toc')) && !(await page.textContent('#menu-pop')).includes('Contents'));
-await page.keyboard.press('Escape');
+check('…and not in the sidebar as well', !(await page.$('#rail #btn-toc')) && !(await page.textContent('#rail')).includes('Contents'));
 const items = await page.$$eval('#toc-list a', (as) => as.map((a) => a.textContent));
 check('Contents lists the chapters', items.join('|') === 'Chapter One|Chapter Two|Chapter Three|Chapter Four|Chapter Five', items.join('|'));
 await page.click('#toc-list a >> nth=3');
@@ -241,7 +238,6 @@ await page.setViewportSize({ width: 1280, height: 900 });
 await page.waitForSelector('#toc');
 
 // ---- editing a Markdown import keeps it Markdown
-await page.click('#btn-menu');
 await page.click('#btn-edit');
 await page.waitForSelector('#source-dialog[data-state="open"]');
 check('editing hides the kind switch', !(await visible('#src-kinds')));
@@ -272,12 +268,9 @@ await page.keyboard.press('Escape');
   await glossesSettled(page);
   const place = await atTop();
 
-  check('Append Text is a button in the bar, beside the ⋯ menu', await visible('#btn-append')
-    && (await page.getAttribute('#btn-append', 'aria-label')) === 'Append Text' && (await page.$eval('#btn-append', (b) => b.nextElementSibling.id)) === 'btn-menu');
-  await page.click('#btn-menu');
-  const menuItems = await page.$$eval('#menu-pop .menu-item', (els) => els.filter((e) => e.checkVisibility()).map((e) => e.id));
-  check('…and not in the menu as well', menuItems.join() === 'btn-edit,btn-settings', menuItems.join());
-  await page.keyboard.press('Escape');
+  check('Append Text floats with the text\'s tools, after Edit', await visible('#btn-append')
+    && (await page.getAttribute('#btn-append', 'aria-label')) === 'Append Text' && (await page.$eval('#btn-append', (b) => !!b.closest('#reader-tools') && b.previousElementSibling.id)) === 'btn-edit');
+  check('…with no ⋯ menu on a wide screen', !(await page.$('#btn-menu')));
   await page.click('#btn-append');
   await page.waitForSelector('#source-dialog[data-state="open"]');
   const dialog = () => page.evaluate(() => ({
@@ -417,7 +410,7 @@ check('a long list keeps the chapter being read in sight', inList.seen, JSON.str
   check('…in small batches', first.every((c) => c.chars <= 900 || c.ids.length === 1), first.map((c) => c.chars).join());
   check('the indicator stays up through the jump', (await p.evaluate(() => window.badgeChanges)) === 0);
   const badge = await p.locator('#progress').boundingBox();
-  check('the indicator is on screen after the jump', badge && badge.y >= 0 && badge.y + badge.height <= 56, JSON.stringify(badge));
+  check('the indicator is on screen after the jump', badge && badge.y >= 0 && badge.y + badge.height <= p.viewportSize().height, JSON.stringify(badge));
   check('…and counts what is on screen', (await p.textContent('#progress')).includes(`${screen.length} left`), await p.textContent('#progress'));
 
   await answer(first);
@@ -599,7 +592,6 @@ await appendLine('And one last line.', '7');
 const expiresNow = Date.parse(await expiry());
 check('…or sets a new one', Math.abs(expiresNow - (Date.now() + 7 * 864e5)) < 120e3 && (await page.textContent('#book-stat')).includes('deletes in 7 days'),
   `${new Date(expiresNow).toISOString()} · ${await page.textContent('#book-stat')}`);
-await page.click('#btn-menu');
 await page.click('#btn-edit');
 await page.waitForSelector('#source-dialog[data-state="open"]');
 check('edit: the time just set is inherited', (await page.$eval('#src-ttl', (s) => s.selectedOptions[0].textContent)) === 'After 7 days (inherited)');

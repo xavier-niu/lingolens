@@ -34,7 +34,7 @@ await app.waitForSelector('#settings-view:not([hidden])');
 check('"Set it up" closes the dialog', !(await app.isVisible('#source-dialog')));
 await app.waitForTimeout(200);
 const top = await app.$eval('#set-clip-h', (h) => h.getBoundingClientRect().top);
-check('…and opens Settings at the bookmarklet, below the header', top >= 60 && top < 200, String(top));
+check('…and opens Settings at the bookmarklet, at the top of the page', top >= 0 && top < 200, String(top));
 
 // ---- Settings: the button to drag, and the code for phones
 const href = await app.getAttribute('#bm-link', 'href');

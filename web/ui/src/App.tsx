@@ -11,6 +11,9 @@ import { Banner } from "@/components/banner"
 import { ChatPanel, useChatDismiss } from "@/components/chat-panel"
 import { SourceDialog } from "@/components/source-dialog"
 import { Contents } from "@/components/contents"
+import { ReaderTools } from "@/components/reader-tools"
+import { Sidebar } from "@/components/sidebar"
+import { useRailMode } from "@/app/rail"
 import { ConfirmHost } from "@/components/confirm"
 import { SparkGradient } from "@/components/icons"
 import { Toaster } from "@/components/ui/sonner"
@@ -25,6 +28,7 @@ let started = false
 export function App() {
   const t = useT()
   const fabPressedAt = React.useRef(0)
+  const rail = useRailMode()
   useCardDismiss()
   useChatDismiss()
   useSelectionWatch(fabPressedAt)
@@ -57,7 +61,10 @@ export function App() {
         {t("a11y.skip")}
       </a>
       <Header />
-      <Banner />
+      <Sidebar />
+      <div className="banner-slot">
+        <Banner />
+      </div>
       <main id="main" className="px-[clamp(16px,4vw,32px)] pb-24 in-data-[view=login]:p-0">
         <LoginView />
         <LibraryView />
@@ -65,6 +72,7 @@ export function App() {
         <SettingsView />
         <ClipView />
       </main>
+      <ReaderTools />
       <Contents />
       <WordCard />
       <AskFab pressedAt={fabPressedAt} />
@@ -74,7 +82,7 @@ export function App() {
       <ConfirmHost />
       <Toaster
         position="top-center"
-        offset={{ top: 68 }}
+        offset={{ top: rail ? 16 : 68 }}
         mobileOffset={{ top: 60, left: 16, right: 16 }}
         visibleToasts={1}
         className="lingolens-toaster"

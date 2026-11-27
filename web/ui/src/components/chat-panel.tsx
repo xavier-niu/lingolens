@@ -71,7 +71,7 @@ export function ChatPanel() {
 
 // ------------------------------------------------------------------ history
 
-function fmtWhen(iso: string) {
+export function fmtWhen(iso: string) {
   const d = new Date(iso)
   const locale = getLang() === "zh" ? "zh-CN" : "en-US"
   const today = new Date()
@@ -490,7 +490,7 @@ export function useChatDismiss() {
       if (get().drawer !== "open" || e.button > 0) return
       const target = e.target as Element
       if (onText(target)) return
-      if (target.closest?.("#chat, #card, #ask-fab, #btn-history, #toast, [data-sonner-toaster], [data-radix-popper-content-wrapper], [data-slot=dialog-content], [data-slot=alert-dialog-content], [data-slot=dialog-overlay], [data-slot=alert-dialog-overlay], #banner")) return
+      if (target.closest?.("#chat, #card, #ask-fab, #btn-history, #rail-chats,#toast, [data-sonner-toaster], [data-radix-popper-content-wrapper], [data-slot=dialog-content], [data-slot=alert-dialog-content], [data-slot=dialog-overlay], [data-slot=alert-dialog-overlay], #banner")) return
       closeChat()
     }
     document.addEventListener("pointerdown", down)

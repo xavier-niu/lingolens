@@ -56,10 +56,14 @@ for (const [label, device] of [['phone', devices['iPhone 13']], ['tablet', devic
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   check(`${label}: no horizontal overflow`, overflow <= 0, `${overflow}px`);
-  const headerH = await page.$eval('.topbar', (h) => h.getBoundingClientRect().height);
-  check(`${label}: header height reasonable`, headerH < 170, `${Math.round(headerH)}px`);
-  const hdr = await page.$eval('.topbar', (h) => h.scrollWidth - h.clientWidth);
-  check(`${label}: header fits without scrolling`, hdr <= 0, `${hdr}px`);
+  if (await page.$('#rail')) { // wide enough for the sidebar (an iPad on its side)
+    check(`${label}: the sidebar in place of the header`, !(await page.$('.topbar')) && await page.isVisible('#rail'));
+  } else {
+    const headerH = await page.$eval('.topbar', (h) => h.getBoundingClientRect().height);
+    check(`${label}: header height reasonable`, headerH < 170, `${Math.round(headerH)}px`);
+    const hdr = await page.$eval('.topbar', (h) => h.scrollWidth - h.clientWidth);
+    check(`${label}: header fits without scrolling`, hdr <= 0, `${hdr}px`);
+  }
   check(`${label}: reading options visible`, await inViewport(page, '#btn-display'));
   const broken = await page.$$eval('ruby.ann', (rs) => rs.filter((r) => r.getClientRects().length > 1).length);
   check(`${label}: no ruby split across lines`, broken === 0, `${broken} split`);

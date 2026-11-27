@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 // otherwise a round button at the bottom right opens it over the page.
 
 const GAP = 40 // between the text and the list
-const EDGE = 16 // between the list and the window's edge (or the open sidebar)
+const EDGE = 16 // between the list and the window's edge (or Ask AI)
 const MIN_WIDTH = 160
 const MAX_WIDTH = 260
 const READ_LINE = 120 // a section is being read once its heading is above this line
@@ -52,7 +52,7 @@ export function Contents() {
         id="toc"
         data-mode="beside"
         aria-labelledby="toc-title"
-        className="toc anim-fade fixed top-24 z-20 flex max-h-[calc(100dvh-120px)] flex-col"
+        className="toc anim-fade fixed top-[calc(var(--bar)+var(--float-top)+32px)] z-20 flex max-h-[calc(100dvh-var(--bar)-var(--float-top)-56px)] flex-col"
         style={{ left: place.left, width: place.width }}
       >
         {title}
@@ -152,31 +152,55 @@ const inView = (box: HTMLElement, el: HTMLElement) => {
 const centred = (ol: HTMLElement, el: HTMLElement) => el.offsetTop - (ol.clientHeight - el.offsetHeight) / 2
 
 // Where the list fits to the right of the text, clear of the Ask AI sidebar;
-// null when it doesn't.
+// null when it doesn't. Beside the centred text if there's room; otherwise, as
+// on a documentation site, the text moves left to make room (centred between
+// the page's left edge, or the left sidebar, and the list).
 function useRoomBeside(on: boolean) {
   const drawer = useApp((s) => s.drawer)
   const [place, setPlace] = React.useState<{ left: number; width: number } | null>(null)
   React.useLayoutEffect(() => {
     if (!on) return
     const column = document.getElementById("reader-view")!
+    const main = document.getElementById("main")!
     const measure = () => {
-      const r = column.getBoundingClientRect()
+      // Measured from the page, not the text, which this moves.
+      const m = main.getBoundingClientRect()
+      const cs = getComputedStyle(main)
+      const start = m.left + parseFloat(cs.paddingLeft)
+      const end = m.right - parseFloat(cs.paddingRight)
+      const width = Math.min(parseFloat(getComputedStyle(column).maxWidth) || column.offsetWidth, end - start)
       let edge = document.documentElement.clientWidth
       if (get().drawer === "open" && edge >= 640) edge -= Math.min(440, edge)
-      const room = Math.floor(edge - r.right - GAP - EDGE)
-      const next = room >= MIN_WIDTH ? { left: Math.round(r.right + GAP), width: Math.min(room, MAX_WIDTH) } : null
+
+      const centredRight = start + (end - start + width) / 2
+      let next: { left: number; width: number } | null = null
+      let shift = ""
+      const room = Math.floor(edge - centredRight - GAP - EDGE)
+      if (room >= MIN_WIDTH) {
+        next = { left: Math.round(centredRight + GAP), width: Math.min(room, MAX_WIDTH) }
+      } else {
+        const most = Math.floor(edge - start - width - GAP - EDGE)
+        if (most >= MIN_WIDTH) {
+          const w = Math.min(most, MAX_WIDTH)
+          const left = edge - EDGE - w
+          next = { left: Math.round(left), width: w }
+          shift = `${Math.round(Math.max(0, (left - GAP - start - width) / 2))}px`
+        }
+      }
+      column.style.marginLeft = shift
       setPlace((p) => (p?.left === next?.left && p?.width === next?.width ? p : next))
     }
     measure()
-    // The column moves with the window, the reading width, and the sidebar
-    // (which makes room for itself on wide screens).
+    // The page changes with the window, the reading width, and the sidebars
+    // (which make room for themselves on wide screens).
     const ro = new ResizeObserver(measure)
     ro.observe(column)
-    ro.observe(document.getElementById("main")!)
+    ro.observe(main)
     window.addEventListener("resize", measure)
     return () => {
       ro.disconnect()
       window.removeEventListener("resize", measure)
+      column.style.marginLeft = ""
     }
   }, [on, drawer])
   return on ? place : null

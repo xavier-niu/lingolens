@@ -8,6 +8,7 @@ import { get, set, bumpChat, showBanner, getLevel, reduceMotion, type HistoryIte
 import { providerProblem } from "./session"
 import { dismissHint, hideFab } from "./engine"
 import { showToast } from "./notice"
+import { noteTokens } from "./books"
 import type { AnswerView } from "./answer-view"
 
 export interface Message { role: "user" | "assistant"; content: string }
@@ -195,16 +196,25 @@ export async function openHistory() {
   showDrawer("history")
   const book = inBook()
   setHist({ scope: book ? "book" : "all" })
-  if (!get().hist.items) {
+  await loadHistory()
+  // Nothing about this text yet: show everything instead of an empty list.
+  if (book && get().hist.items && !historyItems().some((c) => c.bookId === String(book.id))) setHist({ scope: "all" })
+}
+
+// The saved conversations, fetched when first wanted and again after one
+// changes (see saveChat).
+let histLoad: Promise<void> | null = null
+export function loadHistory(): Promise<void> {
+  if (get().hist.items) return Promise.resolve()
+  histLoad ||= (async () => {
     setHist({ status: t("chat.histLoading") })
     try {
       setHist({ items: await api("GET", "/api/chats"), status: "" })
     } catch (err: any) {
       setHist({ status: err.offline ? t("net.needsConnection") : err.message })
     }
-  }
-  // Nothing about this text yet: show everything instead of an empty list.
-  if (book && get().hist.items && !historyItems().some((c) => c.bookId === String(book.id))) setHist({ scope: "all" })
+  })().finally(() => { histLoad = null })
+  return histLoad
 }
 
 // The saved conversations, with this session's first: the server may not have
@@ -335,7 +345,7 @@ export async function sendChat(question: string) {
   let error = ""
   try {
     const events = await postStream("/api/chat", {
-      level: getLevel(), passage: chat.passage, selection: chat.selection,
+      book: chat.bookId, level: getLevel(), passage: chat.passage, selection: chat.selection,
       messages: chat.messages.slice(-MAX_SENT_MESSAGES),
     }, ctl.signal)
     for await (const ev of events) {
@@ -347,6 +357,8 @@ export async function sendChat(question: string) {
         if (first) bumpChat() // "Thinking…" makes way for the text
       } else if (ev.type === "error") {
         error = ev.error
+      } else if (ev.type === "done") {
+        noteTokens(chat.bookId, ev.bookTokens)
       }
     }
   } catch (err: any) {

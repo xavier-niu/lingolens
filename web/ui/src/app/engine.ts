@@ -10,6 +10,7 @@ import { renderMarkdown, escapeHTML, sentenceAround } from "@/lib/markdown"
 import { get, set, showBanner, getLevel, isTouch, type Book, type SelectionInfo } from "./store"
 import { providerProblem } from "./session"
 import { openChat } from "./chat"
+import { noteTokens } from "./books"
 
 export interface Ann {
   start: number
@@ -346,11 +347,14 @@ async function runBatch(ids: string[], gen: number) {
       offline = true
       return
     }
+    const book = get().book?.id || ""
     const events = await postStream("/api/annotate", {
+      book,
       level,
       segments: [...pending].map((id) => ({ id, text: engine.segments.get(id)!.text })),
     }, ctl.signal)
     for await (const ev of events) {
+      if (ev.type === "done") noteTokens(book, ev.bookTokens) // spent, whether or not the reader stayed
       if (gen !== lazy.gen) return
       if (ev.type === "segment") {
         const seg = engine.segments.get(ev.id)
@@ -545,7 +549,10 @@ async function fetchDetail(idx: number) {
   try {
     let data = await savedLookup(a)
     if (!data) {
-      data = await api("POST", "/api/lookup", { level, term: a.text, sentence })
+      const book = get().book?.id || ""
+      const { bookTokens, ...entry } = await api("POST", "/api/lookup", { book, level, term: a.text, sentence })
+      noteTokens(book, bookTokens)
+      data = entry as Entry
       saveLookup(level, a.text, sentence, data)
     }
     applyLookup(idx, data!)

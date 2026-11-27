@@ -86,14 +86,15 @@ export function ThemeChoice({ id, value, onChange, labels = false, className }: 
 const row = "pop-row flex min-h-10 items-center justify-between gap-4 rounded-lg px-2.5 py-1 text-sm"
 
 // Reading Options, under the "Aa" button in the reader: kept on this device.
-export function ReadingOptions({ onClose }: { onClose: () => void }) {
+export function ReadingOptions({ onClose, side, align = "end", sideOffset = 6 }: { onClose: () => void; side?: "bottom" | "right"; align?: "start" | "end"; sideOffset?: number }) {
   const t = useT()
   const r = useReading()
   return (
     <PopoverContent
       id="display-pop"
-      align="end"
-      sideOffset={6}
+      side={side}
+      align={align}
+      sideOffset={sideOffset}
       collisionPadding={8}
       className="w-[min(344px,calc(100vw-16px))] max-h-[calc(100dvh-80px)] gap-0 overflow-y-auto overscroll-contain rounded-2xl p-2 shadow-(--elev-float)"
       onOpenAutoFocus={(e) => e.preventDefault()}

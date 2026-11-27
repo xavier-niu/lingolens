@@ -407,6 +407,7 @@ check('a phone shows the same text size', phoneSize === '18.5px', phoneSize);
 await page.setViewportSize({ width: 1280, height: 860 });
 await page.waitForTimeout(600);
 check('text size kept on this device, not sent to the account', (await accountPrefs()).readSize === 'm' && (await onDevice()).readSize === 'sm', JSON.stringify(await onDevice()));
+await page.click('#btn-display'); // it closed with the phone's header; open it again
 await page.click('#size-seg [data-size="l"]');
 const articleWidth = () => page.evaluate(() => Math.round(document.querySelector('#article').getBoundingClientRect().width));
 check('standard line width by default', await articleWidth() === 700, String(await articleWidth()));
@@ -462,8 +463,8 @@ check('…on this device only', (await accountPrefs()).hideWords === false && (a
 await page.keyboard.press('Escape');
 
 // Settings: the level, and the reading defaults for every device.
-await page.click('#btn-menu');
-await page.click('#btn-settings');
+await page.click('#btn-account'); // the account menu holds Settings
+await page.click('#acct-settings');
 await page.waitForSelector('#settings-view:not([hidden])');
 check('Settings counts the words marked known', (await page.textContent('#known-count')).includes(': 1.'), await page.textContent('#known-count'));
 await page.click('#known-clear');
@@ -488,7 +489,7 @@ check('…and this device uses the one just chosen', !('readSize' in await onDev
 await page.click('#reading-reset');
 check('"Use the defaults here" drops this device\'s choices', JSON.stringify(await onDevice()) === '{}' && !(await page.isVisible('#reading-local')));
 check('Settings from a text: a way back to the text above the title', (await page.textContent('#back-to-text')) === 'Why Small Habits Matter'
-  && (await page.getAttribute('#back-to-text', 'href')).startsWith('#/read/') && (await page.getAttribute('.bar-nav a[href="#/settings"]', 'aria-current')) === 'page');
+  && (await page.getAttribute('#back-to-text', 'href')).startsWith('#/read/') && !(await page.$('header a[href="#/settings"]')));
 await page.click('#back-to-text');
 await page.waitForSelector('#reader-view:not([hidden])');
 check('settings back returns to the book', (await page.textContent('#book-title')) === 'Why Small Habits Matter');
