@@ -150,6 +150,11 @@ var migrations = []string{
 	// tokens read and written.
 	`ALTER TABLE books ADD COLUMN tokens_in INTEGER NOT NULL DEFAULT 0;
 	ALTER TABLE books ADD COLUMN tokens_out INTEGER NOT NULL DEFAULT 0;`,
+	// 9: of the tokens read, those read from the provider's prompt cache, apart
+	// from tokens_in (which counted them until now).
+	`ALTER TABLE books ADD COLUMN tokens_cached INTEGER NOT NULL DEFAULT 0;`,
+	// 10: when the reader put a text aside to read later; '' when they haven't.
+	`ALTER TABLE books ADD COLUMN read_later_at TEXT NOT NULL DEFAULT '';`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

@@ -149,11 +149,12 @@ func (c *anthropicClient) StreamChat(ctx context.Context, system string, msgs []
 	return nil
 }
 
-// anthropicUsage counts prompt-cache reads and writes as input: they are
-// tokens read all the same.
+// anthropicUsage counts prompt-cache reads as cached, and cache writes as
+// input: they are read afresh (and cost more, not less).
 func anthropicUsage(u anthropic.Usage) Usage {
 	return Usage{
-		Input:  int(u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens),
+		Input:  int(u.InputTokens + u.CacheCreationInputTokens),
+		Cached: int(u.CacheReadInputTokens),
 		Output: int(u.OutputTokens),
 	}
 }

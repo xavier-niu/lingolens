@@ -1,16 +1,14 @@
-import { Check, Clock3, LayoutGrid, List, Plus, Sparkles, Trash2 } from "lucide-react"
+import { Bookmark, Check, Clock3, LayoutGrid, List, Plus, Search, Sparkles, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { isFinished, minutesLeft, tintFor } from "@/lib/library.js"
 import { useApp, set, getLevel, type Book } from "@/app/store"
 import { useT } from "@/app/hooks"
 import { addSampleBook, deleteBook } from "@/app/session"
-import { bookStat, daysLeft, expiryText, isExpired, tokensOf } from "@/app/books"
+import { bookStat, daysLeft, expiryText, isExpired, isReadLater, openSource, shelfBooks, showShelf, toggleReadLater } from "@/app/books"
 import { confirmDialog } from "@/components/confirm"
 import { Segmented } from "@/components/segmented"
 import { fmtWhen } from "@/components/chat-panel"
 import { Button } from "@/components/ui/button"
-
-const openSource = () => set((s) => ({ source: { book: null, append: false, seq: (s.source?.seq ?? 0) + 1 } }))
 
 function setShelfView(shelfView: "grid" | "list") {
   try { localStorage.setItem("lingolens.shelfView", shelfView) } catch { /* private mode */ }
@@ -23,6 +21,8 @@ export function LibraryView() {
   const all = useApp((s) => s.books)
   const loaded = useApp((s) => s.booksLoaded)
   const shelfView = useApp((s) => s.shelfView)
+  const filter = useApp((s) => s.shelfFilter)
+  const query = useApp((s) => s.shelfQuery)
   useApp((s) => s.prefs.level)
   const books = all.filter((b) => !isExpired(b)) // the server deletes them; offline, hide them
   const level = getLevel()
@@ -31,15 +31,33 @@ export function LibraryView() {
   if (books.length && left === 0) summary = t("shelf.summaryDone")
   else if (books.length === 1) summary = t("shelf.summaryOne", { m: left, level })
   else if (books.length > 1) summary = t("shelf.summary", { n: books.length, m: left, level })
+  // A filter or a search: the texts it finds, under the filter's name.
+  const shown = shelfBooks(books, filter, query)
+  const narrowed = filter !== "all" || !!query.trim()
+  if (filter !== "all") summary = shown.length === 1 ? t("shelf.countOne") : t("shelf.count", { n: shown.length })
 
   return (
     <section id="library-view" hidden={view !== "library"} className="library mx-auto mt-14 max-w-[1080px] max-sm:mt-8">
       <div className="shelf-head mb-9 flex flex-wrap items-end justify-between gap-x-6 gap-y-4 max-sm:mb-6" hidden={books.length === 0}>
         <div className="min-w-0">
-          <h1 className="m-0 text-[clamp(26px,3.4vw,32px)] leading-tight font-semibold tracking-[-0.025em]">{t("shelf.title")}</h1>
+          <h1 id="shelf-title" className="m-0 text-[clamp(26px,3.4vw,32px)] leading-tight font-semibold tracking-[-0.025em]">{t(filter === "all" ? "shelf.title" : `filter.${filter}`)}</h1>
           <p id="shelf-summary" className="shelf-summary mt-1.5 mb-0 text-[15px] text-muted-foreground tabular-nums">{summary}</p>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5 max-sm:w-full">
+          <label className="relative max-sm:min-w-0 max-sm:flex-1">
+            <span className="sr-only">{t("shelf.search")}</span>
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" strokeWidth={1.8} aria-hidden="true" />
+            <input
+              id="shelf-search"
+              type="search"
+              value={query}
+              placeholder={t("shelf.search")}
+              autoComplete="off"
+              onChange={(e) => set({ shelfQuery: e.target.value })}
+              onKeyDown={(e) => { if (e.key === "Escape" && query) { e.stopPropagation(); set({ shelfQuery: "" }) } }}
+              className="h-9 w-56 rounded-full border border-input bg-card pr-3 pl-9 text-sm outline-none placeholder:text-muted-foreground/80 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/15 max-sm:w-full"
+            />
+          </label>
           <Segmented
             id="shelf-view" label={t("shelf.view")} attr="view" value={shelfView} onChange={(v) => setShelfView(v as "grid" | "list")}
             buttonClassName="h-7 w-8 px-0 [&_svg]:size-4"
@@ -54,11 +72,18 @@ export function LibraryView() {
         </div>
       </div>
 
-      {shelfView === "list" && books.length > 0
-        ? <BookTable books={books} level={level} />
+      {narrowed && books.length > 0 && shown.length === 0 && (
+        <div id="shelf-none" className="mx-auto max-w-[420px] py-16 text-center">
+          <p className="m-0 text-[15px] text-muted-foreground">{t(query.trim() ? "shelf.noMatch" : `filter.${filter}Empty`)}</p>
+          <Button variant="outline" className="mt-5 h-9 rounded-full px-4" onClick={() => { set({ shelfQuery: "" }); showShelf("all") }}>{t("shelf.showAll")}</Button>
+        </div>
+      )}
+
+      {shelfView === "list" && shown.length > 0
+        ? <BookTable books={shown} level={level} />
         : (
           <div id="shelf" className="shelf grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-5 max-sm:grid-cols-2 max-sm:gap-3">
-            {books.map((b) => <BookCard key={b.id} book={b} level={level} />)}
+            {shown.map((b) => <BookCard key={b.id} book={b} level={level} />)}
           </div>
         )}
 
@@ -121,20 +146,24 @@ function BookCard({ book: b, level }: { book: Book; level: string }) {
           <span className="cover-title line-clamp-3 font-serif text-[20px] leading-[1.2] font-semibold tracking-[-0.01em] [overflow-wrap:anywhere] max-sm:line-clamp-5 max-sm:text-[16.5px]">{b.title}</span>
         </div>
       </a>
-      <div className="book-meta flex min-h-11 items-center gap-2 border-t border-border/70 py-1.5 pr-1.5 pl-4 max-sm:pl-3">
+      <div className="book-meta flex min-h-10 items-center gap-1.5 border-t border-border/70 py-1 pr-1.5 pl-4 max-sm:pl-3">
         <span className={cn("book-stat min-w-0 flex-1 truncate text-[13px] text-muted-foreground tabular-nums", done && "done font-medium text-success before:content-['✓_']")}>
           {bookStat(b, level)}
         </span>
-        <button
-          type="button"
-          className="book-del relative z-[2] inline-grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground opacity-0 transition-[opacity,color,background-color] group-focus-within/book:opacity-100 group-hover/book:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/35 focus-visible:outline-none pointer-coarse:opacity-100"
-          data-del-book={b.id}
-          aria-label={`${t("book.delete")}: ${b.title}`}
-          title={t("book.delete")}
-          onClick={remove}
-        >
-          <Trash2 className="size-4" strokeWidth={1.8} />
-        </button>
+        {/* Delete (on hover) to the left, so the bookmark keeps the corner. */}
+        <span className="flex shrink-0 items-center">
+          <button
+            type="button"
+            className="book-del relative z-[2] inline-grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color,background-color] group-focus-within/book:opacity-100 group-hover/book:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/35 focus-visible:outline-none pointer-coarse:opacity-100"
+            data-del-book={b.id}
+            aria-label={`${t("book.delete")}: ${b.title}`}
+            title={t("book.delete")}
+            onClick={remove}
+          >
+            <Trash2 className="size-[15px]" strokeWidth={1.8} />
+          </button>
+          <LaterButton book={b} small />
+        </span>
       </div>
       {p > 0 && !done && (
         <div className="book-bar absolute inset-x-0 bottom-0 h-[3px] bg-transparent" aria-hidden="true">
@@ -149,10 +178,8 @@ function BookCard({ book: b, level }: { book: Book; level: string }) {
 // that matter least.
 function BookTable({ books, level }: { books: Book[]; level: string }) {
   const t = useT()
-  const all = useApp((s) => s.books)
   const lang = useApp((s) => s.lang)
   const locale = lang === "zh" ? "zh-CN" : "en"
-  const compact = new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 })
   const th = "py-2.5 pr-4 text-[12px] font-medium whitespace-nowrap text-muted-foreground"
   return (
     <div id="shelf-list" className="shelf-list overflow-hidden rounded-2xl bg-card shadow-xs ring-1 ring-border">
@@ -163,17 +190,14 @@ function BookTable({ books, level }: { books: Book[]; level: string }) {
             <th scope="col" className={cn(th, "text-right max-sm:hidden")}>{t("shelf.colWords")}</th>
             <th scope="col" className={th}>{t("shelf.colProgress")}</th>
             <th scope="col" className={cn(th, "text-right max-xl:hidden")}>{t("shelf.colLeft")}</th>
-            <th scope="col" className={cn(th, "max-lg:hidden")}>{t("shelf.colRead")}</th>
             <th scope="col" className={cn(th, "max-sm:hidden")}>{t("shelf.colUpdated")}</th>
-            <th scope="col" className={cn(th, "text-right max-lg:hidden")}>{t("shelf.colTokens")}</th>
-            <th scope="col" className="w-11 p-0"><span className="sr-only">{t("book.delete")}</span></th>
+            <th scope="col" className="w-[84px] p-0"><span className="sr-only">{t("shelf.colActions")}</span></th>
           </tr>
         </thead>
         <tbody>
           {books.map((b) => {
             const p = Math.floor((b.progress || 0) * 100)
             const done = isFinished(b)
-            const tokens = tokensOf(b, all).total
             const remove = async () => {
               if (await confirmDialog(t("book.confirmDelete", { t: b.title }), { confirm: t("book.delete"), destructive: true })) deleteBook(b.id)
             }
@@ -209,10 +233,9 @@ function BookTable({ books, level }: { books: Book[]; level: string }) {
                     )}
                 </td>
                 <td className={cn(td, "text-right max-xl:hidden")}>{done ? "—" : t("rail.minutes", { m: minutesLeft(b, level) })}</td>
-                <td className={cn(td, "max-lg:hidden")}>{b.lastReadAt ? fmtWhen(b.lastReadAt) : t("shelf.never")}</td>
                 <td className={cn(td, "max-sm:hidden")}>{b.updatedAt ? fmtWhen(b.updatedAt) : "—"}</td>
-                <td className={cn(td, "text-right max-lg:hidden")} title={tokens ? tokens.toLocaleString(locale) : undefined}>{tokens ? compact.format(tokens) : "—"}</td>
-                <td className="py-1 pr-1.5">
+                <td className="py-1 pr-1.5 text-right whitespace-nowrap">
+                  <LaterButton book={b} />
                   <button
                     type="button"
                     className="book-del relative z-[2] inline-grid size-8 place-items-center rounded-lg text-muted-foreground opacity-0 transition-[opacity,color,background-color] group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/35 focus-visible:outline-none pointer-coarse:opacity-100"
@@ -230,5 +253,30 @@ function BookTable({ books, level }: { books: Book[]; level: string }) {
         </tbody>
       </table>
     </div>
+  )
+}
+
+// Read later, on a card or a row: always in sight (unlike delete), filled
+// once marked.
+function LaterButton({ book: b, small = false }: { book: Book; small?: boolean }) {
+  const t = useT()
+  const on = isReadLater(b)
+  const label = t(on ? "later.remove" : "later.add")
+  return (
+    <button
+      type="button"
+      className={cn(
+        "book-later relative z-[2] inline-grid shrink-0 place-items-center text-muted-foreground/70 transition-[color,background-color] hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/35 focus-visible:outline-none",
+        small ? "size-7 rounded-md" : "size-8 rounded-lg",
+        on && "text-brand hover:text-brand",
+      )}
+      data-later={b.id}
+      aria-pressed={on}
+      aria-label={`${label}: ${b.title}`}
+      title={label}
+      onClick={() => toggleReadLater(b)}
+    >
+      <Bookmark className={cn(small ? "size-[15px]" : "size-4", on && "fill-current")} strokeWidth={1.8} />
+    </button>
   )
 }

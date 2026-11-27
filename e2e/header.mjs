@@ -58,7 +58,7 @@ for (const [name, opts] of [
     check(`${name}/${lang}: no header`, !r.header);
     check(`${name}/${lang}: the sidebar's button at the top left, the text's tools at the top right`,
       inside(r.start) && inside(r.tools) && r.start.left <= 16 && r.vw - r.tools.right <= 16 && Math.abs(r.start.top - r.tools.top) < 1 && r.start.right < r.tools.left && r.scrollW <= r.vw, JSON.stringify(r));
-    check(`${name}/${lang}: Reading Options, Edit and Append, nothing else`, r.startIds === 'btn-rail' && r.toolIds === 'btn-display,btn-edit,btn-append', `${r.startIds} | ${r.toolIds}`);
+    check(`${name}/${lang}: Reading Options, Edit, Append and Read Later`, r.startIds === 'btn-rail' && r.toolIds === 'btn-display,btn-edit,btn-append,btn-later', `${r.startIds} | ${r.toolIds}`);
     check(`${name}/${lang}: all the same kind of button`, new Set(r.looks).size === 1, r.looks.join(' | '));
     check(`${name}/${lang}: the title clear below them`, r.title.top >= Math.max(r.start.bottom, r.tools.bottom) + 8, JSON.stringify(r));
     check(`${name}/${lang}: interface language applied`, (await page.getAttribute('html', 'lang'))?.startsWith(lang));

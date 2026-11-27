@@ -46,7 +46,7 @@ func (fakeClient) StreamChat(ctx context.Context, _ string, msgs []Message, onDe
 	for _, m := range msgs {
 		in += EstimateTokens(m.Content)
 	}
-	Record(ctx, Usage{Input: 400 + in, Output: EstimateTokens(string(reply))}) // as if a real model
+	Record(ctx, Usage{Input: in, Cached: 400, Output: EstimateTokens(string(reply))}) // as if a real model, its instructions cached
 	sizes := []int{3, 9, 2, 14, 6, 1, 11, 5}
 	delays := []time.Duration{20, 70, 15, 120, 35, 10, 90, 40}
 	for i, k := 0, 0; i < len(reply); k++ {

@@ -16,6 +16,7 @@ export function cachedLookup(level: string, term: string, sentence: string, opts
 export function loadData(name: string): Promise<any>
 export function expiresFor(ttlDays: number, from?: number): string
 export function saveProgress(id: string, pos: number, progress: number, opts?: { closing?: boolean }): Promise<void> | undefined
+export function setReadLater(id: string, later: boolean): Promise<void>
 export function savePrefs(patch: Record<string, unknown>): Promise<void>
 export function setKnown(lemma: string, known: boolean): Promise<void>
 export function clearKnown(): Promise<void>

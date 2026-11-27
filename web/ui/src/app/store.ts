@@ -31,6 +31,8 @@ export interface Prefs {
   hidePhrases: boolean
 }
 
+export type ShelfFilter = "all" | "later" | "reading" | "new" | "done" | "expiring"
+
 export interface Book {
   id: string
   title: string
@@ -42,9 +44,11 @@ export interface Book {
   expiresAt?: string
   updatedAt?: string
   lastReadAt?: string // "" until opened
+  readLaterAt?: string // when marked to read later; "" = not
   savedPos?: number
   savedProgress?: number
-  tokensIn?: number // what the AI model has read and written for it, in all
+  tokensIn?: number // what the AI model has read (afresh, and from its prompt cache) and written for it, in all
+  tokensCached?: number
   tokensOut?: number
   [k: string]: unknown
 }
@@ -91,6 +95,8 @@ export interface AppState {
 
   railOpen: boolean // the sidebar on wide screens (this device's choice)
   shelfView: "grid" | "list" // how the shelf shows the texts (this device's choice)
+  shelfFilter: ShelfFilter // which of the texts the shelf shows
+  shelfQuery: string // …whose titles have this in them
   railSlid: boolean // narrower screens: the sidebar slid in over the page
 
   // reader
@@ -145,6 +151,8 @@ export const useApp = create<AppState>()(() => ({
 
   railOpen: (() => { try { return localStorage.getItem("lingolens.rail") !== "off" } catch { return true } })(),
   railSlid: false,
+  shelfFilter: "all",
+  shelfQuery: "",
   shelfView: (() => { try { return localStorage.getItem("lingolens.shelfView") === "list" ? "list" : "grid" } catch { return "grid" } })(),
 
   book: null,

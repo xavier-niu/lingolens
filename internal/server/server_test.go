@@ -468,12 +468,57 @@ func TestLookup(t *testing.T) {
 }
 
 // What the model spends on a text (glosses, lookups, Ask AI) adds up on it.
+func TestReadLater(t *testing.T) {
+	e := newEnv(t)
+	a := e.signIn(t, "a@example.com", false)
+	b := e.signIn(t, "b@example.com", false)
+	book := decodeJSON[store.Book](t, e.do(t, a, "POST", "/api/books", map[string]string{"content": "Notes\n\nSomething to read."}))
+	listed := func() store.Book {
+		for _, x := range decodeJSON[[]store.Book](t, e.do(t, a, "GET", "/api/books", nil)) {
+			if x.ID == book.ID {
+				return x
+			}
+		}
+		t.Fatal("book gone")
+		return store.Book{}
+	}
+	if listed().ReadLaterAt != "" {
+		t.Fatalf("new text already marked: %q", listed().ReadLaterAt)
+	}
+
+	at := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
+	if c := status(t, e.do(t, a, "PUT", "/api/books/"+book.ID+"/later", map[string]any{"later": true, "at": at})); c != 200 {
+		t.Fatalf("mark: %d", c)
+	}
+	got := listed()
+	if got.ReadLaterAt != at.Format(time.RFC3339) {
+		t.Errorf("readLaterAt = %q, want %q (when it was marked)", got.ReadLaterAt, at.Format(time.RFC3339))
+	}
+	if got.UpdatedAt != book.UpdatedAt {
+		t.Errorf("marking changed updatedAt: %s -> %s", book.UpdatedAt, got.UpdatedAt)
+	}
+
+	if c := status(t, e.do(t, b, "PUT", "/api/books/"+book.ID+"/later", map[string]any{"later": false})); c != 404 {
+		t.Errorf("someone else's text: %d, want 404", c)
+	}
+	if listed().ReadLaterAt == "" {
+		t.Error("someone else cleared the mark")
+	}
+
+	if c := status(t, e.do(t, a, "PUT", "/api/books/"+book.ID+"/later", map[string]any{"later": false})); c != 200 {
+		t.Fatalf("clear: %d", c)
+	}
+	if got := listed().ReadLaterAt; got != "" {
+		t.Errorf("cleared, yet readLaterAt = %q", got)
+	}
+}
+
 func TestTokensCountedPerBook(t *testing.T) {
 	e := newEnv(t)
 	a := e.signIn(t, "a@example.com", false)
 	b := e.signIn(t, "b@example.com", false)
 	book := decodeJSON[store.Book](t, e.do(t, a, "POST", "/api/books", map[string]string{"content": "Notes\n\nBy and large, it worked."}))
-	type tokens struct{ Input, Output int }
+	type tokens = store.BookTokens
 	last := func(events []map[string]any) *tokens {
 		done := events[len(events)-1]
 		if done["type"] != "done" {
@@ -483,7 +528,7 @@ func TestTokensCountedPerBook(t *testing.T) {
 		if !ok {
 			return nil
 		}
-		return &tokens{int(bt["input"].(float64)), int(bt["output"].(float64))}
+		return &tokens{Input: int(bt["input"].(float64)), Cached: int(bt["cached"].(float64)), Output: int(bt["output"].(float64))}
 	}
 	stored := func() tokens {
 		for _, x := range decodeJSON[[]store.Book](t, e.do(t, a, "GET", "/api/books", nil)) {
@@ -491,7 +536,7 @@ func TestTokensCountedPerBook(t *testing.T) {
 				if x.UpdatedAt != book.UpdatedAt {
 					t.Errorf("counting tokens changed updatedAt: %s -> %s", book.UpdatedAt, x.UpdatedAt)
 				}
-				return tokens{x.TokensIn, x.TokensOut}
+				return tokens{Input: x.TokensIn, Cached: x.TokensCached, Output: x.TokensOut}
 			}
 		}
 		t.Fatal("book gone")
@@ -501,7 +546,7 @@ func TestTokensCountedPerBook(t *testing.T) {
 	got := last(readEvents(t, e.do(t, a, "POST", "/api/annotate", map[string]any{
 		"book": book.ID, "level": "B1", "segments": []map[string]string{{"id": "s0", "text": "By and large, extraordinary results take time."}},
 	})))
-	if got == nil || got.Input == 0 || got.Output == 0 || *got != stored() {
+	if got == nil || got.Input == 0 || got.Cached == 0 || got.Output == 0 || *got != stored() {
 		t.Fatalf("after annotating: sent %+v, stored %+v", got, stored())
 	}
 	before := *got
@@ -510,7 +555,7 @@ func TestTokensCountedPerBook(t *testing.T) {
 		Lemma      string
 		BookTokens *tokens `json:"bookTokens"`
 	}](t, e.do(t, a, "POST", "/api/lookup", map[string]string{"book": book.ID, "term": "worked", "sentence": "By and large, it worked."}))
-	if entry.Lemma != "worked" || entry.BookTokens == nil || entry.BookTokens.Input <= before.Input || *entry.BookTokens != stored() {
+	if entry.Lemma != "worked" || entry.BookTokens == nil || entry.BookTokens.Input <= before.Input || entry.BookTokens.Cached <= before.Cached || *entry.BookTokens != stored() {
 		t.Fatalf("after lookup: %+v, stored %+v", entry, stored())
 	}
 	before = *entry.BookTokens

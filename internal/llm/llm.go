@@ -44,9 +44,12 @@ func errorf(status int, format string, args ...any) *Error {
 	return &Error{Msg: fmt.Sprintf(format, args...), Status: status}
 }
 
-// Usage is what a call to the model cost, in tokens.
+// Usage is what a call to the model cost, in tokens: the input it read
+// afresh, the input it read from the provider's prompt cache (cheaper), and
+// what it wrote.
 type Usage struct {
 	Input  int `json:"input"`
+	Cached int `json:"cached"`
 	Output int `json:"output"`
 }
 
@@ -60,7 +63,7 @@ func WithMeter(ctx context.Context, m func(Usage)) context.Context {
 
 // Record reports u to the context's meter, if it has one.
 func Record(ctx context.Context, u Usage) {
-	if m, ok := ctx.Value(meterKey{}).(func(Usage)); ok && (u.Input > 0 || u.Output > 0) {
+	if m, ok := ctx.Value(meterKey{}).(func(Usage)); ok && (u.Input > 0 || u.Cached > 0 || u.Output > 0) {
 		m(u)
 	}
 }

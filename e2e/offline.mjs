@@ -179,6 +179,13 @@ await page.waitForTimeout(200);
 const titles = await page.$$eval('#shelf .book', (els) => els.map((e) => e.textContent));
 check('offline shelf: new text in, deleted text out', titles.some((x) => x.includes('Written Offline')) && !titles.some((x) => x.includes('Second Book')), titles.length + '');
 
+// read later, offline: a text from before, and the one written offline
+const localId = await page.$eval('#shelf .book:has-text("Written Offline") [data-later]', (x) => x.dataset.later);
+await page.click(`#shelf [data-later="${a.id}"]`);
+await page.click(`#shelf [data-later="${localId}"]`);
+check('read later offline: marked at once', (await page.getAttribute(`#shelf [data-later="${a.id}"]`, 'aria-pressed')) === 'true'
+  && (await page.getAttribute(`#shelf [data-later="${localId}"]`, 'aria-pressed')) === 'true' && localId.startsWith('local-'), localId);
+
 // a setting changed offline
 await page.click('#btn-account'); await page.click('#acct-settings');
 await page.waitForSelector('#settings-view:not([hidden])');
@@ -203,6 +210,7 @@ check('…exactly once', books.filter((x) => x.title === 'Written Offline').leng
 check('offline delete reached the server', !books.some((x) => x.id === b.id));
 const serverA = books.find((x) => x.id === a.id);
 check('offline reading progress synced', serverA.progress > 0.3, `${serverA.progress} (bar ${progressOffline})`);
+check('read later, set offline, synced (the text written offline too)', !!serverA.readLaterAt && !!created?.readLaterAt, `${serverA.readLaterAt} / ${created?.readLaterAt}`);
 const textA = (await get(page, `/api/books/${a.id}`)).content;
 check('offline addition on the server, once, after a line', textA === `${BOOK_A}\n\n---\n\n${ADDED}`, JSON.stringify(textA.slice(-90)));
 const known = await get(page, '/api/known');

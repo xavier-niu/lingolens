@@ -118,6 +118,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/books/{id}", s.requireUser(s.handleGetBook))
 	mux.HandleFunc("PUT /api/books/{id}", s.requireUser(s.handleUpdateBook))
 	mux.HandleFunc("PUT /api/books/{id}/progress", s.requireUser(s.handleBookProgress))
+	mux.HandleFunc("PUT /api/books/{id}/later", s.requireUser(s.handleBookLater))
 	mux.HandleFunc("DELETE /api/books/{id}", s.requireUser(s.handleDeleteBook))
 	mux.HandleFunc("GET /api/known", s.requireUser(s.handleListKnown))
 	mux.HandleFunc("PUT /api/known/{lemma}", s.requireUser(s.handleSetKnown(true)))
@@ -242,7 +243,7 @@ func (s *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, struct {
 		*annotate.Entry
-		BookTokens *bookTokens `json:"bookTokens,omitempty"`
+		BookTokens *store.BookTokens `json:"bookTokens,omitempty"`
 	}{entry, tokens})
 }
 
@@ -285,12 +286,6 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	_ = nd.send(map[string]any{"type": "done", "bookTokens": meter.save()})
 }
 
-// bookTokens is what the model has spent on a text, in all.
-type bookTokens struct {
-	Input  int `json:"input"`
-	Output int `json:"output"`
-}
-
 // meter adds up what a request's model calls cost, for the text they were for.
 type meter struct {
 	s    *Server
@@ -310,6 +305,7 @@ func (s *Server) bookMeter(r *http.Request, book string) (context.Context, *mete
 	return llm.WithMeter(r.Context(), func(u llm.Usage) {
 		m.mu.Lock()
 		m.used.Input += u.Input
+		m.used.Cached += u.Cached
 		m.used.Output += u.Output
 		m.mu.Unlock()
 	}), m
@@ -317,23 +313,23 @@ func (s *Server) bookMeter(r *http.Request, book string) (context.Context, *mete
 
 // save adds what was spent to the book and returns its new totals; nil if
 // nothing was spent or the book isn't the user's (a text not yet synced).
-func (m *meter) save() *bookTokens {
+func (m *meter) save() *store.BookTokens {
 	m.mu.Lock()
 	used := m.used
 	m.mu.Unlock()
-	if used.Input == 0 && used.Output == 0 {
+	if used == (llm.Usage{}) {
 		return nil
 	}
 	// Spent even if the reader left: count it all the same.
 	ctx := context.WithoutCancel(m.r.Context())
-	in, out, err := m.s.opts.Store.AddBookTokens(ctx, currentUser(ctx).ID, m.book, used.Input, used.Output)
+	t, err := m.s.opts.Store.AddBookTokens(ctx, currentUser(ctx).ID, m.book, store.BookTokens(used))
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
 			m.s.opts.Logger.Warn("count tokens", "book", m.book, "err", err)
 		}
 		return nil
 	}
-	return &bookTokens{Input: in, Output: out}
+	return t
 }
 
 func validateChat(req *chatRequest) string {

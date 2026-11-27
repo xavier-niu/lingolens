@@ -151,7 +151,7 @@ func TestAnthropicRequestShape(t *testing.T) {
 // meter collects what calls under ctx report they cost.
 func meter() (context.Context, *Usage) {
 	var u Usage
-	return WithMeter(context.Background(), func(x Usage) { u.Input += x.Input; u.Output += x.Output }), &u
+	return WithMeter(context.Background(), func(x Usage) { u.Input += x.Input; u.Cached += x.Cached; u.Output += x.Output }), &u
 }
 
 func TestUsageIsMetered(t *testing.T) {
@@ -160,7 +160,7 @@ func TestUsageIsMetered(t *testing.T) {
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		if body["stream"] != true {
-			fmt.Fprint(w, `{"choices":[{"message":{"content":"{}"}}],"usage":{"prompt_tokens":120,"completion_tokens":30}}`)
+			fmt.Fprint(w, `{"choices":[{"message":{"content":"{}"}}],"usage":{"prompt_tokens":120,"completion_tokens":30,"prompt_tokens_details":{"cached_tokens":100}}}`)
 			return
 		}
 		// A server without stream_options turns the request down; the retry
@@ -185,8 +185,9 @@ func TestUsageIsMetered(t *testing.T) {
 	if err := c.StreamChat(ctx, "s", []Message{{Role: "user", Content: "q"}}, func(string) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
-	if *used != (Usage{170, 37}) {
-		t.Errorf("used = %+v, want {170 37}", *used)
+	// Of the 170 read, 100 came from the cache (the stream didn't say).
+	if want := (Usage{Input: 70, Cached: 100, Output: 37}); *used != want {
+		t.Errorf("used = %+v, want %+v", *used, want)
 	}
 
 	strictServer = true
@@ -199,7 +200,7 @@ func TestUsageIsMetered(t *testing.T) {
 		t.Errorf("strict server used = %+v, want nothing", *used)
 	}
 
-	// Anthropic: prompt-cache reads and writes count as input.
+	// Anthropic: prompt-cache reads are cached; cache writes, input.
 	ant := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"id":"msg_1","type":"message","role":"assistant","model":"m",
@@ -212,7 +213,7 @@ func TestUsageIsMetered(t *testing.T) {
 	if _, err := a.CompleteJSON(ctx, "s", "u", nil); err != nil {
 		t.Fatal(err)
 	}
-	if *used != (Usage{215, 9}) {
-		t.Errorf("anthropic used = %+v, want {215 9}", *used)
+	if want := (Usage{Input: 210, Cached: 5, Output: 9}); *used != want {
+		t.Errorf("anthropic used = %+v, want %+v", *used, want)
 	}
 }

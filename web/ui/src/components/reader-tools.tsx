@@ -1,9 +1,10 @@
 import * as React from "react"
-import { FilePlus2, PencilLine } from "lucide-react"
+import { Bookmark, FilePlus2, PencilLine } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useApp } from "@/app/store"
 import { useT } from "@/app/hooks"
 import { useRailMode } from "@/app/rail"
+import { isReadLater, toggleReadLater } from "@/app/books"
 import { TextSizeIcon } from "@/components/icons"
 import { ReadingOptions } from "@/components/reading-options"
 import { editText } from "@/components/header"
@@ -46,7 +47,31 @@ function Pill() {
       <button id="btn-append" type="button" className={floatingButton} title={t("btn.append")} aria-label={t("btn.append")} onClick={() => editText(true)}>
         <FilePlus2 strokeWidth={1.7} />
       </button>
+      <LaterToggle />
     </div>
+  )
+}
+
+// Read later: puts the open text aside to come back to, or takes it off.
+function LaterToggle() {
+  const t = useT()
+  const book = useApp((s) => s.book)
+  useApp((s) => s.rev) // marked in place
+  if (!book) return null
+  const on = isReadLater(book)
+  const label = t(on ? "later.remove" : "later.add")
+  return (
+    <button
+      id="btn-later"
+      type="button"
+      className={cn(floatingButton, "aria-pressed:text-brand aria-pressed:hover:text-brand")}
+      title={label}
+      aria-label={label}
+      aria-pressed={on}
+      onClick={() => toggleReadLater(book)}
+    >
+      <Bookmark className={cn(on && "fill-current")} strokeWidth={1.7} />
+    </button>
   )
 }
 

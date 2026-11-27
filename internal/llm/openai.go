@@ -175,13 +175,22 @@ func (c *openAIClient) StreamChat(ctx context.Context, system string, msgs []Mes
 }
 
 type openAIUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
+	PromptTokens        int `json:"prompt_tokens"`
+	CompletionTokens    int `json:"completion_tokens"`
+	PromptTokensDetails *struct {
+		CachedTokens int `json:"cached_tokens"`
+	} `json:"prompt_tokens_details"`
 }
 
+// usage splits the prompt into what was read from the cache (part of
+// prompt_tokens, where a server reports it) and the rest.
 func (u *openAIUsage) usage() Usage {
 	if u == nil {
 		return Usage{}
 	}
-	return Usage{Input: u.PromptTokens, Output: u.CompletionTokens}
+	cached := 0
+	if d := u.PromptTokensDetails; d != nil {
+		cached = min(max(d.CachedTokens, 0), u.PromptTokens)
+	}
+	return Usage{Input: u.PromptTokens - cached, Cached: cached, Output: u.CompletionTokens}
 }

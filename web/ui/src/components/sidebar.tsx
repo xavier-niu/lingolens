@@ -1,10 +1,10 @@
 import * as React from "react"
-import { ChevronsUpDown, History, Library, PanelLeft, PanelLeftClose, PanelLeftOpen, X } from "lucide-react"
+import { Bookmark, BookOpen, ChevronsUpDown, CircleCheck, CircleDashed, Clock3, History, Library, PanelLeft, PanelLeftClose, PanelLeftOpen, Plus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { isFinished, minutesLeft } from "@/lib/library.js"
-import { useApp, getLevel, type Book } from "@/app/store"
+import { isFinished, tintFor } from "@/lib/library.js"
+import { useApp, type Book, type ShelfFilter } from "@/app/store"
 import { useT } from "@/app/hooks"
-import { isExpired, tokensOf } from "@/app/books"
+import { continueReading, inFilter, isExpired, openSource, showShelf, tokensOf } from "@/app/books"
 import { chats, historyItems, loadHistory, resumeChat, toggleHistory } from "@/app/chat"
 import { slideRail, toggleRail, useBare, useRailMakingRoom, useRailMode, useRailSlides } from "@/app/rail"
 import { LogoMark } from "@/components/icons"
@@ -16,9 +16,8 @@ import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu
 
 // The sidebar on wide screens, in place of the header (the text's own tools
 // float at the top right of the page: reader-tools.tsx). From the top: the
-// name and the shelf, then the latest Ask AI conversations (on the shelf,
-// about any text; in a text, about it). At the foot:
-// statistics (of the text being read, or of the shelf), what's happening
+// name and the shelf; in a text, the latest Ask AI conversations about it, and
+// at the foot its statistics. Then what's happening
 // (glosses on the way, syncing), and the account. Narrowed, it's a
 // strip of icons. On narrower screens it's hidden until the button floating at
 // the top left slides it in over the page. See app/rail.ts for when it shows
@@ -151,14 +150,19 @@ function FullRail({ slid = false }: { slid?: boolean }) {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain px-3 pt-2 pb-4">
-        <nav aria-label={t("a11y.pages")}>
+        <button id="rail-add" type="button" className={row} onClick={() => { slideRail(false); openSource() }}>
+          <Plus strokeWidth={1.9} />{t("shelf.add")}
+        </button>
+        <ContinueReading />
+        <nav aria-label={t("a11y.pages")} className="-mt-3">
           <ShelfLink />
+          <Filters />
         </nav>
-        {(reading || view === "library") && <Conversations book={reading} />}
+        {reading && <Conversations book={reading} />}
       </div>
 
       <div className="shrink-0 px-3 pb-3">
-        <Stats book={reading} />
+        {reading && <Stats book={reading} />}
         <div className="flex flex-col gap-0.5 border-t pt-2">
           {!slid && <Annotating place="row" />}
           {!slid && <NetStatus place="row" />}
@@ -191,8 +195,11 @@ function IconRail() {
       </div>
       <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto pt-2 pb-4">
         {!makingRoom && <RailToggle />}
+        <button id="rail-add" type="button" className={iconButton} title={t("shelf.add")} aria-label={t("shelf.add")} onClick={openSource}>
+          <Plus strokeWidth={1.9} />
+        </button>
         <nav aria-label={t("a11y.pages")} className="contents">
-          <a id="rail-shelf" href="#/" title={t("reader.back")} aria-label={t("reader.back")} aria-current={view === "library" ? "page" : undefined} className={iconButton}>
+          <a id="rail-shelf" href="#/" title={t("reader.back")} aria-label={t("reader.back")} aria-current={view === "library" ? "page" : undefined} className={iconButton} onClick={() => showShelf("all")}>
             <Library strokeWidth={1.8} />
           </a>
         </nav>
@@ -244,11 +251,18 @@ function RailToggle() {
 function ShelfLink() {
   const t = useT()
   const view = useApp((s) => s.view)
+  const filter = useApp((s) => s.shelfFilter)
   const books = useApp((s) => s.books)
   const loaded = useApp((s) => s.booksLoaded)
   const n = books.filter((b) => !isExpired(b)).length
   return (
-    <a id="rail-shelf" href="#/" aria-current={view === "library" ? "page" : undefined} className={row}>
+    <a
+      id="rail-shelf"
+      href="#/"
+      aria-current={view === "library" && filter === "all" ? "page" : undefined}
+      className={row}
+      onClick={(e) => { e.preventDefault(); slideRail(false); showShelf("all") }}
+    >
       <Library strokeWidth={1.8} />
       <span className="flex-1">{t("reader.back")}</span>
       {loaded && n > 0 && <span className="text-xs font-normal text-muted-foreground tabular-nums">{n}</span>}
@@ -256,75 +270,119 @@ function ShelfLink() {
   )
 }
 
-// Statistics, at the foot. In a text: how far along it is, how long it is,
-// and what Ask AI and the glosses have cost on it. Elsewhere: the same for the
-// whole shelf.
-function Stats({ book }: { book: Book | null }) {
+// The shelf's filters, under it, with how many texts each has. "Deleting
+// soon" only when there are some.
+const FILTERS: { f: ShelfFilter; icon: typeof Bookmark }[] = [
+  { f: "later", icon: Bookmark },
+  { f: "reading", icon: BookOpen },
+  { f: "new", icon: CircleDashed },
+  { f: "done", icon: CircleCheck },
+  { f: "expiring", icon: Clock3 },
+]
+
+function Filters() {
+  const t = useT()
+  const view = useApp((s) => s.view)
+  const current = useApp((s) => s.shelfFilter)
+  const books = useApp((s) => s.books)
+  const loaded = useApp((s) => s.booksLoaded)
+  const shelf = books.filter((b) => !isExpired(b))
+  return (
+    <ul id="rail-filters" className="m-0 mt-px flex list-none flex-col gap-px p-0">
+      {FILTERS.map(({ f, icon: Icon }) => {
+        const n = shelf.filter((b) => inFilter(b, f)).length
+        if (f === "expiring" && !n) return null
+        return (
+          <li key={f}>
+            <button
+              type="button"
+              data-filter={f}
+              aria-current={view === "library" && current === f ? "page" : undefined}
+              className={cn(row, "pl-6")}
+              onClick={() => { slideRail(false); showShelf(f) }}
+            >
+              <Icon strokeWidth={1.8} />
+              <span className="flex-1">{t(`filter.${f}`)}</span>
+              {loaded && <span className="text-xs font-normal text-muted-foreground tabular-nums">{n}</span>}
+            </button>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+// The text last read and not yet finished, to go back to in one go (not
+// while reading it).
+function ContinueReading() {
+  const t = useT()
+  const books = useApp((s) => s.books)
+  const openId = useApp((s) => (s.view === "reader" ? s.book?.id : null))
+  useApp((s) => s.rev)
+  const b = continueReading(books)
+  if (!b || b.id === openId) return null
+  const p = Math.floor((b.progress || 0) * 100)
+  return (
+    <section id="rail-continue" aria-labelledby="rail-continue-title">
+      <h2 id="rail-continue-title" className={cn(heading, "mb-1")}>{t("rail.continue")}</h2>
+      <a href={`#/read/${encodeURIComponent(b.id)}`} data-book={b.id} title={b.title} className={cn(row, "h-auto min-h-9 py-1.5")} onClick={() => slideRail(false)}>
+        <span className="cover h-4 w-3 shrink-0 rounded-[3px] ring-1 ring-black/5" data-tint={tintFor(b.id)} aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate">{b.title}</span>
+        <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{p}%</span>
+      </a>
+    </section>
+  )
+}
+
+// Statistics of the open text, at the foot: how far along it is, and what Ask
+// AI and the glosses have cost on it (read afresh, read from the provider's
+// prompt cache, written).
+function Stats({ book }: { book: Book }) {
   const t = useT()
   const lang = useApp((s) => s.lang)
   const books = useApp((s) => s.books)
-  const level = useApp(() => getLevel())
-  const hist = useApp((s) => s.hist)
-  useApp((s) => s.chatRev)
   const locale = lang === "zh" ? "zh-CN" : "en"
   const compact = React.useMemo(() => new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }), [locale])
   const exact = (n: number) => n.toLocaleString(locale)
-  React.useEffect(() => { if (!hist.items) loadHistory() }, [hist.items])
-  const asked = hist.items ? historyItems(hist.items).filter((c) => !book || c.bookId === String(book.id)).length : null
 
-  const rows: { id: string; label: string; value: React.ReactNode; title?: string }[] = []
-  let tokens: { input: number; output: number; total: number }
-  let progress = -1
-  if (book) {
-    const done = isFinished(book)
-    progress = done ? 100 : Math.floor((book.progress || 0) * 100)
-    tokens = tokensOf(book, books)
-    rows.push(
-      { id: "stat-progress", label: t("rail.progress"), value: done ? t("book.finished") : `${progress}%` },
-      { id: "stat-left", label: t("rail.left"), value: done ? "—" : t("rail.minutes", { m: minutesLeft(book, level) }) },
-      { id: "stat-words", label: t("rail.words"), value: exact(book.words || 0) },
-    )
-  } else {
-    const shelf = books.filter((b) => !isExpired(b))
-    const open = useApp.getState().book
-    tokens = shelf.reduce((sum, b) => {
-      const x = tokensOf(b.id === open?.id ? open : b, books)
-      return { input: sum.input + x.input, output: sum.output + x.output, total: sum.total + x.total }
-    }, { input: 0, output: 0, total: 0 })
-    rows.push(
-      { id: "stat-texts", label: t("rail.texts"), value: exact(shelf.length) },
-      { id: "stat-finished", label: t("rail.finished"), value: exact(shelf.filter(isFinished).length) },
-      { id: "stat-left", label: t("rail.left"), value: t("rail.minutes", { m: shelf.reduce((m, b) => m + minutesLeft(b, level), 0) }) },
-    )
-  }
-  rows.push({
-    id: "rail-tokens",
-    label: t("rail.tokens"),
-    value: tokens.total ? compact.format(tokens.total) : "0",
-    title: tokens.total ? t("rail.tokensSplit", { i: exact(tokens.input), o: exact(tokens.output) }) : undefined,
-  })
-  if (asked !== null) rows.push({ id: "stat-questions", label: t("rail.questions"), value: exact(asked) })
+  const done = isFinished(book)
+  const progress = done ? 100 : Math.floor((book.progress || 0) * 100)
+  const tokens = tokensOf(book, books)
+  const count = (n: number) => (n ? compact.format(n) : "0")
+  const title = (n: number) => (n >= 1000 ? exact(n) : undefined)
+  const rows: { id: string; label: string; value: React.ReactNode; title?: string; sub?: boolean }[] = [
+    { id: "stat-progress", label: t("rail.progress"), value: done ? t("book.finished") : `${progress}%` },
+    { id: "rail-tokens", label: t("rail.tokens"), value: count(tokens.total), title: title(tokens.total) },
+    { id: "stat-tokens-in", label: t("rail.tokensIn"), value: count(tokens.input), title: title(tokens.input), sub: true },
+    { id: "stat-tokens-cached", label: t("rail.tokensCached"), value: count(tokens.cached), title: title(tokens.cached), sub: true },
+    { id: "stat-tokens-out", label: t("rail.tokensOut"), value: count(tokens.output), title: title(tokens.output), sub: true },
+  ]
 
   return (
-    <section id="rail-stats" data-scope={book ? "text" : "shelf"} aria-labelledby="rail-stats-title" className="px-3 pt-3 pb-4">
-      <h2 id="rail-stats-title" className="m-0 text-[12px] font-medium text-muted-foreground">{t(book ? "rail.statsText" : "rail.statsShelf")}</h2>
-      {progress >= 0 && (
-        <div
-          className="mt-2.5 h-1 overflow-hidden rounded-full bg-muted"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={progress}
-          aria-label={t("rail.progress")}
-        >
-          <div className={cn("h-full rounded-full bg-(--thread) transition-[width] duration-500", progress === 100 && "bg-success")} style={{ width: `${progress}%` }} />
-        </div>
-      )}
+    <section id="rail-stats" aria-labelledby="rail-stats-title" className="px-3 pt-3 pb-4">
+      <h2 id="rail-stats-title" className="m-0 text-[12px] font-medium text-muted-foreground">{t("rail.statsText")}</h2>
+      <div
+        className="mt-2.5 h-1 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress}
+        aria-label={t("rail.progress")}
+      >
+        <div className={cn("h-full rounded-full bg-(--thread) transition-[width] duration-500", done && "bg-success")} style={{ width: `${progress}%` }} />
+      </div>
       <dl className="m-0 mt-2.5 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1.5 text-[12.5px]">
         {rows.map((r) => (
           <React.Fragment key={r.id}>
-            <dt className="text-muted-foreground">{r.label}</dt>
-            <dd id={r.id} className="m-0 text-right font-medium tabular-nums" title={r.title} data-total={r.id === "rail-tokens" ? tokens.total : undefined}>{r.value}</dd>
+            <dt className={cn("text-muted-foreground", r.sub && "pl-3 text-[12px] text-muted-foreground/80")}>{r.label}</dt>
+            <dd
+              id={r.id}
+              className={cn("m-0 text-right tabular-nums", r.sub ? "text-[12px] text-muted-foreground" : "font-medium")}
+              title={r.title}
+              data-total={r.id === "rail-tokens" ? tokens.total : undefined}
+            >
+              {r.value}
+            </dd>
           </React.Fragment>
         ))}
       </dl>
@@ -332,21 +390,22 @@ function Stats({ book }: { book: Book | null }) {
   )
 }
 
-// The Ask AI conversations last added to, about the open text or (on the
-// shelf) any, to pick one up again; all of them in the Ask AI sidebar.
-function Conversations({ book }: { book: Book | null }) {
+// The Ask AI conversations about the open text, the latest first, to pick one
+// up again; all of them in the Ask AI sidebar.
+function Conversations({ book }: { book: Book }) {
   const t = useT()
   const hist = useApp((s) => s.hist)
   const live = useApp((s) => s.liveAway)
   const history = useApp((s) => s.drawer === "open" && s.chatMode === "history")
   const showing = useApp((s) => s.drawer === "open" && s.chatMode === "chat")
   useApp((s) => s.chatRev)
+  React.useEffect(() => { if (!hist.items) loadHistory() }, [hist.items])
 
   const items = historyItems(hist.items)
-    .filter((c) => !book || c.bookId === String(book.id))
+    .filter((c) => c.bookId === String(book.id))
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
     .slice(0, CHATS)
-  const empty = items.length ? "" : hist.items ? t(book ? "rail.chatsNone" : "rail.chatsNoneAll") : hist.status
+  const empty = items.length ? "" : hist.items ? t("rail.chatsNone") : hist.status
 
   return (
     <section id="rail-chats" aria-labelledby="rail-chats-title">
@@ -366,8 +425,7 @@ function Conversations({ book }: { book: Book | null }) {
       {empty && <p id="rail-chats-empty" className="m-0 px-3 py-1 text-[12.5px] leading-relaxed text-muted-foreground">{empty}</p>}
       <ol id="rail-chat-list" className="m-0 flex list-none flex-col gap-px p-0">
         {items.map((c) => {
-          // On the shelf, which text; in a text, how many questions.
-          const about = book ? (c.questions === 1 ? t("chat.question1") : t("chat.questions", { n: c.questions })) : c.bookTitle
+          const about = c.questions === 1 ? t("chat.question1") : t("chat.questions", { n: c.questions })
           return (
             <li key={c.id}>
               <button

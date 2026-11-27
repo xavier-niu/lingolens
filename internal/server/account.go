@@ -363,6 +363,22 @@ func (s *Server) handleBookProgress(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// handleBookLater marks a text to read later, or clears the mark.
+func (s *Server) handleBookLater(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Later bool      `json:"later"`
+		At    time.Time `json:"at"` // when it was marked; a device syncing offline changes sends it
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	if err := s.opts.Store.SetReadLater(r.Context(), currentUser(r.Context()).ID, r.PathValue("id"), req.Later, req.At); err != nil {
+		s.bookError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 func (s *Server) handleDeleteBook(w http.ResponseWriter, r *http.Request) {
 	if err := s.opts.Store.DeleteBook(r.Context(), currentUser(r.Context()).ID, r.PathValue("id")); err != nil {
 		s.bookError(w, err)

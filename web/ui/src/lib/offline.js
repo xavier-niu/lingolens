@@ -223,7 +223,7 @@ export async function cachedLookup(level, term, sentence, { anySentence = false 
 // key are merged while waiting (only the latest reading position matters, a word
 // saved then removed is a removal, a text edited twice is one edit).
 let sendingSeq = null; // the operation on its way to the server; never merged into
-const BOOK_KINDS = new Set(['create', 'update', 'delete', 'progress']);
+const BOOK_KINDS = new Set(['create', 'update', 'delete', 'progress', 'later']);
 const aboutBook = (o, id) => BOOK_KINDS.has(o.kind) && o.id === id;
 
 const opsFor = (all, key) => all.filter((o) => o.key === key && o.seq !== sendingSeq);
@@ -301,6 +301,8 @@ function replay(name, data, ops = pendingOps) {
         data[i].pos = o.body.pos;
         data[i].progress = Math.max(data[i].progress || 0, o.body.progress);
         data[i].lastReadAt = o.at;
+      } else if (o.kind === 'later' && i >= 0) {
+        data[i].readLaterAt = o.body.later ? o.body.at : '';
       } else if (o.kind === 'create' && i < 0) {
         data.unshift({ ...o.meta, ...metaFor(o.body), id: o.id });
       } else if (o.kind === 'update' && i >= 0) {
@@ -415,6 +417,12 @@ export function saveProgress(id, pos, progress, { closing = false } = {}) {
     api('PUT', `${bookPath(id)}/progress`, body, { keepalive: closing }).catch(() => {});
   }
   return queued;
+}
+
+// Read later: marked (as of now) or not. The latest choice wins.
+export function setReadLater(id, later) {
+  const body = { later, at: new Date().toISOString() };
+  return sendOrQueue({ key: `later:${id}`, kind: 'later', id, method: 'PUT', path: `${bookPath(id)}/later`, body });
 }
 
 export function savePrefs(patch) {

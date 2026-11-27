@@ -31,9 +31,13 @@ type Book struct {
 	// What the agent that saved it noted with it, to find it again (its
 	// session id, say); "" for none and for the user's own texts.
 	Note string `json:"note,omitempty"`
-	// Tokens the AI model has read and written for this text, in all.
-	TokensIn  int `json:"tokensIn"`
-	TokensOut int `json:"tokensOut"`
+	// Tokens the AI model has read (afresh, and from its prompt cache) and
+	// written for this text, in all.
+	TokensIn     int `json:"tokensIn"`
+	TokensCached int `json:"tokensCached"`
+	TokensOut    int `json:"tokensOut"`
+	// When the reader marked it to read later; "" = not marked.
+	ReadLaterAt string `json:"readLaterAt"`
 }
 
 const MaxBookChars = 2_000_000 // a long novel
@@ -216,11 +220,11 @@ func ValidateBook(title, format, content string) (string, string, error) {
 	return title, format, nil
 }
 
-const bookCols = `id, title, format, words, progress, pos, created_at, updated_at, last_read_at, expires_at, note, tokens_in, tokens_out`
+const bookCols = `id, title, format, words, progress, pos, created_at, updated_at, last_read_at, expires_at, note, tokens_in, tokens_cached, tokens_out, read_later_at`
 
 func scanBook(row interface{ Scan(...any) error }, withContent bool) (*Book, error) {
 	var b Book
-	dest := []any{&b.ID, &b.Title, &b.Format, &b.Words, &b.Progress, &b.Pos, &b.CreatedAt, &b.UpdatedAt, &b.LastReadAt, &b.ExpiresAt, &b.Note, &b.TokensIn, &b.TokensOut}
+	dest := []any{&b.ID, &b.Title, &b.Format, &b.Words, &b.Progress, &b.Pos, &b.CreatedAt, &b.UpdatedAt, &b.LastReadAt, &b.ExpiresAt, &b.Note, &b.TokensIn, &b.TokensCached, &b.TokensOut, &b.ReadLaterAt}
 	if withContent {
 		dest = append(dest, &b.Content)
 	}
@@ -256,15 +260,27 @@ func (s *Store) GetBook(ctx context.Context, userID int64, id string) (*Book, er
 	return scanBook(s.db.QueryRowContext(ctx, `SELECT `+bookCols+`, content FROM books WHERE user_id = ? AND id = ? AND `+live, userID, id), true)
 }
 
+// BookTokens is what the AI model has spent on a book, in tokens.
+type BookTokens struct {
+	Input  int `json:"input"`  // read afresh
+	Cached int `json:"cached"` // read from the provider's prompt cache
+	Output int `json:"output"` // written
+}
+
 // AddBookTokens adds what a model call for the book cost and returns the
 // book's new totals. It leaves updated_at alone: the text didn't change.
-func (s *Store) AddBookTokens(ctx context.Context, userID int64, id string, in, out int) (tokensIn, tokensOut int, err error) {
-	err = s.db.QueryRowContext(ctx, `UPDATE books SET tokens_in = tokens_in + ?, tokens_out = tokens_out + ?
-		WHERE user_id = ? AND id = ? RETURNING tokens_in, tokens_out`, in, out, userID, id).Scan(&tokensIn, &tokensOut)
+func (s *Store) AddBookTokens(ctx context.Context, userID int64, id string, add BookTokens) (*BookTokens, error) {
+	var t BookTokens
+	err := s.db.QueryRowContext(ctx, `UPDATE books SET tokens_in = tokens_in + ?, tokens_cached = tokens_cached + ?, tokens_out = tokens_out + ?
+		WHERE user_id = ? AND id = ? RETURNING tokens_in, tokens_cached, tokens_out`,
+		add.Input, add.Cached, add.Output, userID, id).Scan(&t.Input, &t.Cached, &t.Output)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = ErrNotFound
+		return nil, ErrNotFound
 	}
-	return
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
 }
 
 func (s *Store) CreateBook(ctx context.Context, userID int64, title, format, content string) (*Book, error) {
@@ -558,6 +574,27 @@ func (s *Store) DeleteExpiredBooks(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+// SetReadLater marks the book to read later (as of `at`, which can be in the
+// past when a device syncs a mark made offline), or clears the mark. It
+// leaves updated_at alone: the text didn't change.
+func (s *Store) SetReadLater(ctx context.Context, userID int64, id string, later bool, at time.Time) error {
+	ts := ""
+	if later {
+		if t := time.Now(); at.IsZero() || at.After(t) {
+			at = t
+		}
+		ts = at.UTC().Format(time.RFC3339)
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE books SET read_later_at = ? WHERE user_id = ? AND id = ?`, ts, userID, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // SaveProgress records the reading position now; progress only ever increases.

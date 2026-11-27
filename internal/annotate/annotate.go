@@ -129,7 +129,7 @@ func (s *Service) annotateChunk(ctx context.Context, client llm.Client, cfg llm.
 			out[seg.ID] = fakeItems(seg.Text, lv)
 			in += llm.EstimateTokens(seg.Text)
 		}
-		llm.Record(ctx, llm.Usage{Input: 900 + in, Output: 40 * len(chunk)}) // as if a real model
+		llm.Record(ctx, llm.Usage{Input: in, Cached: 900, Output: 40 * len(chunk)}) // as if a real model, its instructions cached
 		return out, nil
 	}
 	raw, err := client.CompleteJSON(ctx, SystemPrompt(lv), UserPrompt(chunk), Schema)
